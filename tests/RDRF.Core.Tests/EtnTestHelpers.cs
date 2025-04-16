@@ -80,11 +80,11 @@ public static class EtnTestHelpers
         return (indexJson, fragments, rcJson, fingerprint, rcCodeClone);
     }
 
-    public static byte[] CorruptRcContent(byte[] rcJson)
+    public static byte[] CorruptRcContent(byte[] rcBytes)
     {
-        var rc = RcFile.FromJson(rcJson);
+        var rc = RcFile.FromCbor(rcBytes);
         rc.Version = 999;
-        return System.Text.Encoding.UTF8.GetBytes(rc.ToJson());
+        return rc.ToCborBytes();
     }
 
     public static byte[] CorruptFragmentData(byte[] fragmentWithTrailer)

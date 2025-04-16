@@ -1,45 +1,85 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Formats.Cbor;
 
 namespace RDRF.Core.Storage;
 
 public class RcFile
 {
-    [JsonPropertyName("version")]
     public int Version { get; set; } = 1;
-
-    [JsonPropertyName("file_fingerprint")]
     public string FileFingerprint { get; set; } = string.Empty;
-
-    [JsonPropertyName("index_block_map")]
     public List<string> IndexBlockMap { get; set; } = new();
-
-    [JsonPropertyName("fragment_block_maps")]
     public List<List<string>> FragentBlockMaps { get; set; } = new();
-
-    [JsonPropertyName("created_at")]
     public long CreatedAt { get; set; }
 
-    public string ToJson()
+    public byte[] ToCborBytes()
     {
-        return JsonSerializer.Serialize(this, new JsonSerializerOptions
-        {
-            WriteIndented = false,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-        });
+        var writer = new CborWriter();
+        writer.WriteStartMap(null);
+
+        writer.WriteTextString("version"); writer.WriteInt32(Version);
+        writer.WriteTextString("file_fingerprint"); writer.WriteTextString(FileFingerprint);
+        writer.WriteTextString("index_block_map"); WriteStringList(writer, IndexBlockMap);
+        writer.WriteTextString("fragment_block_maps"); WriteNestedStringList(writer, FragentBlockMaps);
+        writer.WriteTextString("created_at"); writer.WriteInt64(CreatedAt);
+
+        writer.WriteEndMap();
+        return writer.Encode();
     }
 
-    public static RcFile FromJson(string json)
+    public static RcFile FromCbor(byte[] bytes)
     {
-        var rc = JsonSerializer.Deserialize<RcFile>(json);
-        if (rc == null)
-            throw new InvalidDataException("Failed to parse RC file");
+        var reader = new CborReader(bytes);
+        var rc = new RcFile();
+
+        reader.ReadStartMap();
+        while (reader.PeekState() != CborReaderState.EndMap)
+        {
+            switch (reader.ReadTextString())
+            {
+                case "version":           rc.Version = reader.ReadInt32(); break;
+                case "file_fingerprint":  rc.FileFingerprint = reader.ReadTextString(); break;
+                case "index_block_map":   rc.IndexBlockMap = ReadStringList(reader); break;
+                case "fragment_block_maps": rc.FragentBlockMaps = ReadNestedStringList(reader); break;
+                case "created_at":        rc.CreatedAt = reader.ReadInt64(); break;
+                default:                  reader.SkipValue(); break;
+            }
+        }
+        reader.ReadEndMap();
         return rc;
     }
 
-    public static RcFile FromJson(byte[] jsonBytes)
-        => FromJson(System.Text.Encoding.UTF8.GetString(jsonBytes));
+    private static void WriteStringList(CborWriter writer, List<string> list)
+    {
+        writer.WriteStartArray(null);
+        foreach (var item in list)
+            writer.WriteTextString(item);
+        writer.WriteEndArray();
+    }
 
-    public byte[] ToJsonUtf8Bytes()
-        => System.Text.Encoding.UTF8.GetBytes(ToJson());
+    private static void WriteNestedStringList(CborWriter writer, List<List<string>> list)
+    {
+        writer.WriteStartArray(null);
+        foreach (var inner in list)
+            WriteStringList(writer, inner);
+        writer.WriteEndArray();
+    }
+
+    private static List<string> ReadStringList(CborReader reader)
+    {
+        var list = new List<string>();
+        reader.ReadStartArray();
+        while (reader.PeekState() != CborReaderState.EndArray)
+            list.Add(reader.ReadTextString());
+        reader.ReadEndArray();
+        return list;
+    }
+
+    private static List<List<string>> ReadNestedStringList(CborReader reader)
+    {
+        var list = new List<List<string>>();
+        reader.ReadStartArray();
+        while (reader.PeekState() != CborReaderState.EndArray)
+            list.Add(ReadStringList(reader));
+        reader.ReadEndArray();
+        return list;
+    }
 }

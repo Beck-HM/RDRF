@@ -566,8 +566,8 @@ public class EtnCrossValidationTests
             var storage = new LocalFileAdapter(storageDir);
 
             // Write plaintext RC (simulating old format)
-            storage.WriteRc(fingerprint, System.Text.Encoding.UTF8.GetBytes(
-                new RcFile { Version = 1, FileFingerprint = "test" }.ToJson()));
+            storage.WriteRc(fingerprint,
+                new RcFile { Version = 1, FileFingerprint = "test" }.ToCborBytes());
 
             byte[] onDisk = storage.ReadRc(fingerprint);
             byte[] decrypted;
@@ -580,7 +580,7 @@ public class EtnCrossValidationTests
                 decrypted = onDisk; // fallback
             }
 
-            var rc = RcFile.FromJson(decrypted);
+            var rc = RcFile.FromCbor(decrypted);
             Assert.Equal(1, rc.Version);
             _output.WriteLine("PASS: Plaintext RC file handled via backward compat fallback");
         }

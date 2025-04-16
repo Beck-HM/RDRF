@@ -57,8 +57,8 @@ FragentBlockMaps = fragmentBlockMaps.Select(
                 list => list.Select(EtnBlockMap.HashToHex).ToList()).ToList(),
             CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         };
-        byte[] rcJson = rcFile.ToJsonUtf8Bytes();
-        var rcBlockMap = EtnBlockMap.Build(rcJson);
+        byte[] rcBytes = rcFile.ToCborBytes();
+        var rcBlockMap = EtnBlockMap.Build(rcBytes);
 
         for (int i = 0; i < fragments.Count; i++)
         {
@@ -71,7 +71,7 @@ FragentBlockMaps = fragmentBlockMaps.Select(
         }
 
         byte[] updatedIndexJson = AddFss6FieldsToIndex(indexJson, fragmentBlockMaps, rcBlockMap);
-        return (fragments, updatedIndexJson, rcJson);
+        return (fragments, updatedIndexJson, rcBytes);
     }
 
     private static byte[] AddFss6FieldsToIndex(
