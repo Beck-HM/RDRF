@@ -14,7 +14,7 @@ public static class EtnPrecision
         var result = new PrecisionResult();
 
         RcFile rcFile;
-        try { rcFile = RcFile.FromJson(rcJson); }
+        try { rcFile = RcFile.FromCbor(rcJson); }
         catch (Exception ex)
         {
             result.IsValid = false;
