@@ -1,5 +1,5 @@
+using System.Formats.Cbor;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using RDRF.Core.Encryption;
 
 namespace RDRF.Core.Index;
@@ -54,26 +54,69 @@ public static class IndexManager
 
     public static byte[] SerializeIndex(RdrfIndex index)
     {
-        return JsonSerializer.SerializeToUtf8Bytes(index, new JsonSerializerOptions
-        {
-            WriteIndented = false,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-        });
+        var writer = new CborWriter();
+        writer.WriteStartMap(null);
+
+        WriteField(writer, "file_fingerprint", index.FileFingerprint);
+        WriteField(writer, "custom_name", index.CustomName);
+        WriteField(writer, "original_name", index.OriginalName);
+        WriteField(writer, "file_size", index.FileSize);
+        WriteField(writer, "fragment_count", index.FragentCount);
+        WriteField(writer, "original_fragment_count", index.OriginalFragentCount, 0);
+        WriteField(writer, "original_fragment_sizes", index.OriginalFragentSizes);
+        WriteField(writer, "fragment_hashes", index.FragentHashes);
+        WriteField(writer, "original_hash", index.OriginalHash);
+        WriteField(writer, "fss_strategy", index.FssStrategy);
+        WriteFssParams(writer, index.FssParams);
+        WriteField(writer, "fss6_fragment_block_maps", index.Fss6FragentBlockMaps);
+        WriteField(writer, "fss6_rc_block_map", index.Fss6RcBlockMap);
+        WriteField(writer, "salt", index.Salt);
+        WriteField(writer, "created_at", index.CreatedAt);
+        WriteField(writer, "updated_at", index.UpdatedAt);
+        WriteFragents(writer, index.Fragents);
+
+        writer.WriteEndMap();
+        return writer.Encode();
     }
 
-    public static RdrfIndex DeserializeIndex(byte[] jsonBytes)
+    public static RdrfIndex DeserializeIndex(byte[] cborBytes)
     {
-        var index = JsonSerializer.Deserialize<RdrfIndex>(jsonBytes);
-        if (index == null)
-            throw new InvalidDataException("Failed to parse embedded index");
+        var reader = new CborReader(cborBytes);
+        var index = new RdrfIndex();
+
+        reader.ReadStartMap();
+        while (reader.PeekState() != CborReaderState.EndMap)
+        {
+            switch (reader.ReadTextString())
+            {
+                case "file_fingerprint":            index.FileFingerprint = reader.ReadTextString(); break;
+                case "custom_name":                 index.CustomName = reader.ReadTextString(); break;
+                case "original_name":               index.OriginalName = reader.ReadTextString(); break;
+                case "file_size":                   index.FileSize = reader.ReadInt64(); break;
+                case "fragment_count":              index.FragentCount = reader.ReadInt32(); break;
+                case "original_fragment_count":     index.OriginalFragentCount = reader.ReadInt32(); break;
+                case "original_fragment_sizes":     index.OriginalFragentSizes = ReadInt32List(reader); break;
+                case "fragment_hashes":             index.FragentHashes = ReadStringList(reader); break;
+                case "original_hash":               index.OriginalHash = reader.ReadTextString(); break;
+                case "fss_strategy":                index.FssStrategy = reader.ReadTextString(); break;
+                case "fss_params":                  index.FssParams = ReadFssParams(reader); break;
+                case "fss6_fragment_block_maps":    index.Fss6FragentBlockMaps = ReadNestedStringList(reader); break;
+                case "fss6_rc_block_map":           index.Fss6RcBlockMap = ReadStringList(reader); break;
+                case "salt":                        index.Salt = reader.ReadTextString(); break;
+                case "created_at":                  index.CreatedAt = reader.ReadInt64(); break;
+                case "updated_at":                  index.UpdatedAt = reader.ReadInt64(); break;
+                case "fragments":                   index.Fragents = ReadFragents(reader); break;
+                default:                            reader.SkipValue(); break;
+            }
+        }
+        reader.ReadEndMap();
         return index;
     }
 
     public static byte[] EncryptIndexWithKey(RdrfIndex index, byte[] aesKey)
     {
-        byte[] json = SerializeIndex(index);
-        string jsonString = System.Text.Encoding.UTF8.GetString(json);
-        return EncryptionLayer.EncryptIndexFileWithKey(jsonString, aesKey);
+        byte[] cbor = SerializeIndex(index);
+        return EncryptionLayer.EncryptIndexWithKey(cbor, aesKey);
     }
 
     public static byte[] EncryptIndex(RdrfIndex index, byte[] rcCode)
@@ -81,11 +124,8 @@ public static class IndexManager
 
     public static RdrfIndex DecryptIndexWithKey(byte[] encryptedIndex, byte[] aesKey)
     {
-        string json = EncryptionLayer.DecryptIndexFileWithKey(encryptedIndex, aesKey);
-        RdrfIndex? index = JsonSerializer.Deserialize<RdrfIndex>(json);
-        if (index == null)
-            throw new InvalidDataException("Failed to parse index file");
-        return index;
+        byte[] cbor = EncryptionLayer.DecryptIndexWithKey(encryptedIndex, aesKey);
+        return DeserializeIndex(cbor);
     }
 
     public static RdrfIndex DecryptIndex(byte[] encryptedIndex, byte[] rcCode)
@@ -93,77 +133,225 @@ public static class IndexManager
 
     public static FragentInfo? GetFragentInfo(RdrfIndex index, int fragmentIndex)
         => index.Fragents?.FirstOrDefault(f => f.Index == fragmentIndex);
+
+    // ── CBOR serialization helpers ──
+
+    private static void WriteField(CborWriter w, string key, string? value)
+    {
+        if (value == null) return;
+        w.WriteTextString(key);
+        w.WriteTextString(value);
+    }
+
+    private static void WriteField(CborWriter w, string key, int value)
+    {
+        w.WriteTextString(key);
+        w.WriteInt32(value);
+    }
+
+    private static void WriteField(CborWriter w, string key, int value, int defaultValue)
+    {
+        if (value == defaultValue) return;
+        w.WriteTextString(key);
+        w.WriteInt32(value);
+    }
+
+    private static void WriteField(CborWriter w, string key, long value)
+    {
+        w.WriteTextString(key);
+        w.WriteInt64(value);
+    }
+
+    private static void WriteField(CborWriter w, string key, long? value)
+    {
+        if (value == null) return;
+        w.WriteTextString(key);
+        w.WriteInt64(value.Value);
+    }
+
+    private static void WriteField(CborWriter w, string key, List<string>? values)
+    {
+        if (values == null) return;
+        w.WriteTextString(key);
+        WriteStringList(w, values);
+    }
+
+    private static void WriteField(CborWriter w, string key, List<int> values)
+    {
+        w.WriteTextString(key);
+        WriteInt32List(w, values);
+    }
+
+    private static void WriteField(CborWriter w, string key, List<List<string>>? values)
+    {
+        if (values == null) return;
+        w.WriteTextString(key);
+        WriteNestedStringList(w, values);
+    }
+
+    private static void WriteFssParams(CborWriter w, Dictionary<string, object>? fssParams)
+    {
+        if (fssParams == null || fssParams.Count == 0) return;
+        w.WriteTextString("fss_params");
+        w.WriteStartMap(null);
+        foreach (var kvp in fssParams)
+        {
+            w.WriteTextString(kvp.Key);
+            w.WriteTextString(kvp.Value switch
+            {
+                JsonElement je => je.GetRawText(),
+                _ => kvp.Value?.ToString() ?? ""
+            });
+        }
+        w.WriteEndMap();
+    }
+
+    private static void WriteFragents(CborWriter w, List<FragentInfo>? fragents)
+    {
+        if (fragents == null) return;
+        w.WriteTextString("fragments");
+        w.WriteStartArray(null);
+        foreach (var f in fragents)
+        {
+            w.WriteStartMap(null);
+            w.WriteTextString("index");    w.WriteInt32(f.Index);
+            w.WriteTextString("size");     w.WriteInt32(f.Size);
+            w.WriteTextString("hash");     w.WriteTextString(f.Hash);
+            w.WriteTextString("nonce");    w.WriteTextString(f.Nonce);
+            if (f.Filename != null) { w.WriteTextString("filename"); w.WriteTextString(f.Filename); }
+            w.WriteEndMap();
+        }
+        w.WriteEndArray();
+    }
+
+    private static void WriteStringList(CborWriter w, List<string> list)
+    {
+        w.WriteStartArray(null);
+        foreach (var item in list)
+            w.WriteTextString(item);
+        w.WriteEndArray();
+    }
+
+    private static void WriteInt32List(CborWriter w, List<int> list)
+    {
+        w.WriteStartArray(null);
+        foreach (var item in list)
+            w.WriteInt32(item);
+        w.WriteEndArray();
+    }
+
+    private static void WriteNestedStringList(CborWriter w, List<List<string>> list)
+    {
+        w.WriteStartArray(null);
+        foreach (var inner in list)
+            WriteStringList(w, inner);
+        w.WriteEndArray();
+    }
+
+    private static List<string> ReadStringList(CborReader r)
+    {
+        var list = new List<string>();
+        r.ReadStartArray();
+        while (r.PeekState() != CborReaderState.EndArray)
+            list.Add(r.ReadTextString());
+        r.ReadEndArray();
+        return list;
+    }
+
+    private static List<int> ReadInt32List(CborReader r)
+    {
+        var list = new List<int>();
+        r.ReadStartArray();
+        while (r.PeekState() != CborReaderState.EndArray)
+            list.Add(r.ReadInt32());
+        r.ReadEndArray();
+        return list;
+    }
+
+    private static List<List<string>> ReadNestedStringList(CborReader r)
+    {
+        var list = new List<List<string>>();
+        r.ReadStartArray();
+        while (r.PeekState() != CborReaderState.EndArray)
+            list.Add(ReadStringList(r));
+        r.ReadEndArray();
+        return list;
+    }
+
+    private static Dictionary<string, object>? ReadFssParams(CborReader r)
+    {
+        r.ReadStartMap();
+        var dict = new Dictionary<string, object>();
+        while (r.PeekState() != CborReaderState.EndMap)
+        {
+            var key = r.ReadTextString();
+            var value = r.ReadTextString();
+            try { dict[key] = JsonDocument.Parse(value).RootElement.Clone(); }
+            catch { dict[key] = value; }
+        }
+        r.ReadEndMap();
+        return dict;
+    }
+
+    private static List<FragentInfo> ReadFragents(CborReader r)
+    {
+        var list = new List<FragentInfo>();
+        r.ReadStartArray();
+
+        int index = 0;
+        while (r.PeekState() != CborReaderState.EndArray)
+        {
+            var f = new FragentInfo();
+            r.ReadStartMap();
+            while (r.PeekState() != CborReaderState.EndMap)
+            {
+                switch (r.ReadTextString())
+                {
+                    case "index":    f.Index = r.ReadInt32(); break;
+                    case "size":     f.Size = r.ReadInt32(); break;
+                    case "hash":     f.Hash = r.ReadTextString(); break;
+                    case "nonce":    f.Nonce = r.ReadTextString(); break;
+                    case "filename": f.Filename = r.ReadTextString(); break;
+                    default:         r.SkipValue(); break;
+                }
+            }
+            r.ReadEndMap();
+            f.Index = index++; // override with sequential position
+            list.Add(f);
+        }
+        r.ReadEndArray();
+        return list;
+    }
 }
 
 public class RdrfIndex
 {
-    [JsonPropertyName("file_fingerprint")]
     public string FileFingerprint { get; set; } = string.Empty;
-
-    [JsonPropertyName("custom_name")]
     public string? CustomName { get; set; }
-
-    [JsonPropertyName("original_name")]
     public string OriginalName { get; set; } = string.Empty;
-
-    [JsonPropertyName("file_size")]
     public long FileSize { get; set; }
-
-    [JsonPropertyName("fragment_count")]
     public int FragentCount { get; set; }
-
-    [JsonPropertyName("original_fragment_count")]
     public int OriginalFragentCount { get; set; }
-
-    [JsonPropertyName("original_fragment_sizes")]
     public List<int> OriginalFragentSizes { get; set; } = new();
-
-    [JsonPropertyName("fragment_hashes")]
     public List<string> FragentHashes { get; set; } = new();
-
-    [JsonPropertyName("original_hash")]
     public string OriginalHash { get; set; } = string.Empty;
-
-    [JsonPropertyName("fss_strategy")]
     public string FssStrategy { get; set; } = "FSS1";
-
-    [JsonPropertyName("fss_params")]
     public Dictionary<string, object>? FssParams { get; set; }
-
-    [JsonPropertyName("fss6_fragment_block_maps")]
     public List<List<string>>? Fss6FragentBlockMaps { get; set; }
-
-    [JsonPropertyName("fss6_rc_block_map")]
     public List<string>? Fss6RcBlockMap { get; set; }
-
-    [JsonPropertyName("salt")]
     public string? Salt { get; set; }
-
-    [JsonPropertyName("created_at")]
     public long CreatedAt { get; set; }
-
-    [JsonPropertyName("updated_at")]
     public long? UpdatedAt { get; set; }
-
-    [JsonPropertyName("fragments")]
     public List<FragentInfo>? Fragents { get; set; }
 }
 
 public class FragentInfo
 {
-    [JsonPropertyName("index")]
     public int Index { get; set; }
-
-    [JsonPropertyName("size")]
     public int Size { get; set; }
-
-    [JsonPropertyName("hash")]
     public string Hash { get; set; } = string.Empty;
 
     [Obsolete("Nonce is stored in the index for backward compatibility but never read during restore.")]
-    [JsonPropertyName("nonce")]
     public string Nonce { get; set; } = string.Empty;
-
-    [JsonPropertyName("filename")]
     public string? Filename { get; set; }
 }

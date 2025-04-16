@@ -77,7 +77,7 @@ FragentBlockMaps = fragmentBlockMaps.Select(
     private static byte[] AddFss6FieldsToIndex(
         byte[] indexJson, List<List<byte[]>> fragmentBlockMaps, List<byte[]> rcBlockMap)
     {
-        var index = System.Text.Json.JsonSerializer.Deserialize<RdrfIndex>(indexJson);
+        var index = IndexManager.DeserializeIndex(indexJson);
         if (index == null)
             throw new InvalidDataException("Failed to parse index JSON for ETN injection");
 

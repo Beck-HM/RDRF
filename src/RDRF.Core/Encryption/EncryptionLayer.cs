@@ -171,20 +171,15 @@ public static class EncryptionLayer
     public static byte[] DecryptFragmentCtr(byte[] encryptedData, byte[] rcCode)
         => DecryptFragmentCtrWithKey(encryptedData, DeriveKey(rcCode));
 
-    public static byte[] EncryptIndexFileWithKey(string indexJson, byte[] aesKey)
-    {
-        byte[] plaintext = Encoding.UTF8.GetBytes(indexJson);
-        return EncryptFragmentWithKey(plaintext, aesKey);
-    }
+    public static byte[] EncryptIndexWithKey(byte[] indexData, byte[] aesKey)
+        => EncryptFragmentWithKey(indexData, aesKey);
 
-    public static byte[] EncryptIndexFile(string indexJson, byte[] rcCode)
-        => EncryptIndexFileWithKey(indexJson, DeriveKey(rcCode));
+    public static byte[] EncryptIndex(byte[] indexData, byte[] rcCode)
+        => EncryptIndexWithKey(indexData, DeriveKey(rcCode));
 
-    public static string DecryptIndexFileWithKey(byte[] encryptedIndex, byte[] aesKey)
-    {
-        byte[] plaintext = DecryptFragmentWithKey(encryptedIndex, aesKey);
-        return Encoding.UTF8.GetString(plaintext);
-    }
-    public static string DecryptIndexFile(byte[] encryptedIndex, byte[] rcCode)
-        => DecryptIndexFileWithKey(encryptedIndex, DeriveKey(rcCode));
+    public static byte[] DecryptIndexWithKey(byte[] encryptedIndex, byte[] aesKey)
+        => DecryptFragmentWithKey(encryptedIndex, aesKey);
+
+    public static byte[] DecryptIndex(byte[] encryptedIndex, byte[] rcCode)
+        => DecryptIndexWithKey(encryptedIndex, DeriveKey(rcCode));
 }

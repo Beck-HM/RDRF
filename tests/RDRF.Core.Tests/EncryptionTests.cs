@@ -38,10 +38,11 @@ public class EncryptionTests
         byte[] rc = EncryptionLayer.GenerateRcCode(32);
         string json = "{\"version\":1,\"name\":\"test.txt\"}";
 
-        byte[] encrypted = EncryptionLayer.EncryptIndexFile(json, rc);
-        string decrypted = EncryptionLayer.DecryptIndexFile(encrypted, rc);
+        byte[] jsonBytes = System.Text.Encoding.UTF8.GetBytes(json);
+        byte[] encrypted = EncryptionLayer.EncryptIndex(jsonBytes, rc);
+        byte[] decrypted = EncryptionLayer.DecryptIndex(encrypted, rc);
 
-        Assert.Equal(json, decrypted);
+        Assert.Equal(json, System.Text.Encoding.UTF8.GetString(decrypted));
     }
 
     [Fact]
