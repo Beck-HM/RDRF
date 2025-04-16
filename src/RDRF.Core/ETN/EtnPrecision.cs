@@ -1,4 +1,3 @@
-using System.Text.Json;
 using RDRF.Core.Index;
 using RDRF.Core.Storage;
 
@@ -44,7 +43,7 @@ public static class EtnPrecision
         }
 
         RdrfIndex? index = null;
-        try { index = JsonSerializer.Deserialize<RdrfIndex>(indexJson); }
+        try { index = IndexManager.DeserializeIndex(indexJson); }
         catch { }
 
         var indexStoredRcBm = index?.Fss6RcBlockMap?.Select(EtnBlockMap.HexToHash).ToList() ?? new List<byte[]>();
@@ -191,7 +190,7 @@ public static class EtnPrecision
 
     internal static byte[] StripFss6Fields(byte[] indexJson)
     {
-        var index = JsonSerializer.Deserialize<RdrfIndex>(indexJson);
+        var index = IndexManager.DeserializeIndex(indexJson);
         if (index == null) return indexJson;
         index.Fss6FragentBlockMaps = null;
         index.Fss6RcBlockMap = null;
