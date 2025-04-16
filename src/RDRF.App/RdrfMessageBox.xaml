@@ -1,0 +1,188 @@
+<Window x:Class="RDRF.App.RdrfMessageBox"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="RDRF"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="False"
+        SizeToContent="WidthAndHeight"
+        MinWidth="380"
+        MaxWidth="520">
+    <Window.Resources>
+        <Style x:Key="DialogButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#FF7C6BF2" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="28,10" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="MinWidth" Value="100" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#FF9588F5" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.9" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CopyButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogButtonStyle}">
+            <Setter Property="Background" Value="#FF35354A" />
+            <Setter Property="Foreground" Value="#FFE0E0E8" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#FF3D3D56" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.9" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="#FF1E1E2E"
+            CornerRadius="12"
+            BorderBrush="#FF3D3D56"
+            BorderThickness="1"
+            Padding="0">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Title Bar -->
+            <Border Grid.Row="0"
+                    Background="#FF2A2A3C"
+                    CornerRadius="12,12,0,0"
+                    Padding="20,14">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Icon -->
+                    <TextBlock x:Name="TitleIcon"
+                               Grid.Column="0"
+                               FontSize="20"
+                               FontFamily="Segoe UI Symbol"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0" />
+
+                    <!-- Title -->
+                    <TextBlock x:Name="DialogTitle"
+                               Grid.Column="1"
+                               Text="RDRF"
+                               Foreground="#FFE0E0E8"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center" />
+
+                    <!-- Close -->
+                    <Button Grid.Column="2"
+                            Content="✕"
+                            Width="32"
+                            Height="28"
+                            Background="Transparent"
+                            Foreground="#FF9090A8"
+                            BorderThickness="0"
+                            FontSize="12"
+                            Cursor="Hand"
+                            Click="CloseButton_Click" />
+                </Grid>
+            </Border>
+
+            <!-- Content -->
+            <StackPanel Grid.Row="1"
+                        Margin="24,20,24,16">
+                <!-- Message -->
+                <TextBlock x:Name="DialogMessage"
+                           TextWrapping="Wrap"
+                           Foreground="#FFE0E0E8"
+                           FontSize="14"
+                           LineHeight="22"
+                           Margin="0,0,0,0" />
+
+                <!-- Extra info (e.g., fingerprint) -->
+                <Border x:Name="ExtraInfoBorder"
+                        Visibility="Collapsed"
+                        Background="#FF2A2A3C"
+                        CornerRadius="8"
+                        Padding="14,12"
+                        Margin="0,16,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="ExtraInfoText"
+                                   Grid.Column="0"
+                                   TextWrapping="Wrap"
+                                   Foreground="#FF9090A8"
+                                   FontSize="12"
+                                   FontFamily="Consolas"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                x:Name="CopyButton"
+                                Content="Copy"
+                                Style="{StaticResource CopyButtonStyle}"
+                                Margin="12,0,0,0"
+                                VerticalAlignment="Center"
+                                Click="CopyButton_Click" />
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <!-- Footer -->
+            <Border Grid.Row="2"
+                    Padding="20,0,20,16">
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right">
+                    <Button x:Name="OkButton"
+                            Content="OK"
+                            Style="{StaticResource DialogButtonStyle}"
+                            IsDefault="True"
+                            Click="OkButton_Click" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

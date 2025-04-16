@@ -1,0 +1,19 @@
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+*.cache
+*.log
+*.nupkg
+.vs/
+.DS_Store
+Thumbs.db
+
+# Test output
+tests/RDRF_TestOutput/
+tests/*.mp4
+
+# Scratch/temp
+tools/EtnDemo.Interactive/
+fix_tests*.ps1
