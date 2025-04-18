@@ -6,14 +6,14 @@ namespace RDRF.Core.ETN;
 public static class EtnPrecision
 {
     public static PrecisionResult Analyze(
-        byte[] indexJson,
-        byte[] rcJson,
+        byte[] indexBytes,
+        byte[] rcBytes,
         List<byte[]> fragmentsWithTrailers)
     {
         var result = new PrecisionResult();
 
         RcFile rcFile;
-        try { rcFile = RcFile.FromCbor(rcJson); }
+        try { rcFile = RcFile.FromCbor(rcBytes); }
         catch (Exception ex)
         {
             result.IsValid = false;
@@ -22,9 +22,9 @@ public static class EtnPrecision
             return result;
         }
 
-        byte[] strippedIndexJson = StripFss6Fields(indexJson);
-        var actualIndexBm = EtnBlockMap.Build(strippedIndexJson);
-        var actualRcBm = EtnBlockMap.Build(rcJson);
+        byte[] strippedIndexBytes = StripFss6Fields(indexBytes);
+        var actualIndexBm = EtnBlockMap.Build(strippedIndexBytes);
+        var actualRcBm = EtnBlockMap.Build(rcBytes);
 
         var rcStoredIndexBm = rcFile.IndexBlockMap.Select(EtnBlockMap.HexToHash).ToList();
         var rcStoredFragmentBms = rcFile.FragentBlockMaps
@@ -43,7 +43,7 @@ public static class EtnPrecision
         }
 
         RdrfIndex? index = null;
-        try { index = IndexManager.DeserializeIndex(indexJson); }
+        try { index = IndexManager.DeserializeIndex(indexBytes); }
         catch { }
 
         var indexStoredRcBm = index?.Fss6RcBlockMap?.Select(EtnBlockMap.HexToHash).ToList() ?? new List<byte[]>();
@@ -188,10 +188,10 @@ public static class EtnPrecision
         return set.ToList();
     }
 
-    internal static byte[] StripFss6Fields(byte[] indexJson)
+    internal static byte[] StripFss6Fields(byte[] indexBytes)
     {
-        var index = IndexManager.DeserializeIndex(indexJson);
-        if (index == null) return indexJson;
+        var index = IndexManager.DeserializeIndex(indexBytes);
+        if (index == null) return indexBytes;
         index.Fss6FragentBlockMaps = null;
         index.Fss6RcBlockMap = null;
         return IndexManager.SerializeIndex(index);

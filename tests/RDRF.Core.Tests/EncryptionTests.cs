@@ -36,13 +36,12 @@ public class EncryptionTests
     public void EncryptDecryptIndex_ShouldRoundTrip()
     {
         byte[] rc = EncryptionLayer.GenerateRcCode(32);
-        string json = "{\"version\":1,\"name\":\"test.txt\"}";
+        byte[] plaintext = [0x01, 0x02, 0x03, 0x04];
 
-        byte[] jsonBytes = System.Text.Encoding.UTF8.GetBytes(json);
-        byte[] encrypted = EncryptionLayer.EncryptIndex(jsonBytes, rc);
+        byte[] encrypted = EncryptionLayer.EncryptIndex(plaintext, rc);
         byte[] decrypted = EncryptionLayer.DecryptIndex(encrypted, rc);
 
-        Assert.Equal(json, System.Text.Encoding.UTF8.GetString(decrypted));
+        Assert.Equal(plaintext, decrypted);
     }
 
     [Fact]

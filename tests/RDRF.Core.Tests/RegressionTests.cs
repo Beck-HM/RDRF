@@ -492,4 +492,106 @@ public class RegressionTests
 
         Assert.Equal(key1, key2);
     }
+
+    // ── CBOR round-trip tests ──
+
+    [Fact]
+    public void RcFile_ToCborBytes_FromCbor_RoundTrip()
+    {
+        var original = new RcFile
+        {
+            Version = 2,
+            FileFingerprint = "test-fp-abc123",
+            IndexBlockMap = ["block0", "block1", "block2"],
+            FragentBlockMaps =
+            [
+                ["f0b0", "f0b1"],
+                ["f1b0", "f1b1", "f1b2"],
+            ],
+            CreatedAt = 1700000000,
+        };
+
+        byte[] cbor = original.ToCborBytes();
+        Assert.NotEmpty(cbor);
+
+        var restored = RcFile.FromCbor(cbor);
+        Assert.Equal(original.Version, restored.Version);
+        Assert.Equal(original.FileFingerprint, restored.FileFingerprint);
+        Assert.Equal(original.IndexBlockMap, restored.IndexBlockMap);
+        Assert.Equal(original.CreatedAt, restored.CreatedAt);
+
+        Assert.Equal(original.FragentBlockMaps.Count, restored.FragentBlockMaps.Count);
+        for (int i = 0; i < original.FragentBlockMaps.Count; i++)
+            Assert.Equal(original.FragentBlockMaps[i], restored.FragentBlockMaps[i]);
+    }
+
+    [Fact]
+    public void IndexManager_SerializeIndex_DeserializeIndex_RoundTrip()
+    {
+        var original = IndexManager.BuildIndex(
+            fileFingerprint: "fp-xyz-789",
+            originalFilename: "secret.doc",
+            originalSize: 999_888,
+            fragmentHashes: ["h0", "h1", "h2", "h3"],
+            fragmentNonces: ["n0", "n1", "n2", "n3"],
+            originalHash: "sha256-original-hash",
+            fssStrategy: "FSS6",
+            originalFragentSizes: [250_000, 250_000, 250_000, 249_888],
+            originalFragentCount: 4,
+            fssParams: new Dictionary<string, object>
+            {
+                ["plan"] = "dummy-plan"
+            }
+        );
+        original.CustomName = "my-backup";
+        original.Salt = "abcd1234ef567890";
+        original.UpdatedAt = 1700000001;
+        original.Fss6RcBlockMap = ["rc_b0", "rc_b1"];
+        original.Fss6FragentBlockMaps =
+        [
+            ["f0b0", "f0b1"],
+            ["f1b0"],
+        ];
+        original.Fragents![0].Filename = "special.bin";
+        original.Fragents![0].Size = 123;
+
+        byte[] cbor = IndexManager.SerializeIndex(original);
+        Assert.NotEmpty(cbor);
+
+        var restored = IndexManager.DeserializeIndex(cbor);
+
+        Assert.Equal(original.FileFingerprint, restored.FileFingerprint);
+        Assert.Equal(original.CustomName, restored.CustomName);
+        Assert.Equal(original.OriginalName, restored.OriginalName);
+        Assert.Equal(original.FileSize, restored.FileSize);
+        Assert.Equal(original.FragentCount, restored.FragentCount);
+        Assert.Equal(original.OriginalFragentCount, restored.OriginalFragentCount);
+        Assert.Equal(original.OriginalFragentSizes, restored.OriginalFragentSizes);
+        Assert.Equal(original.FragentHashes, restored.FragentHashes);
+        Assert.Equal(original.OriginalHash, restored.OriginalHash);
+        Assert.Equal(original.FssStrategy, restored.FssStrategy);
+        Assert.Equal(original.Salt, restored.Salt);
+        Assert.Equal(original.CreatedAt, restored.CreatedAt);
+        Assert.Equal(original.UpdatedAt, restored.UpdatedAt);
+        Assert.Equal(original.Fss6RcBlockMap, restored.Fss6RcBlockMap);
+
+        Assert.Equal(original.Fss6FragentBlockMaps!.Count, restored.Fss6FragentBlockMaps!.Count);
+        for (int i = 0; i < original.Fss6FragentBlockMaps.Count; i++)
+            Assert.Equal(original.Fss6FragentBlockMaps[i], restored.Fss6FragentBlockMaps[i]);
+
+        Assert.NotNull(restored.Fragents);
+        Assert.Equal(original.Fragents!.Count, restored.Fragents.Count);
+        for (int i = 0; i < original.Fragents.Count; i++)
+        {
+            Assert.Equal(original.Fragents[i].Index, restored.Fragents[i].Index);
+            Assert.Equal(original.Fragents[i].Size, restored.Fragents[i].Size);
+            Assert.Equal(original.Fragents[i].Hash, restored.Fragents[i].Hash);
+            Assert.Equal(original.Fragents[i].Nonce, restored.Fragents[i].Nonce);
+            Assert.Equal(original.Fragents[i].Filename, restored.Fragents[i].Filename);
+        }
+
+        // FssParams round-trip
+        Assert.NotNull(restored.FssParams);
+        Assert.True(restored.FssParams.ContainsKey("plan"));
+    }
 }

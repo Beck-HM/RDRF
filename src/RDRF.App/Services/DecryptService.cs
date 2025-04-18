@@ -1,6 +1,5 @@
 using System.IO;
 using System.Security.Cryptography;
-using System.Text.Json;
 using RDRF.Core;
 using RDRF.Core.Index;
 using RDRF.Core.Encryption;

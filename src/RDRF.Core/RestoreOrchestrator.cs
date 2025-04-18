@@ -341,10 +341,10 @@ public class RestoreOrchestrator : IDisposable
                 validationActual = true;
                 byte[] encryptedRc = await _storage.ReadRcAsync(fileFingerprint, ct).ConfigureAwait(false);
                 byte[] rcBytes = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, _aesKey);
-                byte[] indexJson = IndexManager.SerializeIndex(index);
+                byte[] indexBytes = IndexManager.SerializeIndex(index);
 
                 var cvResult = Fss6Etn.CrossValidate(
-                    indexJson,
+                    indexBytes,
                     decryptedFragments.OrderBy(k => k.Key).Select(k => k.Value).ToList(),
                     rcBytes);
 
