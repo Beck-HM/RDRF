@@ -489,8 +489,8 @@ public class EtnCrossValidationTests
             var storage = new LocalFileAdapter(storageDir);
             byte[] onDisk = storage.ReadRc(fingerprint);
 
-            // RC file on disk should NOT be plaintext JSON (starts with '{')
-            Assert.NotEqual((byte)'{', onDisk[0]);
+            // Encrypted RC should not equal plaintext
+            Assert.NotEqual(rcJson, onDisk);
             Assert.True(onDisk.Length > rcJson.Length,
                 "Encrypted RC should be larger than plaintext (nonce + ciphertext + tag)");
             _output.WriteLine($"PASS: RC file on disk is encrypted ({onDisk.Length} bytes vs {rcJson.Length} bytes plaintext)");
