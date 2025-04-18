@@ -25,11 +25,11 @@ public class EtnByzantineTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
-            byte[] corruptedIndex = EtnTestHelpers.CorruptIndexNonEtnFields(indexJson);
+            byte[] corruptedIndex = EtnTestHelpers.CorruptIndexNonEtnFields(indexBytes);
 
-            var result = Fss6Etn.CrossValidate(corruptedIndex, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(corruptedIndex, fragments, rcBytes);
             Assert.True(result.IndexCorrupted, "Index must be flagged");
             Assert.False(result.RcCorrupted, "RC must not be flagged");
             Assert.Empty(result.CorruptedFragments);
@@ -47,11 +47,11 @@ public class EtnByzantineTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
-            byte[] corruptedRc = EtnTestHelpers.CorruptRcContent(rcJson);
+            byte[] corruptedRc = EtnTestHelpers.CorruptRcContent(rcBytes);
 
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, corruptedRc);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, corruptedRc);
             Assert.True(result.RcCorrupted, "RC must be flagged");
             Assert.False(result.IndexCorrupted, "Index must not be flagged");
             Assert.Empty(result.CorruptedFragments);
@@ -69,12 +69,12 @@ public class EtnByzantineTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
             Assert.True(fragments.Count >= 2, "Need at least 2 fragments");
 
             fragments[0] = EtnTestHelpers.CorruptFragmentData(fragments[0]);
 
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
             Assert.False(result.IsValid);
             Assert.Contains(0, result.CorruptedFragments);
             Assert.Single(result.CorruptedFragments);
@@ -94,13 +94,13 @@ public class EtnByzantineTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
             Assert.True(fragments.Count >= 4, "Need at least 4 fragments");
 
             fragments[0] = EtnTestHelpers.CorruptFragmentData(fragments[0]);
             fragments[3] = EtnTestHelpers.CorruptFragmentData(fragments[3]);
 
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
             Assert.Contains(0, result.CorruptedFragments);
             Assert.Contains(3, result.CorruptedFragments);
             Assert.Equal(2, result.CorruptedFragments.Count);
@@ -120,12 +120,12 @@ public class EtnByzantineTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
             Assert.True(fragments.Count >= 2, "Need at least 2 fragments");
 
-            byte[] corruptedIndex = EtnTestHelpers.CorruptIndexNonEtnFields(indexJson);
+            byte[] corruptedIndex = EtnTestHelpers.CorruptIndexNonEtnFields(indexBytes);
             fragments[1] = EtnTestHelpers.CorruptFragmentData(fragments[1]);
-            byte[] corruptedRc = EtnTestHelpers.CorruptRcContent(rcJson);
+            byte[] corruptedRc = EtnTestHelpers.CorruptRcContent(rcBytes);
 
             var result = Fss6Etn.CrossValidate(corruptedIndex, fragments, corruptedRc);
             Assert.False(result.IsValid);
@@ -148,12 +148,12 @@ public class EtnByzantineTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
             Assert.True(fragments.Count >= 2, "Need at least 2 fragments");
 
             fragments[1] = EtnTestHelpers.CorruptFragmentData(fragments[1]);
 
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
             Assert.Contains(1, result.CorruptedFragments);
             Assert.False(result.IndexCorrupted);
             Assert.False(result.RcCorrupted);
@@ -171,7 +171,7 @@ public class EtnByzantineTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             // Corrupt the trailer's Index BM section in fragment[0]
             byte[] corrupted = (byte[])fragments[0].Clone();
@@ -180,7 +180,7 @@ public class EtnByzantineTests
             corrupted[flipPos] ^= 0xFF;
             fragments[0] = corrupted;
 
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
             Assert.Contains(0, result.CorruptedFragmentTrailers);
             Assert.DoesNotContain(0, result.CorruptedFragments);
             _output.WriteLine("PASS: Trailer corruption - trailer flagged, data not");
@@ -197,11 +197,11 @@ public class EtnByzantineTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
-            byte[] corrupted = EtnTestHelpers.CorruptIndexEtnFields(indexJson);
+            byte[] corrupted = EtnTestHelpers.CorruptIndexEtnFields(indexBytes);
 
-            var result = Fss6Etn.CrossValidate(corrupted, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(corrupted, fragments, rcBytes);
             Assert.False(result.IndexCorrupted,
                 "ETN field corruption must not flag IndexCorrupted (fields stripped before hash)");
             _output.WriteLine("PASS: ETN fields in index corrupted - index not flagged");

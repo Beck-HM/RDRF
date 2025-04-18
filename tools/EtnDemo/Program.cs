@@ -93,9 +93,9 @@ void RunStandardDemo()
 
         Step("6/9  篡改 RC Version");
         rcPlain = DecryptRc(storage, fingerprint, aesKey);
-        var rc = RcFile.FromJson(rcPlain);
+        var rc = RcFile.FromCbor(rcPlain);
         rc.Version = 999;
-        byte[] corruptedRcRaw = System.Text.Encoding.UTF8.GetBytes(rc.ToJson());
+        byte[] corruptedRcRaw = rc.ToCborBytes();
         storage.WriteRc(fingerprint, EncryptionLayer.EncryptFragmentWithKey(corruptedRcRaw, aesKey));
         records.Add(new RcCorruption("Version", "1 -> 999"));
         Print($"  Version -> 999");

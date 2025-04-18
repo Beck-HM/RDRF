@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text.Json.Serialization;
 using RDRF.Core.Index;
 using RDRF.Core.Integrity;
 

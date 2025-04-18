@@ -39,13 +39,13 @@ public class Fss6Etn : IFssStrategy
     public static (byte[] data, List<byte[]> indexBlockMap, List<byte[]> rcBlockMap) ParseTrailer(byte[] fragmentData)
         => EtnTrailer.Parse(fragmentData);
 
-    public static byte[] StripEtnFieldsFromIndexJson(byte[] indexJson)
-        => EtnPrecision.StripFss6Fields(indexJson);
+    public static byte[] StripEtnFieldsFromIndexJson(byte[] indexBytes)
+        => EtnPrecision.StripFss6Fields(indexBytes);
 
     public static (List<byte[]> Fragments, byte[] IndexJson, byte[] RcJson) InjectCrossValidation(
-        List<byte[]> fragments, byte[] indexJson, string fileFingerprint)
+        List<byte[]> fragments, byte[] indexBytes, string fileFingerprint)
     {
-        var indexBlockMap = EtnBlockMap.Build(indexJson);
+        var indexBlockMap = EtnBlockMap.Build(indexBytes);
         var fragmentBlockMaps = fragments.Select(EtnBlockMap.Build).ToList();
 
         var rcFile = new RcFile
@@ -70,14 +70,14 @@ FragentBlockMaps = fragmentBlockMaps.Select(
             fragments[i] = withTrailer;
         }
 
-        byte[] updatedIndexJson = AddFss6FieldsToIndex(indexJson, fragmentBlockMaps, rcBlockMap);
-        return (fragments, updatedIndexJson, rcBytes);
+        byte[] updatedIndexBytes = AddFss6FieldsToIndex(indexBytes, fragmentBlockMaps, rcBlockMap);
+        return (fragments, updatedIndexBytes, rcBytes);
     }
 
     private static byte[] AddFss6FieldsToIndex(
-        byte[] indexJson, List<List<byte[]>> fragmentBlockMaps, List<byte[]> rcBlockMap)
+        byte[] indexBytes, List<List<byte[]>> fragmentBlockMaps, List<byte[]> rcBlockMap)
     {
-        var index = IndexManager.DeserializeIndex(indexJson);
+        var index = IndexManager.DeserializeIndex(indexBytes);
         if (index == null)
             throw new InvalidDataException("Failed to parse index JSON for ETN injection");
 
@@ -89,9 +89,9 @@ FragentBlockMaps = fragmentBlockMaps.Select(
     }
 
     public static CrossValidationResult CrossValidate(
-        byte[] indexJson, List<byte[]> fragmentsWithTrailers, byte[] rcJson)
+        byte[] indexBytes, List<byte[]> fragmentsWithTrailers, byte[] rcBytes)
     {
-        var precision = EtnPrecision.Analyze(indexJson, rcJson, fragmentsWithTrailers);
+        var precision = EtnPrecision.Analyze(indexBytes, rcBytes, fragmentsWithTrailers);
         return CrossValidationResult.FromPrecision(precision);
     }
 }

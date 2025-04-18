@@ -24,12 +24,12 @@ public class EtnPrecisionTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
             Assert.True(fragments[0].Length > 256, "Fragment must be >256 bytes");
 
             fragments[0] = EtnTestHelpers.CorruptFragmentDataAt(fragments[0], 0);
 
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
             Assert.Contains(0, result.CorruptedFragments);
             Assert.True(result.CorruptedFragmentBlocks.ContainsKey(0));
             Assert.Contains(0, result.CorruptedFragmentBlocks[0]);
@@ -47,12 +47,12 @@ public class EtnPrecisionTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             // Byte 255 is the last byte of block 0 (0>indexed)
             fragments[0] = EtnTestHelpers.CorruptFragmentDataAt(fragments[0], 255);
 
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
             Assert.Contains(0, result.CorruptedFragmentBlocks[0]);
             Assert.DoesNotContain(1, result.CorruptedFragmentBlocks[0]);
             _output.WriteLine("PASS: Byte 255 - block 0");
@@ -69,12 +69,12 @@ public class EtnPrecisionTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             // Byte 256 is the first byte of block 1
             fragments[0] = EtnTestHelpers.CorruptFragmentDataAt(fragments[0], 256);
 
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
             Assert.DoesNotContain(0, result.CorruptedFragmentBlocks[0]);
             Assert.Contains(1, result.CorruptedFragmentBlocks[0]);
             _output.WriteLine("PASS: Byte 256 - block 1");
@@ -91,12 +91,12 @@ public class EtnPrecisionTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             // Byte 511 is the last byte of block 1
             fragments[0] = EtnTestHelpers.CorruptFragmentDataAt(fragments[0], 511);
 
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
             Assert.DoesNotContain(0, result.CorruptedFragmentBlocks[0]);
             Assert.Contains(1, result.CorruptedFragmentBlocks[0]);
             _output.WriteLine("PASS: Byte 511 - block 1");
@@ -113,11 +113,11 @@ public class EtnPrecisionTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             fragments[0] = EtnTestHelpers.CorruptFragmentDataAt(fragments[0], 512);
 
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
             Assert.Contains(2, result.CorruptedFragmentBlocks[0]);
             Assert.DoesNotContain(1, result.CorruptedFragmentBlocks[0]);
             _output.WriteLine("PASS: Byte 512 - block 2");
@@ -134,14 +134,14 @@ public class EtnPrecisionTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
             Assert.True(fragments[0].Length > 512, "Fragment must be >512 bytes for 2>block test");
 
             // Corrupt byte 0 (block 0) and byte 256 (block 1)
             fragments[0] = EtnTestHelpers.CorruptFragmentDataAt(fragments[0], 0);
             fragments[0] = EtnTestHelpers.CorruptFragmentDataAt(fragments[0], 256);
 
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
             Assert.Contains(0, result.CorruptedFragmentBlocks[0]);
             Assert.Contains(1, result.CorruptedFragmentBlocks[0]);
             Assert.Equal(2, result.CorruptedFragmentBlocks[0].Count);
@@ -159,13 +159,13 @@ public class EtnPrecisionTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
             Assert.True(fragments.Count >= 2, "Need at least 2 fragments");
 
             fragments[0] = EtnTestHelpers.CorruptFragmentDataAt(fragments[0], 0);
             fragments[1] = EtnTestHelpers.CorruptFragmentDataAt(fragments[1], 256);
 
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
             Assert.Contains(0, result.CorruptedFragmentBlocks[0]);
             Assert.Contains(1, result.CorruptedFragmentBlocks[1]);
             _output.WriteLine("PASS: Independent block tracking across fragments");
@@ -182,12 +182,12 @@ public class EtnPrecisionTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
             Assert.True(fragments.Count >= 2, "Need at least 2 fragments");
 
-            byte[] corruptedIndex = EtnTestHelpers.CorruptIndexNonEtnFields(indexJson);
+            byte[] corruptedIndex = EtnTestHelpers.CorruptIndexNonEtnFields(indexBytes);
             fragments[1] = EtnTestHelpers.CorruptFragmentData(fragments[1]);
-            byte[] corruptedRc = EtnTestHelpers.CorruptRcContent(rcJson);
+            byte[] corruptedRc = EtnTestHelpers.CorruptRcContent(rcBytes);
 
             var result = Fss6Etn.CrossValidate(corruptedIndex, fragments, corruptedRc);
             Assert.False(result.IsValid);
@@ -212,12 +212,12 @@ public class EtnPrecisionTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             // Corrupt RC content
-            byte[] corruptedRc = EtnTestHelpers.CorruptRcContent(rcJson);
+            byte[] corruptedRc = EtnTestHelpers.CorruptRcContent(rcBytes);
 
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, corruptedRc);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, corruptedRc);
             Assert.True(result.RcCorrupted);
             Assert.NotEmpty(result.RcCorruptedBlocks);
             _output.WriteLine($"PASS: RC corruption: {result.RcCorruptedBlocks.Count} blocks");
@@ -234,8 +234,8 @@ public class EtnPrecisionTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, rcJson);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
 
             Assert.True(result.IsValid);
             Assert.Empty(result.IndexCorruptedBlocks);

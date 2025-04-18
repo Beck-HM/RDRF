@@ -122,8 +122,8 @@ public class RDRFEngine : IDisposable
     public static (byte[]? embeddedIndex, byte[] fragmentData) DecryptFragment(byte[] encryptedFrag, byte[] aesKey)
         => FragmentFileHeader.DecryptWithEmbeddedIndex(encryptedFrag, aesKey);
 
-    public static RdrfIndex DeserializeIndex(byte[] indexJson)
-        => IndexManager.DeserializeIndex(indexJson);
+    public static RdrfIndex DeserializeIndex(byte[] indexBytes)
+        => IndexManager.DeserializeIndex(indexBytes);
 
     // ── Dispose ──
 

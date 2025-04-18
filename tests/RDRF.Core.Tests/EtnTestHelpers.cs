@@ -43,7 +43,7 @@ public static class EtnTestHelpers
         catch { }
     }
 
-    public static (byte[] IndexJson, List<byte[]> Fragments, byte[] RcJson, string Fingerprint, byte[] RcCode)
+    public static (byte[] IndexBytes, List<byte[]> Fragments, byte[] RcBytes, string Fingerprint, byte[] RcCode)
         CreateDecryptedBackup(string storageDir, string strategy = "FSS6")
     {
         byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
@@ -73,11 +73,11 @@ public static class EtnTestHelpers
         }
 
         byte[] encryptedRc = storage.ReadRc(fingerprint);
-        byte[] rcJson = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, aesKey);
+        byte[] rcBytes = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, aesKey);
 
-        byte[] indexJson = IndexManager.SerializeIndex(index);
+        byte[] indexBytes = IndexManager.SerializeIndex(index);
 
-        return (indexJson, fragments, rcJson, fingerprint, rcCodeClone);
+        return (indexBytes, fragments, rcBytes, fingerprint, rcCodeClone);
     }
 
     public static byte[] CorruptRcContent(byte[] rcBytes)
@@ -110,16 +110,16 @@ public static class EtnTestHelpers
         return copy;
     }
 
-    public static byte[] CorruptIndexNonEtnFields(byte[] indexJson)
+    public static byte[] CorruptIndexNonEtnFields(byte[] indexBytes)
     {
-        var index = IndexManager.DeserializeIndex(indexJson);
+        var index = IndexManager.DeserializeIndex(indexBytes);
         index.OriginalName = index.OriginalName + "_CORRUPTED";
         return IndexManager.SerializeIndex(index);
     }
 
-    public static byte[] CorruptIndexEtnFields(byte[] indexJson)
+    public static byte[] CorruptIndexEtnFields(byte[] indexBytes)
     {
-        var index = IndexManager.DeserializeIndex(indexJson);
+        var index = IndexManager.DeserializeIndex(indexBytes);
         index.Fss6FragentBlockMaps = new List<List<string>> { new List<string> { "AA" } };
         return IndexManager.SerializeIndex(index);
     }
@@ -129,8 +129,8 @@ public static class EtnTestHelpers
         byte[] aesKey = EncryptionLayer.DeriveKey(rcCode);
         var storage = new LocalFileAdapter(storageDir);
         byte[] encryptedRc = storage.ReadRc(fingerprint);
-        byte[] rcJson = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, aesKey);
-        byte[] corrupted = CorruptRcContent(rcJson);
+        byte[] rcBytes = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, aesKey);
+        byte[] corrupted = CorruptRcContent(rcBytes);
         byte[] reEncrypted = EncryptionLayer.EncryptFragmentWithKey(corrupted, aesKey);
         storage.WriteRc(fingerprint, reEncrypted);
         return reEncrypted;

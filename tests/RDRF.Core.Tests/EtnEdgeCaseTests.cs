@@ -30,7 +30,7 @@ public class EtnEdgeCaseTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, fingerprint, rcCode) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, fingerprint, rcCode) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             var storage = new LocalFileAdapter(storageDir);
             string rcPath = Path.Combine(storageDir, fingerprint + Constants.RcFileSuffix);
@@ -78,17 +78,17 @@ public class EtnEdgeCaseTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             // Strip FSS6 fields from index (simulate index without ETN metadata)
-            var index = IndexManager.DeserializeIndex(indexJson);
+            var index = IndexManager.DeserializeIndex(indexBytes);
             index.Fss6FragentBlockMaps = null;
             index.Fss6RcBlockMap = null;
             byte[] strippedIndex = IndexManager.SerializeIndex(index);
 
             // CrossValidate should handle gracefully (trailer cross>refs still provide
             // some validation even without index's FSS6 fields)
-            var result = Fss6Etn.CrossValidate(strippedIndex, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(strippedIndex, fragments, rcBytes);
             Assert.NotNull(result);
             _output.WriteLine("PASS: CrossValidate with null FSS6 fields does not crash");
         }
@@ -104,13 +104,13 @@ public class EtnEdgeCaseTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             // Strip trailer from first fragment
             var (rawData, _, _) = Fss6Etn.ParseTrailer(fragments[0]);
             fragments[0] = rawData; // no trailer
 
-            var result = Fss6Etn.CrossValidate(indexJson, fragments, rcJson);
+            var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
             Assert.NotNull(result);
             _output.WriteLine("PASS: Fragment without trailer handled gracefully");
         }
@@ -141,7 +141,7 @@ public class EtnEdgeCaseTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var (indexJson, fragments, rcJson, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             var (_, refIndexBm, refRcBm) = Fss6Etn.ParseTrailer(fragments[0]);
             for (int i = 1; i < fragments.Count; i++)
