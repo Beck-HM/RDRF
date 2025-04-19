@@ -49,8 +49,7 @@ void RunStandardDemo()
         WaitRun();
 
         Step("3/9  解密备份数据 (基准准备)");
-        byte[] fragmentKey = GetFragmentKey(index, rcCodeSave, aesKey);
-        var baseline = DecryptFragments(index, storage, fragmentKey);
+        var baseline = DecryptFragments(index, storage, aesKey);
         byte[] rcPlain = DecryptRc(storage, fingerprint, aesKey);
         byte[] indexJson = IndexManager.SerializeIndex(index);
         var baselineCheck = Fss6Etn.CrossValidate(indexJson, baseline, rcPlain);
@@ -70,14 +69,14 @@ void RunStandardDemo()
         string prefix = index.CustomName ?? fingerprint;
         string fragFile = $"{prefix}_{targetFrag}.rdrf";
         byte[] encFrag = storage.ReadFragment(fragFile);
-        var (embIdx, fragData) = FragmentFileHeader.DecryptWithEmbeddedIndex(encFrag, fragmentKey);
+        var (embIdx, fragData) = FragmentFileHeader.DecryptWithEmbeddedIndex(encFrag, aesKey);
         int corruptOffset = Math.Min(4096, fragData.Length > 1 ? 4096 : fragData.Length / 2);
         int expectedBlock = corruptOffset / 256;
         byte orig = fragData[corruptOffset];
         fragData[corruptOffset] ^= 0xFF;
         bool needsCtr = encFrag.Length > 5 && encFrag[5] == 1;
         byte[] nonce = RandomNumberGenerator.GetBytes(12);
-        storage.WriteFragment(fragFile, FragmentFileHeader.EncryptWithEmbeddedIndex(fragData, embIdx!, fragmentKey, nonce, needsCtr));
+        storage.WriteFragment(fragFile, FragmentFileHeader.EncryptWithEmbeddedIndex(fragData, embIdx!, aesKey, nonce, needsCtr));
         records.Add(new FragmentCorruption(targetFrag, expectedBlock, $"{orig:X2}->{(orig ^ 0xFF):X2}"));
         Print($"  Fragment[{targetFrag}], byte {corruptOffset}, block #{expectedBlock}");
         WaitRun();
@@ -105,7 +104,7 @@ void RunStandardDemo()
         encIdx = storage.ReadIndex(fingerprint);
         var restoredIndex = IndexManager.DecryptIndexWithKey(encIdx, aesKey);
         indexJson = IndexManager.SerializeIndex(restoredIndex);
-        var restored = DecryptFragments(restoredIndex, storage, fragmentKey);
+        var restored = DecryptFragments(restoredIndex, storage, aesKey);
         rcPlain = DecryptRc(storage, fingerprint, aesKey);
         Print($"  Index JSON: {indexJson.Length:N0} B");
         Print($"  Fragments: {restored.Count}");
@@ -396,7 +395,7 @@ bool Scenario6_ReplayAttack(string logFile, System.Text.StringBuilder csv)
 
         byte[] aesKey = EncryptionLayer.DeriveKey(rcA);
         var index1 = IndexManager.DecryptIndexWithKey(storage1.ReadIndex(fp1), aesKey);
-        byte[] fragmentKey = GetFragmentKey(index1, rcA, aesKey);
+        byte[] fragmentKey = aesKey;
 
         // Tamper: replace one fragment's data with junk (simulating a mix-up/replay)
         var decrypted = DecryptFragments(index1, storage1, fragmentKey);
@@ -439,7 +438,7 @@ bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv)
 
         byte[] aesKey = EncryptionLayer.DeriveKey(rcCopy);
         var index = IndexManager.DecryptIndexWithKey(storage.ReadIndex(fp), aesKey);
-        byte[] fragmentKey = GetFragmentKey(index, rcCopy, aesKey);
+        byte[] fragmentKey = aesKey;
         string prefix = index.CustomName ?? fp;
 
         var rand = new Random(123);
@@ -513,8 +512,7 @@ bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv)
         fp = e.BackupFile(testFile, "FSS6");
     byte[] aesKey2 = EncryptionLayer.DeriveKey(rcCopy);
     var idx = IndexManager.DecryptIndexWithKey(storage.ReadIndex(fp), aesKey2);
-    byte[] fragKey = GetFragmentKey(idx, rcCopy, aesKey2);
-    return (storage, fp, aesKey2, fragKey, idx);
+    return (storage, fp, aesKey2, aesKey2, idx);
 }
 
 CrossValidationResult RunEtn(LocalFileAdapter storage, string fingerprint, byte[] aesKey,
@@ -664,13 +662,6 @@ static string GenerateTestFile(string dir, int sizeMB = 0)
 // ═══════════════════════════════════════════════
 //  Key/Fragment Helpers
 // ═══════════════════════════════════════════════
-static byte[] GetFragmentKey(RdrfIndex index, byte[] rcCode, byte[] aesKey)
-{
-    if (!string.IsNullOrEmpty(index.Salt))
-        return EncryptionLayer.DeriveKey(rcCode, Convert.FromHexString(index.Salt));
-    return aesKey;
-}
-
 static List<byte[]> DecryptFragments(RdrfIndex index, LocalFileAdapter storage, byte[] fragmentKey)
 {
     string prefix = index.CustomName ?? index.FileFingerprint;

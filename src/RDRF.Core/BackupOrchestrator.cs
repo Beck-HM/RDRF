@@ -117,8 +117,37 @@ public class BackupOrchestrator : IDisposable
 
         Debug.WriteLine($"Backing up: {filename} ({fileSize:N0} bytes)");
 
-        var (originalFragments, fileFingerprint) = Frags.SplitFile(fileInfo.FullName, fragmentSize);
-        string originalHash = IntegrityChecker.HashFile(fileInfo.FullName);
+        int fragSize = fragmentSize > 0 ? fragmentSize : 1024 * 1024;
+        var originalFragments = new List<byte[]>();
+        string originalHash;
+        string fileFingerprint;
+
+        using (var fs = new FileStream(fileInfo.FullName, FileMode.Open, FileAccess.Read,
+            FileShare.Read, 65536, FileOptions.SequentialScan))
+        using (var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
+        {
+            byte[] buf = new byte[fragSize];
+            int read;
+            while ((read = fs.Read(buf, 0, fragSize)) > 0)
+            {
+                hasher.AppendData(buf.AsSpan(0, read));
+                if (read == fragSize)
+                {
+                    originalFragments.Add(buf);
+                    buf = new byte[fragSize];
+                }
+                else
+                {
+                    var last = new byte[read];
+                    Buffer.BlockCopy(buf, 0, last, 0, read);
+                    originalFragments.Add(last);
+                }
+            }
+            byte[] hashBytes = hasher.GetHashAndReset();
+            fileFingerprint = Convert.ToHexString(hashBytes).ToLowerInvariant();
+            originalHash = fileFingerprint;
+        }
+
         int originalFragentCount = originalFragments.Count;
         var originalFragentSizes = originalFragments.Select(f => f.Length).ToList();
 
