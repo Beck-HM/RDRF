@@ -25,6 +25,29 @@ public static class Frags
         return (fragments, fingerprint);
     }
 
+    public static IEnumerable<byte[]> EnumerateFragments(string filePath, int fragmentSize = 0)
+    {
+        if (fragmentSize <= 0) fragmentSize = DefaultFragentSize;
+        using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
+            FileShare.Read, 65536, FileOptions.SequentialScan);
+        byte[] buf = new byte[fragmentSize];
+        int read;
+        while ((read = fs.Read(buf, 0, fragmentSize)) > 0)
+        {
+            if (read == fragmentSize)
+            {
+                yield return buf;
+                buf = new byte[fragmentSize];
+            }
+            else
+            {
+                var last = new byte[read];
+                Buffer.BlockCopy(buf, 0, last, 0, read);
+                yield return last;
+            }
+        }
+    }
+
     public static List<byte[]> SplitData(byte[] data, int fragmentSize = 0)
     {
         if (fragmentSize <= 0) fragmentSize = DefaultFragentSize;
