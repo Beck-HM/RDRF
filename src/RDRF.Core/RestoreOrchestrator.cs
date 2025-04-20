@@ -293,19 +293,19 @@ public class RestoreOrchestrator : IDisposable
                 byte[] encrypted = await _storage.ReadFragmentAsync(fname, ct).ConfigureAwait(false);
 
                 bool hasHeader = FragmentFileHeader.HasHeader(encrypted);
-                byte[] payload = hasHeader ? encrypted[6..] : encrypted;
+                int hdrOff = hasHeader ? 6 : 0;
                 byte[] raw;
 
                 if (hasHeader && !needsCtr && encrypted[4] >= 2)
-                    raw = EncryptionLayer.DecryptFragmentWithKey(payload, _aesKey, associatedData: encrypted[..6]);
+                    raw = EncryptionLayer.DecryptFragmentWithKey(encrypted, hdrOff, _aesKey, associatedData: encrypted[..6]);
                 else
                     raw = needsCtr
-                        ? EncryptionLayer.DecryptFragmentCtrWithKey(payload, _aesKey)
-                        : EncryptionLayer.DecryptFragmentWithKey(payload, _aesKey);
+                        ? EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, hdrOff, _aesKey)
+                        : EncryptionLayer.DecryptFragmentWithKey(encrypted, hdrOff, _aesKey);
 
                 if (hasHeader && raw.Length >= 4)
                 {
-                    int idxLen = BitConverter.ToInt32(raw[0..4]);
+                    int idxLen = BitConverter.ToInt32(raw.AsSpan(0, 4));
                     if (idxLen > 4 && idxLen <= raw.Length - 4)
                         raw = raw[(4 + idxLen)..];
                 }
@@ -424,15 +424,15 @@ public class RestoreOrchestrator : IDisposable
                     Frags.FragentFilename(filePrefix, i), ct).ConfigureAwait(false);
 
                 bool header = FragmentFileHeader.HasHeader(encrypted);
-                byte[] payload = header ? encrypted[6..] : encrypted;
+                int headerOffset = header ? 6 : 0;
 
                 byte[] decrypted;
                 if (header && !needsCtr && encrypted[4] >= 2)
-                    decrypted = EncryptionLayer.DecryptFragmentWithKey(payload, _aesKey, associatedData: encrypted[..6]);
+                    decrypted = EncryptionLayer.DecryptFragmentWithKey(encrypted, headerOffset, _aesKey, associatedData: encrypted[..6]);
                 else
                     decrypted = needsCtr
-                        ? EncryptionLayer.DecryptFragmentCtrWithKey(payload, _aesKey)
-                        : EncryptionLayer.DecryptFragmentWithKey(payload, _aesKey);
+                        ? EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, headerOffset, _aesKey)
+                        : EncryptionLayer.DecryptFragmentWithKey(encrypted, headerOffset, _aesKey);
 
                 if (header && decrypted.Length >= 4)
                 {

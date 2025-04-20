@@ -58,19 +58,19 @@ public static class FragmentFileHeader
         else
             throw new InvalidDataException("Cannot determine encryption mode.");
 
-        byte[] encrypted = hasHeader ? fileData[HeaderSize..] : fileData;
+        int hdrOff = hasHeader ? HeaderSize : 0;
 
         byte[] decrypted;
         if (hasHeader && !needsCtr && fileData[4] >= AadAuthenticationVersion)
         {
             byte[] headerBytes = fileData[..HeaderSize];
-            decrypted = EncryptionLayer.DecryptFragmentWithKey(encrypted, aesKey, associatedData: headerBytes);
+            decrypted = EncryptionLayer.DecryptFragmentWithKey(fileData, hdrOff, aesKey, associatedData: headerBytes);
         }
         else
         {
             decrypted = needsCtr
-                ? EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, aesKey)
-                : EncryptionLayer.DecryptFragmentWithKey(encrypted, aesKey);
+                ? EncryptionLayer.DecryptFragmentCtrWithKey(fileData, hdrOff, aesKey)
+                : EncryptionLayer.DecryptFragmentWithKey(fileData, hdrOff, aesKey);
         }
 
         if (hasHeader && decrypted.Length >= 4)
