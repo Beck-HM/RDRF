@@ -133,16 +133,13 @@ public static class EncryptionLayer
         }
     }
 
-    [Obsolete("CTR mode lacks authentication. Use GCM (EncryptFragmentWithKey) for new backups.")]
     public static byte[] EncryptFragmentCtrWithKey(byte[] plaintext, byte[] aesKey)
     {
         byte[] nonce = RandomNumberGenerator.GetBytes(Constants.NonceLength);
         byte[] ciphertext = CtrCryptWithKey(plaintext, aesKey, nonce);
-        byte[] hmac = HMACSHA256.HashData(aesKey, ciphertext);
-        byte[] result = new byte[nonce.Length + ciphertext.Length + hmac.Length];
+        byte[] result = new byte[nonce.Length + ciphertext.Length];
         Buffer.BlockCopy(nonce, 0, result, 0, nonce.Length);
         Buffer.BlockCopy(ciphertext, 0, result, nonce.Length, ciphertext.Length);
-        Buffer.BlockCopy(hmac, 0, result, nonce.Length + ciphertext.Length, hmac.Length);
         return result;
     }
 
@@ -155,21 +152,14 @@ public static class EncryptionLayer
     public static byte[] DecryptFragmentCtrWithKey(byte[] encryptedData, int offset, byte[] aesKey)
     {
         int nonceLen = Constants.NonceLength;
-        const int hmacLen = 32;
-        int ciphertextLen = encryptedData.Length - offset - nonceLen - hmacLen;
+        int ciphertextLen = encryptedData.Length - offset - nonceLen;
         if (ciphertextLen < 0)
-            throw new CryptographicException("Invalid encrypted data length for CTR mode.");
+            throw new CryptographicException("Invalid encrypted data length.");
 
         byte[] nonce = new byte[nonceLen];
         byte[] ciphertext = new byte[ciphertextLen];
-        byte[] storedHmac = new byte[hmacLen];
         Buffer.BlockCopy(encryptedData, offset, nonce, 0, nonceLen);
         Buffer.BlockCopy(encryptedData, offset + nonceLen, ciphertext, 0, ciphertextLen);
-        Buffer.BlockCopy(encryptedData, offset + nonceLen + ciphertextLen, storedHmac, 0, hmacLen);
-
-        byte[] computedHmac = HMACSHA256.HashData(aesKey, ciphertext);
-        if (!CryptographicOperations.FixedTimeEquals(storedHmac, computedHmac))
-            throw new CryptographicException("CTR HMAC verification failed.");
 
         return CtrCryptWithKey(ciphertext, aesKey, nonce);
     }

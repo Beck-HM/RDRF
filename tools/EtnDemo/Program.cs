@@ -76,7 +76,7 @@ void RunStandardDemo()
         fragData[corruptOffset] ^= 0xFF;
         bool needsCtr = encFrag.Length > 5 && encFrag[5] == 1;
         byte[] nonce = RandomNumberGenerator.GetBytes(12);
-        storage.WriteFragment(fragFile, FragmentFileHeader.EncryptWithEmbeddedIndex(fragData, embIdx!, aesKey, nonce, needsCtr));
+        storage.WriteFragment(fragFile, FragmentFileHeader.EncryptWithEmbeddedIndex(fragData, embIdx!, aesKey));
         records.Add(new FragmentCorruption(targetFrag, expectedBlock, $"{orig:X2}->{(orig ^ 0xFF):X2}"));
         Print($"  Fragment[{targetFrag}], byte {corruptOffset}, block #{expectedBlock}");
         WaitRun();
@@ -207,7 +207,7 @@ bool Scenario1_MultiFragmentCascade(string logFile, System.Text.StringBuilder cs
             data[pos] ^= 0xFF;
             bool nc = enc.Length > 5 && enc[5] == 1;
             byte[] nonce = RandomNumberGenerator.GetBytes(12);
-            storage.WriteFragment(f, FragmentFileHeader.EncryptWithEmbeddedIndex(data, emb!, fragmentKey, nonce, nc));
+            storage.WriteFragment(f, FragmentFileHeader.EncryptWithEmbeddedIndex(data, emb!, fragmentKey));
             records.Add(new FragmentCorruption(i, blk, $"byte {pos}"));
             details.Add($"Frag[{i}]: byte {pos}, block {blk}");
         }
@@ -245,7 +245,7 @@ bool Scenario2_CrossBlockBoundary(string logFile, System.Text.StringBuilder csv)
         data[256] ^= 0xFF;
         bool nc = enc.Length > 5 && enc[5] == 1;
         byte[] nonce = RandomNumberGenerator.GetBytes(12);
-        storage.WriteFragment(f, FragmentFileHeader.EncryptWithEmbeddedIndex(data, emb!, fragmentKey, nonce, nc));
+        storage.WriteFragment(f, FragmentFileHeader.EncryptWithEmbeddedIndex(data, emb!, fragmentKey));
 
         var result = RunEtn(storage, fingerprint, aesKey, fragmentKey, index);
         bool has0 = result.CorruptedFragmentBlocks.TryGetValue(0, out var blocks) && blocks.Contains(0) && blocks.Contains(1);
@@ -293,7 +293,7 @@ bool Scenario3_ByzantineMetadata(string logFile, System.Text.StringBuilder csv)
         Buffer.BlockCopy(newTrailer, 0, newFrag0, raw0.Length, newTrailer.Length);
         bool nc0 = enc0.Length > 5 && enc0[5] == 1;
         byte[] nonce = RandomNumberGenerator.GetBytes(12);
-        storage.WriteFragment(f0, FragmentFileHeader.EncryptWithEmbeddedIndex(newFrag0, emb0!, fragmentKey, nonce, nc0));
+        storage.WriteFragment(f0, FragmentFileHeader.EncryptWithEmbeddedIndex(newFrag0, emb0!, fragmentKey));
 
         var result = RunEtn(storage, fingerprint, aesKey, fragmentKey, index);
         // Index must be flagged (actual index changed, RC has original BM)
@@ -324,7 +324,7 @@ bool Scenario4_RecoveryResidual(string logFile, System.Text.StringBuilder csv)
         d0[mid] ^= 0xFF;
         bool nc0 = enc0.Length > 5 && enc0[5] == 1;
         byte[] nonce = RandomNumberGenerator.GetBytes(12);
-        storage.WriteFragment(f0, FragmentFileHeader.EncryptWithEmbeddedIndex(d0, emb0!, fragmentKey, nonce, nc0));
+        storage.WriteFragment(f0, FragmentFileHeader.EncryptWithEmbeddedIndex(d0, emb0!, fragmentKey));
 
         var result = RunEtn(storage, fp, aesKey, fragmentKey, index);
         bool ok = result.CorruptedFragments.Contains(0)
@@ -365,7 +365,7 @@ bool Scenario5_BlockSaturation(string logFile, System.Text.StringBuilder csv)
         }
         bool nc = enc.Length > 5 && enc[5] == 1;
         byte[] nonce = RandomNumberGenerator.GetBytes(12);
-        storage.WriteFragment(f, FragmentFileHeader.EncryptWithEmbeddedIndex(data, emb!, fragmentKey, nonce, nc));
+        storage.WriteFragment(f, FragmentFileHeader.EncryptWithEmbeddedIndex(data, emb!, fragmentKey));
 
         var result = RunEtn(storage, fingerprint, aesKey, fragmentKey, index);
         bool hasDetail = result.CorruptedFragmentBlocks.TryGetValue(0, out var actualBlocks);
@@ -407,7 +407,7 @@ bool Scenario6_ReplayAttack(string logFile, System.Text.StringBuilder csv)
         RandomNumberGenerator.Fill(fakeData);
         bool nc0 = enc0.Length > 5 && enc0[5] == 1;
         byte[] nonce = RandomNumberGenerator.GetBytes(12);
-        storage1.WriteFragment(f0, FragmentFileHeader.EncryptWithEmbeddedIndex(fakeData, emb0!, fragmentKey, nonce, nc0));
+        storage1.WriteFragment(f0, FragmentFileHeader.EncryptWithEmbeddedIndex(fakeData, emb0!, fragmentKey));
 
         byte[] rcAplain = DecryptRc(storage1, fp1, aesKey);
         var result = Fss6Etn.CrossValidate(IndexManager.SerializeIndex(index1),
@@ -465,7 +465,7 @@ bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv)
                 data[pos] ^= 0xFF;
                 bool nc = enc.Length > 5 && enc[5] == 1;
                 byte[] nonce = RandomNumberGenerator.GetBytes(12);
-                storage.WriteFragment(ff, FragmentFileHeader.EncryptWithEmbeddedIndex(data, emb!, fragmentKey, nonce, nc));
+                storage.WriteFragment(ff, FragmentFileHeader.EncryptWithEmbeddedIndex(data, emb!, fragmentKey));
             }
             else
             {

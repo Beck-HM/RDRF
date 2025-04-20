@@ -371,11 +371,7 @@ public class RegressionTests
                 {
                     byte[] encrypted = storage.ReadFragment(fragName);
                     bool hasHeader = FragmentFileHeader.HasHeader(encrypted);
-                    byte[] payload = hasHeader ? encrypted[6..] : encrypted;
-                    byte[] raw;
-                    if (hasHeader && encrypted[5] != 1 && encrypted[4] >= 2)
-                        raw = EncryptionLayer.DecryptFragmentWithKey(payload, aesKey, associatedData: encrypted[..6]);
-                    else raw = EncryptionLayer.DecryptFragmentWithKey(payload, aesKey);
+                    byte[] raw = EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, hasHeader ? 6 : 0, aesKey);
                     decryptedFragments[i] = raw;
                 }
             }
