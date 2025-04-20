@@ -42,10 +42,13 @@ public static class EncryptionLayer
     }
 
     public static byte[] DecryptFragmentWithKey(byte[] encryptedData, byte[] aesKey, byte[]? associatedData = null)
+        => DecryptFragmentWithKey(encryptedData, 0, aesKey, associatedData);
+
+    public static byte[] DecryptFragmentWithKey(byte[] encryptedData, int offset, byte[] aesKey, byte[]? associatedData = null)
     {
         int nonceLen = Constants.NonceLength;
         int tagLen = Constants.TagLength;
-        int ciphertextLen = encryptedData.Length - nonceLen - tagLen;
+        int ciphertextLen = encryptedData.Length - offset - nonceLen - tagLen;
         if (ciphertextLen < 0)
             throw new CryptographicException("Invalid encrypted data length.");
 
@@ -53,9 +56,9 @@ public static class EncryptionLayer
         byte[] ciphertext = new byte[ciphertextLen];
         byte[] tag = new byte[tagLen];
 
-        Buffer.BlockCopy(encryptedData, 0, nonce, 0, nonceLen);
-        Buffer.BlockCopy(encryptedData, nonceLen, ciphertext, 0, ciphertextLen);
-        Buffer.BlockCopy(encryptedData, nonceLen + ciphertextLen, tag, 0, tagLen);
+        Buffer.BlockCopy(encryptedData, offset, nonce, 0, nonceLen);
+        Buffer.BlockCopy(encryptedData, offset + nonceLen, ciphertext, 0, ciphertextLen);
+        Buffer.BlockCopy(encryptedData, offset + nonceLen + ciphertextLen, tag, 0, tagLen);
 
         byte[] plaintext = new byte[ciphertextLen];
         using var aes = new AesGcm(aesKey, Constants.TagLength);
@@ -147,19 +150,22 @@ public static class EncryptionLayer
         => EncryptFragmentCtrWithKey(plaintext, DeriveKey(rcCode));
 
     public static byte[] DecryptFragmentCtrWithKey(byte[] encryptedData, byte[] aesKey)
+        => DecryptFragmentCtrWithKey(encryptedData, 0, aesKey);
+
+    public static byte[] DecryptFragmentCtrWithKey(byte[] encryptedData, int offset, byte[] aesKey)
     {
         int nonceLen = Constants.NonceLength;
         const int hmacLen = 32;
-        int ciphertextLen = encryptedData.Length - nonceLen - hmacLen;
+        int ciphertextLen = encryptedData.Length - offset - nonceLen - hmacLen;
         if (ciphertextLen < 0)
             throw new CryptographicException("Invalid encrypted data length for CTR mode.");
 
         byte[] nonce = new byte[nonceLen];
         byte[] ciphertext = new byte[ciphertextLen];
         byte[] storedHmac = new byte[hmacLen];
-        Buffer.BlockCopy(encryptedData, 0, nonce, 0, nonceLen);
-        Buffer.BlockCopy(encryptedData, nonceLen, ciphertext, 0, ciphertextLen);
-        Buffer.BlockCopy(encryptedData, nonceLen + ciphertextLen, storedHmac, 0, hmacLen);
+        Buffer.BlockCopy(encryptedData, offset, nonce, 0, nonceLen);
+        Buffer.BlockCopy(encryptedData, offset + nonceLen, ciphertext, 0, ciphertextLen);
+        Buffer.BlockCopy(encryptedData, offset + nonceLen + ciphertextLen, storedHmac, 0, hmacLen);
 
         byte[] computedHmac = HMACSHA256.HashData(aesKey, ciphertext);
         if (!CryptographicOperations.FixedTimeEquals(storedHmac, computedHmac))
