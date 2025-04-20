@@ -133,4 +133,19 @@ public class Fss1Neighbor : IFssStrategy
         }
         return result;
     }
+
+    public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)
+    {
+        if (originalSizes != null && index < originalSizes.Count && originalSizes[index] > 0)
+        {
+            int size = originalSizes[index];
+            byte[] stripped = new byte[size];
+            Buffer.BlockCopy(encodedFragment, 0, stripped, 0, size);
+            return stripped;
+        }
+        int half = encodedFragment.Length / 2;
+        byte[] result = new byte[half];
+        Buffer.BlockCopy(encodedFragment, 0, result, 0, half);
+        return result;
+    }
 }

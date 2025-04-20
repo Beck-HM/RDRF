@@ -95,4 +95,7 @@ public class Fss3ReedSolomon : IFssStrategy
         }
         return result;
     }
+
+    public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)
+        => encodedFragment;
 }

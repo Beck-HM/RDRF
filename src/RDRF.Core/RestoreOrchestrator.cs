@@ -191,13 +191,22 @@ public class RestoreOrchestrator : IDisposable
 
         bool needsCtr = plan?.NeedsCtr ?? false;
 
+        // Try streaming restore when all fragments are on disk (no recovery needed)
+        bool hasFss6 = index.Fss6FragentBlockMaps != null || index.Fss6RcBlockMap != null;
+        if (await TryStreamingRestoreCoreAsync(index, filePrefix, outputPath, needsCtr, hasFss6,
+                progress, ct).ConfigureAwait(false))
+        {
+            Debug.WriteLine("  Restore complete!");
+            return true;
+        }
+        Debug.WriteLine("  Falling back to dictionary-based restore (recovery or missing fragments)");
+
         // Download and decrypt fragments
         var decryptedFragments = await DownloadAndDecryptFragmentsAsync(
             filePrefix, fragmentCount, needsCtr, fileFingerprint, progress, ct).ConfigureAwait(false);
 
         // ETN cross-validation + strip
         var etnActual = false;
-        bool hasFss6 = index.Fss6FragentBlockMaps != null || index.Fss6RcBlockMap != null;
         if (hasFss6)
         {
             ct.ThrowIfCancellationRequested();
@@ -383,6 +392,76 @@ public class RestoreOrchestrator : IDisposable
     {
         var strategy = _fss.GetStrategy(fssStrategy);
         return strategy.Strip(decryptedFragments, originalCount, originalSizes);
+    }
+
+    // ── Streaming Restore ──
+
+    private async Task<bool> TryStreamingRestoreCoreAsync(
+        RdrfIndex index, string filePrefix, string outputPath,
+        bool needsCtr, bool hasFss6,
+        IProgress<RdrfProgressReport>? progress, CancellationToken ct)
+    {
+        int fragmentCount = index.FragentCount;
+        int origCount = index.OriginalFragentCount > 0 ? index.OriginalFragentCount : fragmentCount;
+
+        for (int i = 0; i < fragmentCount; i++)
+            if (!_storage.FragmentExists(Frags.FragentFilename(filePrefix, i)))
+                return false;
+
+        var strategy = _fss.GetStrategy(index.FssStrategy);
+        var etn = hasFss6 ? (Fss6Etn)_fss.GetStrategy(Constants.FssLevel6) : null;
+
+        try
+        {
+            using var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
+            using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+
+            for (int i = 0; i < fragmentCount; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                byte[] encrypted = await _storage.ReadFragmentAsync(
+                    Frags.FragentFilename(filePrefix, i), ct).ConfigureAwait(false);
+
+                bool header = FragmentFileHeader.HasHeader(encrypted);
+                byte[] payload = header ? encrypted[6..] : encrypted;
+
+                byte[] decrypted;
+                if (header && !needsCtr && encrypted[4] >= 2)
+                    decrypted = EncryptionLayer.DecryptFragmentWithKey(payload, _aesKey, associatedData: encrypted[..6]);
+                else
+                    decrypted = needsCtr
+                        ? EncryptionLayer.DecryptFragmentCtrWithKey(payload, _aesKey)
+                        : EncryptionLayer.DecryptFragmentWithKey(payload, _aesKey);
+
+                if (header && decrypted.Length >= 4)
+                {
+                    int idxLen = BitConverter.ToInt32(decrypted.AsSpan(0, 4));
+                    if (idxLen > 4 && idxLen <= decrypted.Length - 4)
+                        decrypted = decrypted[(4 + idxLen)..];
+                }
+
+                if (etn != null)
+                    decrypted = etn.Strip(decrypted);
+
+                if (i >= origCount) continue;
+
+                byte[] original = strategy.StripSingle(decrypted, i, index.OriginalFragentSizes);
+                output.Write(original, 0, original.Length);
+                hasher.AppendData(original.AsSpan(0, original.Length));
+            }
+
+            byte[] hashBytes = hasher.GetHashAndReset();
+            string restoredHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+            bool valid = IntegrityChecker.VerifyHash(restoredHash, index.OriginalHash);
+            Debug.WriteLine($"  Integrity check: {(valid ? "PASS" : "FAIL")}");
+            return valid;
+        }
+        catch
+        {
+            if (File.Exists(outputPath)) File.Delete(outputPath);
+            return false;
+        }
     }
 
     // ── Dispose ──

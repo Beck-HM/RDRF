@@ -136,6 +136,13 @@ public class Fss5CrossRecovery : IFssStrategy
         return result;
     }
 
+    public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)
+    {
+        if (originalSizes != null && index < originalSizes.Count && encodedFragment.Length <= originalSizes[index])
+            return encodedFragment;
+        return ExtractOwnData(encodedFragment);
+    }
+
     private static byte[] ExtractOwnData(byte[] encoded)
     {
         int ownSize = BitConverter.ToInt32(encoded, 0);
