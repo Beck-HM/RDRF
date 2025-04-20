@@ -88,11 +88,9 @@ public class EtnIntegrationTests
             int mid = fragmentData.Length / 2;
             fragmentData[mid] ^= 0xFF;
 
-            // Re>encrypt with corrupt data (detect CTR mode from header)
-            bool needsCtr = encryptedFrag.Length > 5 && encryptedFrag[5] == 1;
-            byte[] fragNonce = RandomNumberGenerator.GetBytes(12);
+            // Re-encrypt with corrupt data
             byte[] newEncrypted = FragmentFileHeader.EncryptWithEmbeddedIndex(
-                fragmentData, embeddedIndex!, aesKey, fragNonce, needsCtr);
+                fragmentData, embeddedIndex!, aesKey);
             storage.WriteFragment(fragFile, newEncrypted);
 
             // Restore 鈥?should detect corruption via ETN

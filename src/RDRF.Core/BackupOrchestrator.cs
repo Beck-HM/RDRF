@@ -180,11 +180,9 @@ public class BackupOrchestrator : IDisposable
         }
 
         var nonces = new List<string>(fragments.Count);
-        var nonceBytes = new List<byte[]>(fragments.Count);
         for (int i = 0; i < fragments.Count; i++)
         {
             byte[] n = RandomNumberGenerator.GetBytes(Constants.NonceLength);
-            nonceBytes.Add(n);
             nonces.Add(Convert.ToBase64String(n));
         }
 
@@ -229,7 +227,7 @@ public class BackupOrchestrator : IDisposable
             if ((i & 3) == 0) cancellationToken.ThrowIfCancellationRequested();
 
             byte[] fileData = FragmentFileHeader.EncryptWithEmbeddedIndex(
-                fragments[i], serializedIndex, _aesKey, nonceBytes[i], plan.NeedsCtr);
+                fragments[i], serializedIndex, _aesKey);
 
             string fname = Frags.FragentFilename(filePrefix, i);
             int rawLen = fragments[i].Length;

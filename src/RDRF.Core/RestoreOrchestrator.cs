@@ -189,11 +189,10 @@ public class RestoreOrchestrator : IDisposable
             }
         }
 
-        bool needsCtr = plan?.NeedsCtr ?? false;
+        bool hasFss6 = index.Fss6FragentBlockMaps != null || index.Fss6RcBlockMap != null;
 
         // Try streaming restore when all fragments are on disk (no recovery needed)
-        bool hasFss6 = index.Fss6FragentBlockMaps != null || index.Fss6RcBlockMap != null;
-        if (await TryStreamingRestoreCoreAsync(index, filePrefix, outputPath, needsCtr, hasFss6,
+        if (await TryStreamingRestoreCoreAsync(index, filePrefix, outputPath, hasFss6,
                 progress, ct).ConfigureAwait(false))
         {
             Debug.WriteLine("  Restore complete!");
@@ -203,7 +202,7 @@ public class RestoreOrchestrator : IDisposable
 
         // Download and decrypt fragments
         var decryptedFragments = await DownloadAndDecryptFragmentsAsync(
-            filePrefix, fragmentCount, needsCtr, fileFingerprint, progress, ct).ConfigureAwait(false);
+            filePrefix, fragmentCount, fileFingerprint, progress, ct).ConfigureAwait(false);
 
         // ETN cross-validation + strip
         var etnActual = false;
@@ -268,15 +267,15 @@ public class RestoreOrchestrator : IDisposable
     // ── Download and Decrypt Fragments ──
 
     private Dictionary<int, byte[]> DownloadAndDecryptFragments(
-        string filePrefix, int fragmentCount, bool needsCtr, string fileFingerprint,
+        string filePrefix, int fragmentCount, string fileFingerprint,
         IProgress<RdrfProgressReport>? progress)
     {
-        return DownloadAndDecryptFragmentsAsync(filePrefix, fragmentCount, needsCtr, fileFingerprint, progress, CancellationToken.None)
+        return DownloadAndDecryptFragmentsAsync(filePrefix, fragmentCount, fileFingerprint, progress, CancellationToken.None)
             .GetAwaiter().GetResult();
     }
 
     private async Task<Dictionary<int, byte[]>> DownloadAndDecryptFragmentsAsync(
-        string filePrefix, int fragmentCount, bool needsCtr, string fileFingerprint,
+        string filePrefix, int fragmentCount, string fileFingerprint,
         IProgress<RdrfProgressReport>? progress, CancellationToken ct)
     {
         var decryptedFragments = new Dictionary<int, byte[]>();
@@ -294,14 +293,7 @@ public class RestoreOrchestrator : IDisposable
 
                 bool hasHeader = FragmentFileHeader.HasHeader(encrypted);
                 int hdrOff = hasHeader ? 6 : 0;
-                byte[] raw;
-
-                if (hasHeader && !needsCtr && encrypted[4] >= 2)
-                    raw = EncryptionLayer.DecryptFragmentWithKey(encrypted, hdrOff, _aesKey, associatedData: encrypted[..6]);
-                else
-                    raw = needsCtr
-                        ? EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, hdrOff, _aesKey)
-                        : EncryptionLayer.DecryptFragmentWithKey(encrypted, hdrOff, _aesKey);
+                byte[] raw = EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, hdrOff, _aesKey);
 
                 if (hasHeader && raw.Length >= 4)
                 {
@@ -398,7 +390,7 @@ public class RestoreOrchestrator : IDisposable
 
     private async Task<bool> TryStreamingRestoreCoreAsync(
         RdrfIndex index, string filePrefix, string outputPath,
-        bool needsCtr, bool hasFss6,
+        bool hasFss6,
         IProgress<RdrfProgressReport>? progress, CancellationToken ct)
     {
         int fragmentCount = index.FragentCount;
@@ -426,13 +418,7 @@ public class RestoreOrchestrator : IDisposable
                 bool header = FragmentFileHeader.HasHeader(encrypted);
                 int headerOffset = header ? 6 : 0;
 
-                byte[] decrypted;
-                if (header && !needsCtr && encrypted[4] >= 2)
-                    decrypted = EncryptionLayer.DecryptFragmentWithKey(encrypted, headerOffset, _aesKey, associatedData: encrypted[..6]);
-                else
-                    decrypted = needsCtr
-                        ? EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, headerOffset, _aesKey)
-                        : EncryptionLayer.DecryptFragmentWithKey(encrypted, headerOffset, _aesKey);
+                byte[] decrypted = EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, headerOffset, _aesKey);
 
                 if (header && decrypted.Length >= 4)
                 {

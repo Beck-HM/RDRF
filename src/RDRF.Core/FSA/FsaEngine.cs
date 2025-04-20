@@ -33,6 +33,8 @@ public class FsaEngine
 
         var allStrategies = new List<string> { primary };
         allStrategies.AddRange(auxiliary);
+        if (!allStrategies.Contains(Constants.FssLevel6))
+            allStrategies.Add(Constants.FssLevel6);
 
         string primaryFamily = FamilyMap.GetValueOrDefault(primary, FamilyEtn);
 
@@ -62,8 +64,6 @@ public class FsaEngine
             if (fam != null) familiesInSet.Add(fam);
         }
         plan.FamilyOrder = familiesInSet.ToList();
-        plan.EncryptionMode = "gcm";
-
         var encodeSteps = new List<FsaStep>();
         encodeSteps.Add(new FsaStep
         {
@@ -190,12 +190,6 @@ public class FsaPlan
 
     [JsonPropertyName("restore_pipeline")]
     public List<FsaStep> RestorePipeline { get; set; } = new();
-
-    [JsonPropertyName("encryption_mode")]
-    public string EncryptionMode { get; set; } = "gcm";
-
-    [JsonPropertyName("needs_ctr")]
-    public bool NeedsCtr { get; set; }
 
     [JsonPropertyName("estimated_overhead")]
     public double EstimatedOverhead { get; set; }
