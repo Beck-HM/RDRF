@@ -18,4 +18,6 @@ public interface IFssStrategy
         Dictionary<int, byte[]> encodedFragments,
         int originalFragmentCount,
         List<int>? originalSizes = null);
+
+    byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null);
 }

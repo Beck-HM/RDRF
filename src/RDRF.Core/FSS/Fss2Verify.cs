@@ -105,4 +105,11 @@ public class Fss2Verify : IFssStrategy
 
         return _fss1.Strip(verifind, originalFragentCount, originalSizes);
     }
+
+    public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)
+    {
+        byte[] data = new byte[encodedFragment.Length - 32];
+        Buffer.BlockCopy(encodedFragment, 0, data, 0, data.Length);
+        return _fss1.StripSingle(data, index, originalSizes);
+    }
 }

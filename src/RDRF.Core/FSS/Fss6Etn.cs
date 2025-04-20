@@ -31,6 +31,9 @@ public class Fss6Etn : IFssStrategy
         return data;
     }
 
+    public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)
+        => encodedFragment;
+
     public static List<byte[]> BuildBlockMap(byte[] data) => EtnBlockMap.Build(data);
     public static bool CompareBlockMaps(List<byte[]> a, List<byte[]> b) => EtnBlockMap.Compare(a, b);
     public static byte[] BuildTrailer(List<byte[]> indexBlockMap, List<byte[]> rcBlockMap, int rawSize = 0)

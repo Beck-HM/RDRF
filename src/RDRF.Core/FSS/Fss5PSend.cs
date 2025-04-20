@@ -80,4 +80,19 @@ public class Fss5PSend : IFssStrategy
         }
         return result;
     }
+
+    public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)
+    {
+        if (originalSizes != null && index < originalSizes.Count && encodedFragment.Length <= originalSizes[index])
+            return encodedFragment;
+        if (originalSizes != null && index < originalSizes.Count)
+        {
+            byte[] stripped = new byte[originalSizes[index]];
+            Buffer.BlockCopy(encodedFragment, 0, stripped, 0, stripped.Length);
+            return stripped;
+        }
+        byte[] result = new byte[encodedFragment.Length / 2];
+        Buffer.BlockCopy(encodedFragment, 0, result, 0, result.Length);
+        return result;
+    }
 }
