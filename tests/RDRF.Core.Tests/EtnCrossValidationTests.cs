@@ -220,10 +220,10 @@ public class EtnCrossValidationTests
             byte[] corrupted = (byte[])fragments[0].Clone();
             int trailerSize = BitConverter.ToInt32(corrupted, corrupted.Length - 4);
             int trailerStart = corrupted.Length - trailerSize;
-            // Parse the indexBMCount to find where indexBM hashes start
-            int indexBMCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
-            // Flip a byte in the middle of the first indexBM hash (within the trailer)
-            int flipPos = trailerStart + 8 + 5; // 5 bytes into first hash
+            int fragBmCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
+            int idxPos = trailerStart + 12 + fragBmCount * 2;
+            int indexBMCount = BitConverter.ToInt32(corrupted, idxPos);
+            int flipPos = idxPos + 4 + 5;
             if (flipPos < corrupted.Length && indexBMCount > 0)
                 corrupted[flipPos] ^= 0xFF;
 
@@ -422,12 +422,15 @@ public class EtnCrossValidationTests
             var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             // Corrupt the trailer's indexBM section in fragment[0]
+            // New trailer format: [rawSize][fragBmCount][fragFlat][indexBmCount][indexFlat][rcBmCount][rcFlat][trailerSize]
             byte[] corrupted = (byte[])fragments[0].Clone();
             int trailerSize = BitConverter.ToInt32(corrupted, corrupted.Length - 4);
             int trailerStart = corrupted.Length - trailerSize;
-            int indexBMCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
+            int fragBmCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
+            int idxPos = trailerStart + 12 + fragBmCount * 2;
+            int indexBMCount = BitConverter.ToInt32(corrupted, idxPos);
             // Flip a byte in the middle of the first indexBM hash
-            int flipPos = trailerStart + 8 + 5;
+            int flipPos = idxPos + 4 + 5;
             if (flipPos < corrupted.Length && indexBMCount > 0)
                 corrupted[flipPos] ^= 0xFF;
 

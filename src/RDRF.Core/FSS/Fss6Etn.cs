@@ -27,7 +27,7 @@ public class Fss6Etn : IFssStrategy
 
     public byte[] Strip(byte[] fragmentData)
     {
-        var (data, _, _) = EtnTrailer.Parse(fragmentData);
+        var (data, _, _, _) = EtnTrailer.Parse(fragmentData);
         return data;
     }
 
@@ -36,11 +36,14 @@ public class Fss6Etn : IFssStrategy
 
     public static List<byte[]> BuildBlockMap(byte[] data) => EtnBlockMap.Build(data);
     public static bool CompareBlockMaps(List<byte[]> a, List<byte[]> b) => EtnBlockMap.Compare(a, b);
-    public static byte[] BuildTrailer(List<byte[]> indexBlockMap, List<byte[]> rcBlockMap, int rawSize = 0)
-        => EtnTrailer.Build(indexBlockMap, rcBlockMap, rawSize);
+    public static byte[] BuildTrailer(List<byte[]> fragmentBlockMap, List<byte[]> indexBlockMap, List<byte[]> rcBlockMap, int rawSize = 0)
+        => EtnTrailer.Build(fragmentBlockMap, indexBlockMap, rcBlockMap, rawSize);
 
     public static (byte[] data, List<byte[]> indexBlockMap, List<byte[]> rcBlockMap) ParseTrailer(byte[] fragmentData)
-        => EtnTrailer.Parse(fragmentData);
+    {
+        var (data, _, idxBm, rcBm) = EtnTrailer.Parse(fragmentData);
+        return (data, idxBm, rcBm);
+    }
 
     public static byte[] StripEtnFieldsFromIndexJson(byte[] indexBytes)
         => EtnPrecision.StripFss6Fields(indexBytes);
@@ -55,9 +58,9 @@ public class Fss6Etn : IFssStrategy
         {
             Version = 1,
             FileFingerprint = fileFingerprint,
-            IndexBlockMap = indexBlockMap.Select(EtnBlockMap.HashToHex).ToList(),
-FragentBlockMaps = fragmentBlockMaps.Select(
-                list => list.Select(EtnBlockMap.HashToHex).ToList()).ToList(),
+            IndexBlockMap = indexBlockMap.Select(h => EtnBlockMap.HashToHex(EtnBlockMap.TruncateSecond(h))).ToList(),
+            FragentBlockMaps = fragmentBlockMaps.Select(
+                list => list.Select(h => EtnBlockMap.HashToHex(EtnBlockMap.TruncateSecond(h))).ToList()).ToList(),
             CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         };
         byte[] rcBytes = rcFile.ToCborBytes();
@@ -66,7 +69,10 @@ FragentBlockMaps = fragmentBlockMaps.Select(
         for (int i = 0; i < fragments.Count; i++)
         {
             int rawLen = fragments[i].Length;
-            byte[] trailer = EtnTrailer.Build(indexBlockMap, rcBlockMap, rawLen);
+            var trailerFragBm = fragmentBlockMaps[i].Select(EtnBlockMap.TruncateFirst).ToList();
+            var trailerIndexBm = indexBlockMap.Select(EtnBlockMap.TruncateFirst).ToList();
+            var trailerRcBm = rcBlockMap.Select(EtnBlockMap.TruncateFirst).ToList();
+            byte[] trailer = EtnTrailer.Build(trailerFragBm, trailerIndexBm, trailerRcBm, rawLen);
             byte[] withTrailer = new byte[rawLen + trailer.Length];
             Buffer.BlockCopy(fragments[i], 0, withTrailer, 0, rawLen);
             Buffer.BlockCopy(trailer, 0, withTrailer, rawLen, trailer.Length);
@@ -85,8 +91,8 @@ FragentBlockMaps = fragmentBlockMaps.Select(
             throw new InvalidDataException("Failed to parse index JSON for ETN injection");
 
         index.Fss6FragentBlockMaps = fragmentBlockMaps.Select(
-            list => list.Select(EtnBlockMap.HashToHex).ToList()).ToList();
-        index.Fss6RcBlockMap = rcBlockMap.Select(EtnBlockMap.HashToHex).ToList();
+            list => list.Select(h => EtnBlockMap.HashToHex(EtnBlockMap.TruncateSecond(h))).ToList()).ToList();
+        index.Fss6RcBlockMap = rcBlockMap.Select(h => EtnBlockMap.HashToHex(EtnBlockMap.TruncateSecond(h))).ToList();
 
         return IndexManager.SerializeIndex(index);
     }

@@ -123,13 +123,13 @@ public class EtnEdgeCaseTests
     [Fact]
     public void EmptyTrailer_DoesNotBreakParse()
     {
-        var (data, indexBm, rcBm) = EtnTrailer.Parse(new byte[0]);
+        var (data, _, indexBm, rcBm) = EtnTrailer.Parse(new byte[0]);
         Assert.Empty(data);
         Assert.Empty(indexBm);
         Assert.Empty(rcBm);
         _output.WriteLine("PASS: Empty trailer parse returns empty");
 
-        var (data2, indexBm2, rcBm2) = EtnTrailer.Parse(new byte[] { 1, 2, 3 });
+        var (data2, _, indexBm2, rcBm2) = EtnTrailer.Parse(new byte[] { 1, 2, 3 });
         Assert.Equal(3, data2.Length);
         _output.WriteLine("PASS: Small data without trailer returns data as>is");
     }

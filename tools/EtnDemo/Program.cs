@@ -287,7 +287,8 @@ bool Scenario3_ByzantineMetadata(string logFile, System.Text.StringBuilder csv)
             corruptedHash[0] ^= 0xFF;
             idxBm[idxBm.Count - 1] = corruptedHash;
         }
-        byte[] newTrailer = Fss6Etn.BuildTrailer(idxBm, rcBm, raw0.Length);
+        var fragBm0 = Fss6Etn.BuildBlockMap(raw0);
+        byte[] newTrailer = Fss6Etn.BuildTrailer(fragBm0, idxBm, rcBm, raw0.Length);
         byte[] newFrag0 = new byte[raw0.Length + newTrailer.Length];
         Buffer.BlockCopy(raw0, 0, newFrag0, 0, raw0.Length);
         Buffer.BlockCopy(newTrailer, 0, newFrag0, raw0.Length, newTrailer.Length);

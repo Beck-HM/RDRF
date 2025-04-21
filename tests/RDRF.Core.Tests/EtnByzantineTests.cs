@@ -174,10 +174,16 @@ public class EtnByzantineTests
             var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             // Corrupt the trailer's Index BM section in fragment[0]
+            // New trailer format: [rawSize][fragBmCount][fragFlat][indexBmCount][indexFlat][rcBmCount][rcFlat][trailerSize]
             byte[] corrupted = (byte[])fragments[0].Clone();
             int trailerSize = BitConverter.ToInt32(corrupted, corrupted.Length - 4);
-            int flipPos = corrupted.Length - trailerSize + 8 + 5; // into first indexBM hash
-            corrupted[flipPos] ^= 0xFF;
+            int trailerStart = corrupted.Length - trailerSize;
+            int fragBmCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
+            int idxPos = trailerStart + 12 + fragBmCount * 2; // after fragFlat
+            int indexBMCount = BitConverter.ToInt32(corrupted, idxPos);
+            int flipPos = idxPos + 4 + 5; // 5 bytes into first index hash
+            if (flipPos < corrupted.Length && indexBMCount > 0)
+                corrupted[flipPos] ^= 0xFF;
             fragments[0] = corrupted;
 
             var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
