@@ -8,6 +8,15 @@ using RDRF.Core.Storage;
 
 bool _interactive = args.Contains("-i");
 bool _stress = args.Contains("--stress");
+int _sizeMB = 0;
+string? _outDir = null;
+for (int i = 0; i < args.Length; i++)
+{
+    if ((args[i] == "-a" || args[i] == "--size") && i + 1 < args.Length)
+        int.TryParse(args[i + 1], out _sizeMB);
+    if ((args[i] == "-o" || args[i] == "--out") && i + 1 < args.Length)
+        _outDir = args[i + 1];
+}
 
 PrintBanner();
 if (_stress)
@@ -20,14 +29,15 @@ else
 // ═══════════════════════════════════════════════
 void RunStandardDemo()
 {
-    string demoDir = CreateTempDir();
+    string demoDir = CreateTempDir(_outDir);
     try
     {
         Step("1/9  生成测试代码文件");
-        string testFile = GenerateTestFile(demoDir);
+        string testFile = GenerateTestFile(demoDir, _sizeMB);
         byte[] originalHash = SHA256.HashData(File.ReadAllBytes(testFile));
         Print($"  File: {Path.GetFileName(testFile)}");
-        Print($"  Size: {new FileInfo(testFile).Length:N0} bytes");
+        long fileBytes = new FileInfo(testFile).Length;
+        Print($"  Size: {fileBytes:N0} bytes ({fileBytes / 1024 / 1024} MB)");
         Print($"  SHA256: {Convert.ToHexString(originalHash).ToLowerInvariant()}");
         WaitRun();
 
@@ -116,7 +126,10 @@ void RunStandardDemo()
         WaitRun();
 
         Step("8/9  ETN 精密交叉校验");
+        var swEtn = System.Diagnostics.Stopwatch.StartNew();
         var result = Fss6Etn.CrossValidate(indexJson, restored, rcPlain);
+        swEtn.Stop();
+        Print($"  2-tier ETN: {swEtn.Elapsed.TotalMilliseconds:F1} ms");
         PrintResult(result, restored.Count, records);
 
         Step("9/9  总结报告");
@@ -539,9 +552,9 @@ byte[] DecryptRc(LocalFileAdapter storage, string fingerprint, byte[] aesKey)
     catch { return enc; }
 }
 
-static string CreateTempDir()
+static string CreateTempDir(string? customBase = null)
 {
-    string dir = Path.Combine(Path.GetTempPath(), $"EtnDemo_{Guid.NewGuid():N}");
+    string dir = Path.Combine(customBase ?? Path.GetTempPath(), $"EtnDemo_{Guid.NewGuid():N}");
     Directory.CreateDirectory(dir);
     return dir;
 }

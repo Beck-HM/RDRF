@@ -244,12 +244,9 @@ public class RestoreOrchestrator : IDisposable
             }
         }
 
-        // Strip FSS encoding
+        // Strip FSS encoding → stream (avoids List<byte[]> intermediate copy)
         int origCount = originalCount ?? fragmentCount;
-        var strippedList = StripFssEncoding(decryptedFragments, fssStrategy, fragmentCount, originalSizes, origCount);
-
-        // Merge
-        Frags.MergeFragents(strippedList, outputPath);
+        StripFssEncodingToStream(decryptedFragments, fssStrategy, originalSizes, origCount, outputPath);
 
         // Verify integrity
         string restoredHash = IntegrityChecker.HashFile(outputPath);
@@ -384,6 +381,23 @@ public class RestoreOrchestrator : IDisposable
     {
         var strategy = _fss.GetStrategy(fssStrategy);
         return strategy.Strip(decryptedFragments, originalCount, originalSizes);
+    }
+
+    private void StripFssEncodingToStream(
+        Dictionary<int, byte[]> decryptedFragments,
+        string fssStrategy,
+        List<int>? originalSizes, int originalCount,
+        string outputPath)
+    {
+        var strategy = _fss.GetStrategy(fssStrategy);
+        using var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
+        for (int i = 0; i < originalCount; i++)
+        {
+            if (!decryptedFragments.TryGetValue(i, out var data)) continue;
+            byte[] original = strategy.StripSingle(data, i, originalSizes);
+            output.Write(original, 0, original.Length);
+            decryptedFragments[i] = null!;
+        }
     }
 
     // ── Streaming Restore ──
