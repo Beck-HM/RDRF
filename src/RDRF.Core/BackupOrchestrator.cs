@@ -245,33 +245,12 @@ public class BackupOrchestrator : IDisposable
             });
         }
 
-        var standaloneIndex = IndexManager.BuildIndex(
-            fileFingerprint: fileFingerprint,
-            originalFilename: filename,
-            originalSize: fileSize,
-            fragmentHashes: fragmentHashes,
-            fragmentNonces: nonces,
-            originalHash: originalHash,
-            fssStrategy: plan.EffectivePrimary,
-            originalFragentSizes: originalFragentSizes,
-            originalFragentCount: originalFragentCount,
-            fssParams: new Dictionary<string, object>
-            {
-                ["plan"] = JsonSerializer.SerializeToElement(plan)
-            });
-
-        if (!string.IsNullOrEmpty(customName))
-            standaloneIndex.CustomName = customName;
-        if (_salt.Length > 0)
-            standaloneIndex.Salt = Convert.ToHexString(_salt).ToLowerInvariant();
-        standaloneIndex.CreatedAt = embeddedIndex.CreatedAt;
-
-        if (hasFss6 && rcBytes.Length > 0)
+        // Reuse the serialized index as the standalone index (avoids a second BuildIndex)
+        var standaloneIndex = IndexManager.DeserializeIndex(serializedIndex);
+        standaloneIndex.FssParams = new Dictionary<string, object>
         {
-            var etnIndex = IndexManager.DeserializeIndex(serializedIndex);
-            standaloneIndex.Fss6FragentBlockMaps = etnIndex.Fss6FragentBlockMaps;
-            standaloneIndex.Fss6RcBlockMap = etnIndex.Fss6RcBlockMap;
-        }
+            ["plan"] = JsonSerializer.SerializeToElement(plan)
+        };
 
         byte[] encryptedIndex = IndexManager.EncryptIndexWithKey(standaloneIndex, _aesKey);
         await _storage.WriteIndexAsync(filePrefix, encryptedIndex, cancellationToken).ConfigureAwait(false);
