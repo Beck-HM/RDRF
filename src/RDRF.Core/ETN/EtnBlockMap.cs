@@ -11,15 +11,16 @@ public static class EtnBlockMap
     public static List<byte[]> Build(byte[] data)
     {
         int blockCount = (data.Length + BlockSize - 1) / BlockSize;
-        var hashes = new List<byte[]>(blockCount);
+        byte[][] hashes = new byte[blockCount][];
         for (int i = 0; i < blockCount; i++)
         {
             int offset = i * BlockSize;
             int len = Math.Min(BlockSize, data.Length - offset);
-            byte[] hash = SHA256.HashData(data.AsSpan(offset, len));
-            hashes.Add(hash);
+            byte[] h = new byte[32];
+            SHA256.HashData(data.AsSpan(offset, len), h.AsSpan());
+            hashes[i] = h;
         }
-        return hashes;
+        return hashes.ToList();
     }
 
     public static byte[] TruncateFirst(byte[] fullHash) => fullHash[..TrailerHashLen];
@@ -51,5 +52,19 @@ public static class EtnBlockMap
     }
 
     public static byte[] HexToHash(string hex) => Convert.FromHexString(hex);
-    public static string HashToHex(byte[] hash) => Convert.ToHexString(hash).ToLowerInvariant();
+
+    public static string HashToHex(byte[] hash)
+    {
+        return string.Create(hash.Length * 2, hash, static (chars, bytes) =>
+        {
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                byte b = bytes[i];
+                chars[i * 2] = HexChar(b >> 4);
+                chars[i * 2 + 1] = HexChar(b & 0xF);
+            }
+        });
+    }
+
+    private static char HexChar(int val) => (char)(val < 10 ? '0' + val : 'a' + val - 10);
 }

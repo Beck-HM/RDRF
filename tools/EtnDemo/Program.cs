@@ -19,8 +19,9 @@ for (int i = 0; i < args.Length; i++)
 }
 
 PrintBanner();
+int stressSize = _sizeMB > 0 ? _sizeMB : 500;
 if (_stress)
-    RunStressTests();
+    RunStressTests(stressSize);
 else
     RunStandardDemo();
 
@@ -155,50 +156,80 @@ void RunStandardDemo()
 // ═══════════════════════════════════════════════
 //  Stress Tests
 // ═══════════════════════════════════════════════
-void RunStressTests()
+void RunStressTests(int sizeMB)
 {
     int total = 0, passed = 0;
     string resultsFile = Path.Combine(Path.GetTempPath(), $"EtnStress_{Guid.NewGuid():N}.csv");
     var csv = new System.Text.StringBuilder();
-    csv.AppendLine("Scenario,Result,Details");
+    csv.AppendLine("Scenario,Result,Details,Time");
+    var swTotal = System.Diagnostics.Stopwatch.StartNew();
 
-    Step($"STRESS: 7 scenarios — interactive={_interactive}");
+    Step($"STRESS: 11 scenarios, {sizeMB}MB — interactive={_interactive}");
     Print($"  Results CSV: {resultsFile}");
     WaitRun();
 
     // Scenario 1
     total++;
+    var sw = System.Diagnostics.Stopwatch.StartNew();
     if (Scenario1_MultiFragmentCascade(resultsFile, csv)) passed++;
-    WaitRun();
+    csv.AppendLine($"S1_T,{sw.Elapsed.TotalSeconds:F2}s");
+    WaitRun(); sw.Restart();
     // Scenario 2
     total++;
     if (Scenario2_CrossBlockBoundary(resultsFile, csv)) passed++;
-    WaitRun();
+    csv.AppendLine($"S2_T,{sw.Elapsed.TotalSeconds:F2}s");
+    WaitRun(); sw.Restart();
     // Scenario 3
     total++;
     if (Scenario3_ByzantineMetadata(resultsFile, csv)) passed++;
-    WaitRun();
+    csv.AppendLine($"S3_T,{sw.Elapsed.TotalSeconds:F2}s");
+    WaitRun(); sw.Restart();
     // Scenario 4
     total++;
     if (Scenario4_RecoveryResidual(resultsFile, csv)) passed++;
-    WaitRun();
+    csv.AppendLine($"S4_T,{sw.Elapsed.TotalSeconds:F2}s");
+    WaitRun(); sw.Restart();
     // Scenario 5
     total++;
     if (Scenario5_BlockSaturation(resultsFile, csv)) passed++;
-    WaitRun();
+    csv.AppendLine($"S5_T,{sw.Elapsed.TotalSeconds:F2}s");
+    WaitRun(); sw.Restart();
     // Scenario 6
     total++;
     if (Scenario6_ReplayAttack(resultsFile, csv)) passed++;
-    WaitRun();
+    csv.AppendLine($"S6_T,{sw.Elapsed.TotalSeconds:F2}s");
+    WaitRun(); sw.Restart();
     // Scenario 7
     total++;
-    if (Scenario7_LargeFile(resultsFile, csv)) passed++;
-    WaitRun();
+    if (Scenario7_LargeFile(resultsFile, csv, sizeMB)) passed++;
+    csv.AppendLine($"S7_T,{sw.Elapsed.TotalSeconds:F2}s");
+    WaitRun(); sw.Restart();
+    // Scenario 8 - Extreme bit rot
+    total++;
+    if (Scenario8_ExtremeBitRot(resultsFile, csv, sizeMB)) passed++;
+    csv.AppendLine($"S8_T,{sw.Elapsed.TotalSeconds:F2}s");
+    WaitRun(); sw.Restart();
+    // Scenario 9 - Contiguous stripe kill
+    total++;
+    if (Scenario9_ContiguousStripeKill(resultsFile, csv, sizeMB)) passed++;
+    csv.AppendLine($"S9_T,{sw.Elapsed.TotalSeconds:F2}s");
+    WaitRun(); sw.Restart();
+    // Scenario 10 - Combined multi-layer attack
+    total++;
+    if (Scenario10_CombinedAttack(resultsFile, csv, sizeMB)) passed++;
+    csv.AppendLine($"S10_T,{sw.Elapsed.TotalSeconds:F2}s");
+    WaitRun(); sw.Restart();
+    // Scenario 11 - Trailer 2B false positive stress
+    total++;
+    if (Scenario11_TrailerFPStress(resultsFile, csv, sizeMB)) passed++;
+    csv.AppendLine($"S11_T,{sw.Elapsed.TotalSeconds:F2}s");
 
+    swTotal.Stop();
     Step("STRESS: Summary");
     Print($"  Scenarios passed: {passed}/{total}");
     double rate = total > 0 ? (double)passed / total * 100 : 0;
     Print($"  Pass rate: {rate:F1}%");
+    Print($"  Total time: {swTotal.Elapsed.TotalSeconds:F1}s");
     Print($"  Results CSV: {resultsFile}");
     File.WriteAllText(resultsFile, csv.ToString());
 }
@@ -206,7 +237,7 @@ void RunStressTests()
 bool Scenario1_MultiFragmentCascade(string logFile, System.Text.StringBuilder csv)
 {
     Step("S1  Multi-Fragment Cascade — corrupt every fragment");
-    string dir = CreateTempDir();
+    string dir = CreateTempDir(_outDir);
     try
     {
         var (storage, fingerprint, aesKey, fragmentKey, index) = QuickBackup(dir);
@@ -250,7 +281,7 @@ bool Scenario1_MultiFragmentCascade(string logFile, System.Text.StringBuilder cs
 bool Scenario2_CrossBlockBoundary(string logFile, System.Text.StringBuilder csv)
 {
     Step("S2  Cross-block boundary — corrupt bytes 255 & 256");
-    string dir = CreateTempDir();
+    string dir = CreateTempDir(_outDir);
     try
     {
         var (storage, fingerprint, aesKey, fragmentKey, index) = QuickBackup(dir);
@@ -282,7 +313,7 @@ bool Scenario2_CrossBlockBoundary(string logFile, System.Text.StringBuilder csv)
 bool Scenario3_ByzantineMetadata(string logFile, System.Text.StringBuilder csv)
 {
     Step("S3  Byzantine metadata — three-way disagreement on Index hash");
-    string dir = CreateTempDir();
+    string dir = CreateTempDir(_outDir);
     try
     {
         var (storage, fingerprint, aesKey, fragmentKey, index) = QuickBackup(dir);
@@ -307,7 +338,7 @@ bool Scenario3_ByzantineMetadata(string logFile, System.Text.StringBuilder csv)
             corruptedHash[0] ^= 0xFF;
             idxBm[idxBm.Count - 1] = corruptedHash;
         }
-        var fragBm0 = Fss6Etn.BuildBlockMap(raw0);
+        var fragBm0 = Fss6Etn.BuildBlockMap(raw0).Select(EtnBlockMap.TruncateFirst).ToList();
         byte[] newTrailer = Fss6Etn.BuildTrailer(fragBm0, idxBm, rcBm, raw0.Length);
         byte[] newFrag0 = new byte[raw0.Length + newTrailer.Length];
         Buffer.BlockCopy(raw0, 0, newFrag0, 0, raw0.Length);
@@ -329,7 +360,7 @@ bool Scenario3_ByzantineMetadata(string logFile, System.Text.StringBuilder csv)
 bool Scenario4_RecoveryResidual(string logFile, System.Text.StringBuilder csv)
 {
     Step("S4  Recovery residual — corrupt raw data (simulating post-recovery residual error)");
-    string dir = CreateTempDir();
+    string dir = CreateTempDir(_outDir);
     try
     {
         var (storage, fp, aesKey, fragmentKey, index) = QuickBackup(dir);
@@ -361,7 +392,7 @@ bool Scenario4_RecoveryResidual(string logFile, System.Text.StringBuilder csv)
 bool Scenario5_BlockSaturation(string logFile, System.Text.StringBuilder csv)
 {
     Step("S5  Block saturation — 40 non-consecutive blocks in one fragment");
-    string dir = CreateTempDir();
+    string dir = CreateTempDir(_outDir);
     try
     {
         var (storage, fingerprint, aesKey, fragmentKey, index) = QuickBackup(dir);
@@ -403,8 +434,8 @@ bool Scenario5_BlockSaturation(string logFile, System.Text.StringBuilder csv)
 bool Scenario6_ReplayAttack(string logFile, System.Text.StringBuilder csv)
 {
     Step("S6  Replay attack — mix nodes from two backup sessions");
-    string dir1 = CreateTempDir();
-    string dir2 = CreateTempDir();
+    string dir1 = CreateTempDir(_outDir);
+    string dir2 = CreateTempDir(_outDir);
     try
     {
         var storage1 = new LocalFileAdapter(dir1);
@@ -441,14 +472,14 @@ bool Scenario6_ReplayAttack(string logFile, System.Text.StringBuilder csv)
     finally { Cleanup(dir1); Cleanup(dir2); }
 }
 
-bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv)
+bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv, int sizeMB)
 {
-    Step("S7  Large file — 50 MB, 100 random block corruptions");
-    string dir = CreateTempDir();
+    Step($"S7  Large file — {sizeMB} MB, {sizeMB * 2} random block corruptions");
+    string dir = CreateTempDir(_outDir);
     try
     {
-        Step("  Generating 50 MB test file...");
-        string testFile = GenerateTestFile(dir, sizeMB: 50);
+        Step($"  Generating {sizeMB} MB test file...");
+        string testFile = GenerateTestFile(dir, sizeMB);
         var storage = new LocalFileAdapter(dir);
         byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
         byte[] rcCopy = (byte[])rcCode.Clone();
@@ -463,18 +494,17 @@ bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv)
         string prefix = index.CustomName ?? fp;
 
         var rand = new Random(123);
-        var blockTargets = new Dictionary<int, HashSet<int>>(); // frag => unique blocks
-        var perFragRawSize = new Dictionary<int, int>();
+        var blockTargets = new Dictionary<int, HashSet<int>>();
         int maxFrag = index.FragentCount;
+        int corruptCount = Math.Max(100, sizeMB * 2);
 
-        for (int c = 0; c < 100; c++)
+        for (int c = 0; c < corruptCount; c++)
         {
             int fi = rand.Next(maxFrag);
             string ff = $"{prefix}_{fi}.rdrf";
             byte[] enc = storage.ReadFragment(ff);
             var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, fragmentKey);
             var (rawOnly, _, _) = Fss6Etn.ParseTrailer(data);
-            perFragRawSize[fi] = rawOnly.Length;
             if (!blockTargets.ContainsKey(fi))
                 blockTargets[fi] = new HashSet<int>();
             int rawBlocks = rawOnly.Length / 256;
@@ -484,14 +514,7 @@ bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv)
             if (blockTargets[fi].Add(blk))
             {
                 data[pos] ^= 0xFF;
-                bool nc = enc.Length > 5 && enc[5] == 1;
-                byte[] nonce = RandomNumberGenerator.GetBytes(12);
                 storage.WriteFragment(ff, FragmentFileHeader.EncryptWithEmbeddedIndex(data, emb!, fragmentKey));
-            }
-            else
-            {
-                // Re-read the already-corrupted file — block was already hit
-                // No need to corrupt again — the same block was already targeted
             }
         }
 
@@ -500,15 +523,14 @@ bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv)
             foreach (int blk in kv.Value)
                 records.Add(new FragmentCorruption(kv.Key, blk, $"{kv.Key}:b{blk}"));
 
-        Step("  Running ETN cross-validation on 50 MB backup...");
+        Step($"  Running ETN cross-validation on {sizeMB} MB backup ({maxFrag} fragments)...");
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var result = RunEtn(storage, fp, aesKey, fragmentKey, index);
         sw.Stop();
 
         int blockHits = records.Count(r => r.Check(result));
         int fragsHit = result.CorruptedFragments.Count;
-        double blockRate = 100.0 * blockHits / records.Count;
-        // Pass if at least one corruption was detected at fragment level
+        double blockRate = blockHits > 0 ? 100.0 * blockHits / records.Count : 0;
         bool ok = fragsHit > 0;
         csv.AppendLine($"S7,{(ok ? "PASS" : "FAIL")},blockHits={blockHits}/{records.Count} fragments={fragsHit}/{maxFrag} time={sw.Elapsed.TotalSeconds:F2}s");
         Print($"  100 corruptions: {blockHits}/{records.Count} block-exact ({blockRate:F1}%)");
@@ -520,14 +542,250 @@ bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv)
 }
 
 // ═══════════════════════════════════════════════
+//  Extreme Stress Scenarios
+// ═══════════════════════════════════════════════
+
+bool Scenario8_ExtremeBitRot(string logFile, System.Text.StringBuilder csv, int sizeMB)
+{
+    Step("S8  Extreme bit rot — 0.01% scattered byte flips across ALL fragments");
+    string dir = CreateTempDir(_outDir);
+    try
+    {
+        var (storage, fingerprint, aesKey, _, index) = QuickBackup(dir, sizeMB);
+        string prefix = index.CustomName ?? fingerprint;
+        var rand = new Random(42);
+        var records = new List<CorruptionRecord>();
+
+        for (int i = 0; i < index.FragentCount; i++)
+        {
+            string f = $"{prefix}_{i}.rdrf";
+            byte[] enc = storage.ReadFragment(f);
+            var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, aesKey);
+            var (rawOnly, _, _) = Fss6Etn.ParseTrailer(data);
+            int rotBytes = Math.Max(1, rawOnly.Length / 10000);
+            var flippedBlocks = new HashSet<int>();
+            for (int b = 0; b < rotBytes; b++)
+            {
+                int pos = rand.Next(rawOnly.Length);
+                int blk = pos / 256;
+                data[pos] ^= (byte)(1 << rand.Next(8));
+                flippedBlocks.Add(blk);
+            }
+            storage.WriteFragment(f, FragmentFileHeader.EncryptWithEmbeddedIndex(data, emb!, aesKey));
+            foreach (int blk in flippedBlocks)
+                records.Add(new FragmentCorruption(i, blk, $"rot@{i}:b{blk}"));
+        }
+
+        Step("  Running ETN cross-validation...");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = RunEtn(storage, fingerprint, aesKey, aesKey, index);
+        sw.Stop();
+
+        int detected = records.Count(r => r.Check(result));
+        double rate = records.Count > 0 ? 100.0 * detected / records.Count : 100;
+        bool ok = detected > 0;
+        csv.AppendLine($"S8,{(ok ? "PASS" : "FAIL")},detected={detected}/{records.Count} frags={result.CorruptedFragments.Count} time={sw.Elapsed.TotalSeconds:F2}s");
+        Print($"  Bit rot: {detected}/{records.Count} blocks detected ({rate:F1}%)");
+        Print($"  Corrupted fragments: {result.CorruptedFragments.Count}/{index.FragentCount}");
+        Print($"  ETN time: {sw.Elapsed.TotalSeconds:F2}s");
+        return ok;
+    }
+    finally { Cleanup(dir); }
+}
+
+bool Scenario9_ContiguousStripeKill(string logFile, System.Text.StringBuilder csv, int sizeMB)
+{
+    Step("S9  Contiguous stripe kill — zero large block ranges (simulating media failure)");
+    string dir = CreateTempDir(_outDir);
+    try
+    {
+        var (storage, fingerprint, aesKey, _, index) = QuickBackup(dir, sizeMB);
+        string prefix = index.CustomName ?? fingerprint;
+        var rand = new Random(77);
+        var records = new List<CorruptionRecord>();
+
+        int stripeCount = Math.Min(6, Math.Max(3, index.FragentCount / 10));
+        for (int s = 0; s < stripeCount; s++)
+        {
+            int fi = rand.Next(index.FragentCount);
+            string f = $"{prefix}_{fi}.rdrf";
+            byte[] enc = storage.ReadFragment(f);
+            var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, aesKey);
+            var (rawOnly, _, _) = Fss6Etn.ParseTrailer(data);
+            int rawBlocks = rawOnly.Length / 256;
+            if (rawBlocks < 10) continue;
+
+            int startBlk = rand.Next(rawBlocks / 2);
+            int killBlocks = Math.Min(rawBlocks - startBlk, rand.Next(100, Math.Min(500, rawBlocks / 4)));
+            for (int b = startBlk; b < startBlk + killBlocks; b++)
+            {
+                int pos = b * 256;
+                int wipeLen = Math.Min(256, rawOnly.Length - pos);
+                Array.Fill<byte>(data, 0, pos, wipeLen);
+                records.Add(new FragmentCorruption(fi, b, $"kill@{fi}:b{b}"));
+            }
+            storage.WriteFragment(f, FragmentFileHeader.EncryptWithEmbeddedIndex(data, emb!, aesKey));
+        }
+
+        Step("  Running ETN cross-validation...");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = RunEtn(storage, fingerprint, aesKey, aesKey, index);
+        sw.Stop();
+
+        int detected = records.Count(r => r.Check(result));
+        double rate = records.Count > 0 ? 100.0 * detected / records.Count : 100;
+        bool ok = detected > records.Count * 0.9;
+        csv.AppendLine($"S9,{(ok ? "PASS" : "FAIL")},detected={detected}/{records.Count} frags={result.CorruptedFragments.Count} time={sw.Elapsed.TotalSeconds:F2}s");
+        Print($"  Stripe kill: {detected}/{records.Count} blocks detected ({rate:F1}%)");
+        Print($"  Corrupted fragments: {result.CorruptedFragments.Count}/{index.FragentCount}");
+        Print($"  ETN time: {sw.Elapsed.TotalSeconds:F2}s");
+        return ok;
+    }
+    finally { Cleanup(dir); }
+}
+
+bool Scenario10_CombinedAttack(string logFile, System.Text.StringBuilder csv, int sizeMB)
+{
+    Step("S10  Combined multi-layer attack — data + Index + RC + trailer");
+    string dir = CreateTempDir(_outDir);
+    try
+    {
+        var (storage, fingerprint, aesKey, _, index) = QuickBackup(dir, sizeMB);
+        string prefix = index.CustomName ?? fingerprint;
+        var rand = new Random(2024);
+        var records = new List<CorruptionRecord>();
+
+        for (int i = 0; i < index.FragentCount; i++)
+        {
+            if (rand.NextDouble() > 0.3) continue;
+            string f = $"{prefix}_{i}.rdrf";
+            byte[] enc = storage.ReadFragment(f);
+            var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, aesKey);
+            var (rawOnly, _, _) = Fss6Etn.ParseTrailer(data);
+            int rotBytes = Math.Max(1, rawOnly.Length / 20000);
+            var flipped = new HashSet<int>();
+            for (int b = 0; b < rotBytes; b++)
+            {
+                int pos = rand.Next(rawOnly.Length);
+                int blk = pos / 256;
+                data[pos] ^= (byte)(1 << rand.Next(8));
+                flipped.Add(blk);
+            }
+            storage.WriteFragment(f, FragmentFileHeader.EncryptWithEmbeddedIndex(data, emb!, aesKey));
+            foreach (int blk in flipped)
+                records.Add(new FragmentCorruption(i, blk, $"layer1@{i}:b{blk}"));
+        }
+
+        byte[] encIdx = storage.ReadIndex(fingerprint);
+        var idx = IndexManager.DecryptIndexWithKey(encIdx, aesKey);
+        idx.OriginalName += "_TAMPERED";
+        storage.WriteIndex(fingerprint, IndexManager.EncryptIndexWithKey(idx, aesKey));
+        records.Add(new IndexCorruption("OriginalName", "tampered"));
+
+        byte[] rcPlain = DecryptRc(storage, fingerprint, aesKey);
+        var rc = RcFile.FromCbor(rcPlain);
+        rc.Version = 999;
+        storage.WriteRc(fingerprint, EncryptionLayer.EncryptFragmentWithKey(rc.ToCborBytes(), aesKey));
+        records.Add(new RcCorruption("Version", "1->999"));
+
+        if (index.FragentCount > 0)
+        {
+            int ti = rand.Next(index.FragentCount);
+            string tf = $"{prefix}_{ti}.rdrf";
+            byte[] tenc = storage.ReadFragment(tf);
+            var (temb, tdata) = FragmentFileHeader.DecryptWithEmbeddedIndex(tenc, aesKey);
+            var (rawData, idxBm, rcBm) = Fss6Etn.ParseTrailer(tdata);
+            if (idxBm.Count > 0)
+            {
+                byte[] h = (byte[])idxBm[rand.Next(idxBm.Count)].Clone();
+                h[0] ^= 0xFF;
+                byte[] newTrailer = Fss6Etn.BuildTrailer(
+                    Fss6Etn.BuildBlockMap(rawData).Select(EtnBlockMap.TruncateFirst).ToList(), idxBm, rcBm, rawData.Length);
+                byte[] newFrag = new byte[rawData.Length + newTrailer.Length];
+                Buffer.BlockCopy(rawData, 0, newFrag, 0, rawData.Length);
+                Buffer.BlockCopy(newTrailer, 0, newFrag, rawData.Length, newTrailer.Length);
+                storage.WriteFragment(tf, FragmentFileHeader.EncryptWithEmbeddedIndex(newFrag, temb!, aesKey));
+            }
+        }
+
+        Step("  Running ETN cross-validation...");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = RunEtn(storage, fingerprint, aesKey, aesKey, index);
+        sw.Stop();
+
+        int dataDetected = records.Count(r => r.Check(result));
+        bool ok = (result.IndexCorrupted || result.RcCorrupted) && dataDetected > 0;
+        csv.AppendLine($"S10,{(ok ? "PASS" : "FAIL")},idx={result.IndexCorrupted} rc={result.RcCorrupted} data={dataDetected} time={sw.Elapsed.TotalSeconds:F2}s");
+        Print($"  Index corrupted: {result.IndexCorrupted}");
+        Print($"  RC corrupted: {result.RcCorrupted}");
+        Print($"  Data blocks detected: {dataDetected}");
+        Print($"  Corrupted fragments: {result.CorruptedFragments.Count}/{index.FragentCount}");
+        Print($"  ETN time: {sw.Elapsed.TotalSeconds:F2}s");
+        return ok;
+    }
+    finally { Cleanup(dir); }
+}
+
+bool Scenario11_TrailerFPStress(string logFile, System.Text.StringBuilder csv, int sizeMB)
+{
+    Step("S11  Trailer false positive stress — corrupt only 2B trailer hashes, data intact");
+    string dir = CreateTempDir(_outDir);
+    try
+    {
+        var (storage, fingerprint, aesKey, _, index) = QuickBackup(dir, sizeMB);
+        string prefix = index.CustomName ?? fingerprint;
+        var rand = new Random(2024);
+        int fpBlocks = 0;
+
+        for (int i = 0; i < Math.Min(20, index.FragentCount); i++)
+        {
+            string f = $"{prefix}_{i}.rdrf";
+            byte[] enc = storage.ReadFragment(f);
+            var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, aesKey);
+            var (rawData, tFragBm, tIdxBm, tRcBm) = EtnTrailer.Parse(data);
+            if (tFragBm.Count == 0) continue;
+
+            for (int h = 0; h < 2; h++)
+            {
+                int flipIdx = rand.Next(tFragBm.Count);
+                tFragBm[flipIdx] = new byte[] { (byte)rand.Next(256), (byte)rand.Next(256) };
+                fpBlocks++;
+            }
+
+            byte[] newTrailer = EtnTrailer.Build(tFragBm, tIdxBm, tRcBm, rawData.Length);
+            byte[] newFrag = new byte[rawData.Length + newTrailer.Length];
+            Buffer.BlockCopy(rawData, 0, newFrag, 0, rawData.Length);
+            Buffer.BlockCopy(newTrailer, 0, newFrag, rawData.Length, newTrailer.Length);
+            storage.WriteFragment(f, FragmentFileHeader.EncryptWithEmbeddedIndex(newFrag, emb!, aesKey));
+        }
+
+        Step("  Running ETN cross-validation...");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = RunEtn(storage, fingerprint, aesKey, aesKey, index);
+        sw.Stop();
+
+        int totalSusp = result.SuspiciousFragmentBlocks.Values.Sum(l => l.Count);
+        int totalCorrupt = result.CorruptedFragmentBlocks.Values.Sum(l => l.Count);
+        bool ok = totalSusp > 0 && totalCorrupt == 0;
+        csv.AppendLine($"S11,{(ok ? "PASS" : "FAIL")},suspicious={totalSusp} corrupted={totalCorrupt} time={sw.Elapsed.TotalSeconds:F2}s");
+        Print($"  Trailer FPs injected: {fpBlocks}");
+        Print($"  Suspicious (2B flagged, 8B cleared): {totalSusp}");
+        Print($"  False corrupted (should be 0): {totalCorrupt}");
+        Print($"  ETN time: {sw.Elapsed.TotalSeconds:F2}s");
+        return ok;
+    }
+    finally { Cleanup(dir); }
+}
+
+// ═══════════════════════════════════════════════
 //  Shared Helpers
 // ═══════════════════════════════════════════════
-(LocalFileAdapter storage, string fingerprint, byte[] aesKey, byte[] fragmentKey, RdrfIndex index) QuickBackup(string dir)
+(LocalFileAdapter storage, string fingerprint, byte[] aesKey, byte[] fragmentKey, RdrfIndex index) QuickBackup(string dir, int sizeMB = 0)
 {
     var storage = new LocalFileAdapter(dir);
     byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
     byte[] rcCopy = (byte[])rcCode.Clone();
-    string testFile = GenerateTestFile(dir);
+    string testFile = GenerateTestFile(dir, sizeMB);
     string fp;
     using (var e = new RDRFEngine(rcCode, storage))
         fp = e.BackupFile(testFile, "FSS6");
