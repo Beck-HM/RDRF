@@ -427,10 +427,10 @@ public class EtnCrossValidationTests
             int trailerSize = BitConverter.ToInt32(corrupted, corrupted.Length - 4);
             int trailerStart = corrupted.Length - trailerSize;
             int fragBmCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
-            int idxPos = trailerStart + 12 + fragBmCount * 2;
-            int indexBMCount = BitConverter.ToInt32(corrupted, idxPos);
+            int idxBmCountPos = trailerStart + 8 + fragBmCount * 2;
+            int indexBMCount = BitConverter.ToInt32(corrupted, idxBmCountPos);
             // Flip a byte in the middle of the first indexBM hash
-            int flipPos = idxPos + 4 + 5;
+            int flipPos = idxBmCountPos + 4 + 5;
             if (flipPos < corrupted.Length && indexBMCount > 0)
                 corrupted[flipPos] ^= 0xFF;
 

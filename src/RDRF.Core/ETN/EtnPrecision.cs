@@ -174,21 +174,6 @@ public static class EtnPrecision
                 }
             }
 
-            // If no trailer available, compare full against RC/Index directly
-            if (!hasTrailer)
-            {
-                bool rcMatch = hasRc && EtnBlockMap.DiffTrimmed(actual32, rcStoredFragmentBms[i]).Count == 0;
-                bool idxMatch = hasIndex && EtnBlockMap.DiffTrimmed(actual32, indexStoredFragmentBms[i]).Count == 0;
-
-                if (!rcMatch && !idxMatch)
-                {
-                    result.CorruptedFragments.Add(i);
-                    result.CorruptedFragmentBlocks[i] = EtnBlockMap.DiffTrimmed(actual32,
-                        rcStoredFragmentBms[i].Count > 0 ? rcStoredFragmentBms[i] : indexStoredFragmentBms[i]);
-                }
-                continue;
-            }
-
             if (corrupted.Count > 0)
             {
                 result.CorruptedFragments.Add(i);
