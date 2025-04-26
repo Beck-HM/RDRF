@@ -52,7 +52,12 @@ public class Fss6Etn : IFssStrategy
         List<byte[]> fragments, byte[] indexBytes, string fileFingerprint)
     {
         var indexBlockMap = EtnBlockMap.Build(indexBytes);
-        var fragmentBlockMaps = fragments.Select(EtnBlockMap.Build).ToList();
+        var fragmentBlockMaps = new List<List<byte[]>>(fragments.Count);
+        for (int i = 0; i < fragments.Count; i++) fragmentBlockMaps.Add(null!);
+        Parallel.For(0, fragments.Count, i =>
+        {
+            fragmentBlockMaps[i] = EtnBlockMap.Build(fragments[i]);
+        });
 
         var rcFile = new RcFile
         {
