@@ -30,19 +30,21 @@ public static class EtnPrecision
         var rcStoredFragmentBms = rcFile.FragentBlockMaps
             .Select(list => list.Select(EtnBlockMap.HexToHash).ToList()).ToList();
 
-        var actualFragmentBms = new List<List<byte[]>>();
-        var trailerFragmentBms = new List<List<byte[]>>();
-        var trailerIndexBms = new List<List<byte[]>>();
-        var trailerRcBms = new List<List<byte[]>>();
+        int n = fragmentsWithTrailers.Count;
+        var actualFragmentBms = new List<List<byte[]>>(n);
+        var trailerFragmentBms = new List<List<byte[]>>(n);
+        var trailerIndexBms = new List<List<byte[]>>(n);
+        var trailerRcBms = new List<List<byte[]>>(n);
+        for (int i = 0; i < n; i++) { actualFragmentBms.Add(null!); trailerFragmentBms.Add(null!); trailerIndexBms.Add(null!); trailerRcBms.Add(null!); }
 
-        for (int i = 0; i < fragmentsWithTrailers.Count; i++)
+        Parallel.For(0, n, i =>
         {
             var (data, tFragBm, tIndexBm, tRcBm) = EtnTrailer.Parse(fragmentsWithTrailers[i]);
-            actualFragmentBms.Add(EtnBlockMap.Build(data));
-            trailerFragmentBms.Add(tFragBm);
-            trailerIndexBms.Add(tIndexBm);
-            trailerRcBms.Add(tRcBm);
-        }
+            actualFragmentBms[i] = EtnBlockMap.Build(data);
+            trailerFragmentBms[i] = tFragBm;
+            trailerIndexBms[i] = tIndexBm;
+            trailerRcBms[i] = tRcBm;
+        });
 
         RdrfIndex? index = null;
         try { index = IndexManager.DeserializeIndex(indexBytes); }
