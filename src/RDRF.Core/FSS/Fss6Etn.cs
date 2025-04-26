@@ -35,7 +35,7 @@ public class Fss6Etn : IFssStrategy
         => encodedFragment;
 
     public static List<byte[]> BuildBlockMap(byte[] data) => EtnBlockMap.Build(data);
-    public static bool CompareBlockMaps(List<byte[]> a, List<byte[]> b) => EtnBlockMap.Compare(a, b);
+    public static bool CompareBlockMaps(List<byte[]> a, List<byte[]> b) => EtnBlockMap.DiffTrimmed(a, b).Count == 0;
     public static byte[] BuildTrailer(List<byte[]> fragmentBlockMap, List<byte[]> indexBlockMap, List<byte[]> rcBlockMap, int rawSize = 0)
         => EtnTrailer.Build(fragmentBlockMap, indexBlockMap, rcBlockMap, rawSize);
 
@@ -116,6 +116,7 @@ public class CrossValidationResult
     public List<int> RcCorruptedBlocks { get; set; } = new();
     public Dictionary<int, List<int>> CorruptedFragmentBlocks { get; set; } = new();
     public List<int> CorruptedFragmentTrailers { get; set; } = new();
+    public Dictionary<int, List<int>> SuspiciousFragmentBlocks { get; set; } = new();
 
     public static CrossValidationResult FromPrecision(PrecisionResult p)
     {
@@ -130,6 +131,7 @@ public class CrossValidationResult
             RcCorruptedBlocks = p.RcCorruptedBlocks,
             CorruptedFragmentBlocks = p.CorruptedFragmentBlocks,
             CorruptedFragmentTrailers = p.CorruptedFragmentTrailers,
+            SuspiciousFragmentBlocks = p.SuspiciousFragmentBlocks,
         };
     }
 }

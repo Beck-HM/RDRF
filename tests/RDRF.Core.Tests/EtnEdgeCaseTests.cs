@@ -147,9 +147,9 @@ public class EtnEdgeCaseTests
             for (int i = 1; i < fragments.Count; i++)
             {
                 var (_, idxBm, rcBm) = Fss6Etn.ParseTrailer(fragments[i]);
-                Assert.True(EtnBlockMap.Compare(refIndexBm, idxBm),
+                Assert.True(EtnBlockMap.DiffTrimmed(refIndexBm, idxBm).Count == 0,
                     $"Fragment {i} index BM differs from fragment 0");
-                Assert.True(EtnBlockMap.Compare(refRcBm, rcBm),
+                Assert.True(EtnBlockMap.DiffTrimmed(refRcBm, rcBm).Count == 0,
                     $"Fragment {i} RC BM differs from fragment 0");
             }
             _output.WriteLine($"PASS: All {fragments.Count} fragments have consistent trailers");

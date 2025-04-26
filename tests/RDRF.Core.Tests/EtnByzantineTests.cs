@@ -179,9 +179,9 @@ public class EtnByzantineTests
             int trailerSize = BitConverter.ToInt32(corrupted, corrupted.Length - 4);
             int trailerStart = corrupted.Length - trailerSize;
             int fragBmCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
-            int idxPos = trailerStart + 12 + fragBmCount * 2; // after fragFlat
-            int indexBMCount = BitConverter.ToInt32(corrupted, idxPos);
-            int flipPos = idxPos + 4 + 5; // 5 bytes into first index hash
+            int idxBmCountPos = trailerStart + 8 + fragBmCount * 2; // after fragFlat
+            int indexBMCount = BitConverter.ToInt32(corrupted, idxBmCountPos);
+            int flipPos = idxBmCountPos + 4 + 5; // 5 bytes into first index hash
             if (flipPos < corrupted.Length && indexBMCount > 0)
                 corrupted[flipPos] ^= 0xFF;
             fragments[0] = corrupted;

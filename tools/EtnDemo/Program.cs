@@ -54,12 +54,16 @@ void RunStandardDemo()
         byte[] indexJson = IndexManager.SerializeIndex(index);
         var baselineCheck = Fss6Etn.CrossValidate(indexJson, baseline, rcPlain);
         AssertOrDie(baselineCheck.IsValid, "Baseline backup is incomplete — cannot continue");
-        Print($"  Index BM: {EtnBlockMap.Build(Fss6Etn.StripEtnFieldsFromIndexJson(indexJson)).Count} entries");
-        Print($"  RC   BM: {EtnBlockMap.Build(rcPlain).Count} entries");
+        int indexBmCount = EtnBlockMap.Build(Fss6Etn.StripEtnFieldsFromIndexJson(indexJson)).Count;
+        int rcBmCount = EtnBlockMap.Build(rcPlain).Count;
+        Print($"  Index BM: {indexBmCount} entries → stored in RC (8B each)");
+        Print($"  RC   BM: {rcBmCount} entries → stored in Index (8B each)");
         for (int i = 0; i < baseline.Count; i++)
         {
             var (raw, _, _) = Fss6Etn.ParseTrailer(baseline[i]);
-            Print($"  Fragment[{i}]: {raw.Length:N0} B, {EtnBlockMap.Build(raw).Count} blocks");
+            int blockCount = EtnBlockMap.Build(raw).Count;
+            int trailerBytes = baseline[i].Length - raw.Length;
+            Print($"  Fragment[{i}]: {raw.Length:N0} B, {blockCount} blocks, trailer {trailerBytes} B (2B/block)");
         }
         WaitRun();
 
@@ -118,6 +122,9 @@ void RunStandardDemo()
         Step("9/9  总结报告");
         int detected = records.Count(r => r.Check(result));
         Print($"  Detected: {detected}/{records.Count}");
+        int totalSusp = result.SuspiciousFragmentBlocks.Values.Sum(l => l.Count);
+        if (totalSusp > 0)
+            Print($"  False positives (2B collision → 8B cleared): {totalSusp} blocks");
         foreach (var r2 in records)
         {
             bool hit = r2.Check(result);
@@ -573,8 +580,8 @@ static void PrintBanner()
     Console.ForegroundColor = ConsoleColor.Cyan;
     Console.WriteLine();
     Console.WriteLine("  ╔══════════════════════════════════════════════════════════════╗");
-    Console.WriteLine("  ║         ETN Precision Cross-Validation                     ║");
-    Console.WriteLine("  ║  256B block · 3 nodes · surgical precision                 ║");
+    Console.WriteLine("  ║      ETN 2B+8B Precision Cross-Validation                  ║");
+    Console.WriteLine("  ║  256B block · 3 nodes · 2-tier · surgical precision         ║");
     Console.WriteLine("  ╚══════════════════════════════════════════════════════════════╝");
     Console.ResetColor();
 }
@@ -592,28 +599,29 @@ static void PrintResult(CrossValidationResult r, int fragmentCount, List<Corrupt
 {
     Console.WriteLine();
     Console.ForegroundColor = ConsoleColor.White;
-    Console.WriteLine("  ┌───────┬────────┬─────────────────────────────────────┐");
-    Console.WriteLine("  │ Node  │ Status │ Corrupted 256B Blocks              │");
-    Console.WriteLine("  ├───────┼────────┼─────────────────────────────────────┤");
+    Console.WriteLine("  ┌───────┬────────┬─────────────────────────────────────┬──────────────────┐");
+    Console.WriteLine("  │ Node  │ Status │ Corrupted 256B Blocks              │ Suspicious (FP)  │");
+    Console.WriteLine("  ├───────┼────────┼─────────────────────────────────────┼──────────────────┤");
     Console.ResetColor();
 
-    PrintNodeRow("Index", r.IndexCorrupted, r.IndexCorruptedBlocks, null, r.IndexCorrupted, corruptions);
-    PrintNodeRow("RC", r.RcCorrupted, r.RcCorruptedBlocks, null, r.RcCorrupted, corruptions);
+    PrintNodeRow("Index", r.IndexCorrupted, r.IndexCorruptedBlocks, null, r.IndexCorrupted, corruptions, null);
+    PrintNodeRow("RC", r.RcCorrupted, r.RcCorruptedBlocks, null, r.RcCorrupted, corruptions, null);
 
     for (int i = 0; i < fragmentCount; i++)
     {
         bool isCorrupt = r.CorruptedFragments.Contains(i);
         var blocks = r.CorruptedFragmentBlocks.TryGetValue(i, out var b) ? b : null;
         bool idx0Trailer = r.CorruptedFragmentTrailers.Contains(i);
-        PrintNodeRow($"Fragment[{i}]", isCorrupt, blocks, idx0Trailer ? "TRAILER" : null, isCorrupt, corruptions);
+        var susp = r.SuspiciousFragmentBlocks.TryGetValue(i, out var s) ? s : null;
+        PrintNodeRow($"Fragment[{i}]", isCorrupt, blocks, idx0Trailer ? "TRAILER" : null, isCorrupt, corruptions, susp);
     }
     Console.ForegroundColor = ConsoleColor.White;
-    Console.WriteLine("  └───────┴────────┴─────────────────────────────────────┘");
+    Console.WriteLine("  └───────┴────────┴─────────────────────────────────────┴──────────────────┘");
     Console.ResetColor();
 }
 
 static void PrintNodeRow(string name, bool isCorrupt, List<int>? blocks, string? extraTag,
-    bool hasTag, List<CorruptionRecord> corruptions)
+    bool hasTag, List<CorruptionRecord> corruptions, List<int>? suspicious)
 {
     Console.ForegroundColor = isCorrupt ? ConsoleColor.Red : ConsoleColor.Green;
     string status = isCorrupt ? "FAILED" : "OK    ";
@@ -622,8 +630,13 @@ static void PrintNodeRow(string name, bool isCorrupt, List<int>? blocks, string?
             ? string.Join(",", blocks)
             : string.Join(",", blocks.Take(6)) + $"+{blocks.Count - 6} blks")
         : (isCorrupt ? "-" : "-");
+    string suspStr = suspicious != null && suspicious.Count > 0
+        ? (suspicious.Count <= 4
+            ? string.Join(",", suspicious)
+            : string.Join(",", suspicious.Take(3)) + $"+{suspicious.Count - 3}")
+        : "";
     string tag = hasTag ? " [TAMPER]" : extraTag != null ? $" [{extraTag}]" : "";
-    Console.WriteLine($"  │ {name,-14} │ {status} │ {blkStr,-28} │{tag}");
+    Console.WriteLine($"  │ {name,-14} │ {status} │ {blkStr,-28} │ {suspStr,-16} │{tag}");
     Console.ResetColor();
 }
 

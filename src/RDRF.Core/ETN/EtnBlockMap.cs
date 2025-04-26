@@ -43,45 +43,11 @@ public static class EtnBlockMap
         return diff;
     }
 
-    public static byte[] HashTrimmed(byte[] fullHash, int len)
-    {
-        var trimmed = new byte[len];
-        Buffer.BlockCopy(fullHash, 0, trimmed, 0, len);
-        return trimmed;
-    }
-
-    public static bool Compare(List<byte[]> a, List<byte[]> b)
-    {
-        if (a.Count != b.Count) return false;
-        for (int i = 0; i < a.Count; i++)
-        {
-            if (a[i].Length != b[i].Length) return false;
-            if (!CryptographicOperations.FixedTimeEquals(a[i], b[i])) return false;
-        }
-        return true;
-    }
-
-    public static List<int> Diff(List<byte[]> actual, List<byte[]> expected)
-    {
-        var diff = new List<int>();
-        int count = Math.Min(actual.Count, expected.Count);
-        for (int i = 0; i < count; i++)
-            if (!CryptographicOperations.FixedTimeEquals(actual[i], expected[i]))
-                diff.Add(i);
-        for (int i = count; i < actual.Count || i < expected.Count; i++)
-            diff.Add(i);
-        return diff;
-    }
-
-    public static bool IsFirstPassMatch(byte[] actualFull, byte[] storedTrailer)
-        => actualFull[0] == storedTrailer[0] && actualFull[1] == storedTrailer[1];
-
     public static bool IsSecondPassMatch(byte[] actualFull, byte[] storedSecond)
     {
         int len = Math.Min(SecondHashLen, storedSecond.Length);
-        for (int i = 0; i < len; i++)
-            if (actualFull[i] != storedSecond[i]) return false;
-        return true;
+        return CryptographicOperations.FixedTimeEquals(
+            actualFull.AsSpan(0, len), storedSecond.AsSpan(0, len));
     }
 
     public static byte[] HexToHash(string hex) => Convert.FromHexString(hex);
