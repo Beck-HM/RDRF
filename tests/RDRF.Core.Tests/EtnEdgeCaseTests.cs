@@ -52,7 +52,7 @@ public class EtnEdgeCaseTests
                 byte[] fileBytes = storage.ReadFragment(fname);
                 var (_, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(fileBytes, aesKey);
                 // Strip ETN trailer from fragment data
-                var (cleanData, _, _) = Fss6Etn.ParseTrailer(data);
+                var (cleanData, _, _, _, _) = Fss6Etn.ParseTrailer(data);
                 decrypted.Add(cleanData);
             }
 
@@ -107,7 +107,7 @@ public class EtnEdgeCaseTests
             var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             // Strip trailer from first fragment
-            var (rawData, _, _) = Fss6Etn.ParseTrailer(fragments[0]);
+            var (rawData, _, _, _, _) = Fss6Etn.ParseTrailer(fragments[0]);
             fragments[0] = rawData; // no trailer
 
             var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
@@ -123,13 +123,11 @@ public class EtnEdgeCaseTests
     [Fact]
     public void EmptyTrailer_DoesNotBreakParse()
     {
-        var (data, _, indexBm, rcBm) = EtnTrailer.Parse(new byte[0]);
+        var (data, _, _, _, _, _, _) = EtnTrailer.Parse(new byte[0]);
         Assert.Empty(data);
-        Assert.Empty(indexBm);
-        Assert.Empty(rcBm);
         _output.WriteLine("PASS: Empty trailer parse returns empty");
 
-        var (data2, _, indexBm2, rcBm2) = EtnTrailer.Parse(new byte[] { 1, 2, 3 });
+        var (data2, _, _, _, _, _, _) = EtnTrailer.Parse(new byte[] { 1, 2, 3 });
         Assert.Equal(3, data2.Length);
         _output.WriteLine("PASS: Small data without trailer returns data as>is");
     }
@@ -143,13 +141,13 @@ public class EtnEdgeCaseTests
         {
             var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
-            var (_, refIndexBm, refRcBm) = Fss6Etn.ParseTrailer(fragments[0]);
+            var (_, refIdxFlat, refIdxCnt, refRcFlat, refRcCnt) = Fss6Etn.ParseTrailer(fragments[0]);
             for (int i = 1; i < fragments.Count; i++)
             {
-                var (_, idxBm, rcBm) = Fss6Etn.ParseTrailer(fragments[i]);
-                Assert.True(EtnBlockMap.DiffTrimmed(refIndexBm, idxBm).Count == 0,
+                var (_, idxFlat, idxCnt, rcFlat, rcCnt) = Fss6Etn.ParseTrailer(fragments[i]);
+                Assert.True(EtnBlockMap.DiffTrimmed(refIdxFlat, refIdxCnt, idxFlat, idxCnt, EtnBlockMap.TrailerHashLen).Count == 0,
                     $"Fragment {i} index BM differs from fragment 0");
-                Assert.True(EtnBlockMap.DiffTrimmed(refRcBm, rcBm).Count == 0,
+                Assert.True(EtnBlockMap.DiffTrimmed(refRcFlat, refRcCnt, rcFlat, rcCnt, EtnBlockMap.TrailerHashLen).Count == 0,
                     $"Fragment {i} RC BM differs from fragment 0");
             }
             _output.WriteLine($"PASS: All {fragments.Count} fragments have consistent trailers");

@@ -349,7 +349,7 @@ public class EtnCrossValidationTests
             var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             // Corrupt fragment[0] at data.Length/2, record the raw data length for block calc
-            var (rawData, _, _) = Fss6Etn.ParseTrailer(fragments[0]);
+            var (rawData, _, _, _, _) = Fss6Etn.ParseTrailer(fragments[0]);
             int targetPos = rawData.Length / 2;
             int expectedBlock = targetPos / 256;
             _output.WriteLine($"  Fragment[0] ra[{rawData.Length}, flip @ {targetPos}, expected block ~{expectedBlock}");
@@ -383,7 +383,7 @@ public class EtnCrossValidationTests
         {
             var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
-            var (rawData, _, _) = Fss6Etn.ParseTrailer(fragments[0]);
+            var (rawData, _, _, _, _) = Fss6Etn.ParseTrailer(fragments[0]);
             Assert.True(rawData.Length > 256, "Fragment must be >256 bytes for this test");
 
             byte[] copy = (byte[])fragments[0].Clone();

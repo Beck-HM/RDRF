@@ -27,22 +27,22 @@ public class Fss6Etn : IFssStrategy
 
     public byte[] Strip(byte[] fragmentData)
     {
-        var (data, _, _, _) = EtnTrailer.Parse(fragmentData);
+        var (data, _, _, _, _, _, _) = EtnTrailer.Parse(fragmentData);
         return data;
     }
 
     public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)
         => encodedFragment;
 
-    public static List<byte[]> BuildBlockMap(byte[] data) => EtnBlockMap.Build(data);
+    public static byte[] BuildBlockMap(byte[] data) => EtnBlockMap.Build(data);
     public static bool CompareBlockMaps(List<byte[]> a, List<byte[]> b) => EtnBlockMap.DiffTrimmed(a, b).Count == 0;
-    public static byte[] BuildTrailer(List<byte[]> fragmentBlockMap, List<byte[]> indexBlockMap, List<byte[]> rcBlockMap, int rawSize = 0)
-        => EtnTrailer.Build(fragmentBlockMap, indexBlockMap, rcBlockMap, rawSize);
+    public static byte[] BuildTrailer(byte[] fragFlat, int fragCount, byte[] indexFlat, int indexCount, byte[] rcFlat, int rcCount, int rawSize = 0)
+        => EtnTrailer.Build(fragFlat, fragCount, indexFlat, indexCount, rcFlat, rcCount, rawSize);
 
-    public static (byte[] data, List<byte[]> indexBlockMap, List<byte[]> rcBlockMap) ParseTrailer(byte[] fragmentData)
+    public static (byte[] data, byte[] indexFlat, int indexCount, byte[] rcFlat, int rcCount) ParseTrailer(byte[] fragmentData)
     {
-        var (data, _, idxBm, rcBm) = EtnTrailer.Parse(fragmentData);
-        return (data, idxBm, rcBm);
+        var (data, _, _, indexFlat, indexCount, rcFlat, rcCount) = EtnTrailer.Parse(fragmentData);
+        return (data, indexFlat, indexCount, rcFlat, rcCount);
     }
 
     public static byte[] StripEtnFieldsFromIndexJson(byte[] indexBytes)
@@ -51,53 +51,62 @@ public class Fss6Etn : IFssStrategy
     public static (List<byte[]> Fragments, byte[] IndexJson, byte[] RcJson) InjectCrossValidation(
         List<byte[]> fragments, byte[] indexBytes, string fileFingerprint)
     {
-        var indexBlockMap = EtnBlockMap.Build(indexBytes);
-        var fragmentBlockMaps = new List<List<byte[]>>(fragments.Count);
-        for (int i = 0; i < fragments.Count; i++) fragmentBlockMaps.Add(null!);
+        byte[] indexBlockFlat = EtnBlockMap.Build(indexBytes);
+        int idxBlockCount = EtnBlockMap.BlockCount(indexBlockFlat);
+
+        var fragmentBlockFlats = new byte[fragments.Count][];
         Parallel.For(0, fragments.Count, i =>
         {
-            fragmentBlockMaps[i] = EtnBlockMap.Build(fragments[i]);
+            fragmentBlockFlats[i] = EtnBlockMap.Build(fragments[i]);
         });
 
         var rcFile = new RcFile
         {
             Version = 1,
             FileFingerprint = fileFingerprint,
-            IndexBlockMap = indexBlockMap.Select(h => EtnBlockMap.HashToHex(EtnBlockMap.TruncateSecond(h))).ToList(),
-            FragentBlockMaps = fragmentBlockMaps.Select(
-                list => list.Select(h => EtnBlockMap.HashToHex(EtnBlockMap.TruncateSecond(h))).ToList()).ToList(),
+            IndexBlockMap = HexListFromSecondFlat(indexBlockFlat, idxBlockCount),
+            FragentBlockMaps = fragmentBlockFlats.Select(f => HexListFromSecondFlat(f, EtnBlockMap.BlockCount(f))).ToList(),
             CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         };
         byte[] rcBytes = rcFile.ToCborBytes();
-        var rcBlockMap = EtnBlockMap.Build(rcBytes);
+        byte[] rcBlockFlat = EtnBlockMap.Build(rcBytes);
+        int rcBlockCount = EtnBlockMap.BlockCount(rcBlockFlat);
 
         for (int i = 0; i < fragments.Count; i++)
         {
             int rawLen = fragments[i].Length;
-            var trailerFragBm = fragmentBlockMaps[i].Select(EtnBlockMap.TruncateFirst).ToList();
-            var trailerIndexBm = indexBlockMap.Select(EtnBlockMap.TruncateFirst).ToList();
-            var trailerRcBm = rcBlockMap.Select(EtnBlockMap.TruncateFirst).ToList();
-            byte[] trailer = EtnTrailer.Build(trailerFragBm, trailerIndexBm, trailerRcBm, rawLen);
+            int fragCount = EtnBlockMap.BlockCount(fragmentBlockFlats[i]);
+            byte[] trailer = EtnTrailer.Build(
+                fragmentBlockFlats[i], fragCount,
+                indexBlockFlat, idxBlockCount,
+                rcBlockFlat, rcBlockCount,
+                rawLen);
             byte[] withTrailer = new byte[rawLen + trailer.Length];
             Buffer.BlockCopy(fragments[i], 0, withTrailer, 0, rawLen);
             Buffer.BlockCopy(trailer, 0, withTrailer, rawLen, trailer.Length);
             fragments[i] = withTrailer;
         }
 
-        byte[] updatedIndexBytes = AddFss6FieldsToIndex(indexBytes, fragmentBlockMaps, rcBlockMap);
+        byte[] updatedIndexBytes = AddFss6FieldsToIndex(indexBytes, fragmentBlockFlats, rcBlockFlat);
         return (fragments, updatedIndexBytes, rcBytes);
     }
 
     private static byte[] AddFss6FieldsToIndex(
-        byte[] indexBytes, List<List<byte[]>> fragmentBlockMaps, List<byte[]> rcBlockMap)
+        byte[] indexBytes, byte[][] fragmentBlockFlats, byte[] rcBlockFlat)
     {
         var index = IndexManager.DeserializeIndex(indexBytes);
         if (index == null)
-            throw new InvalidDataException("Failed to parse index JSON for ETN injection");
+            throw new InvalidDataException("Failed to parse index for ETN injection");
 
-        index.Fss6FragentBlockMaps = fragmentBlockMaps.Select(
-            list => list.Select(h => EtnBlockMap.HashToHex(EtnBlockMap.TruncateSecond(h))).ToList()).ToList();
-        index.Fss6RcBlockMap = rcBlockMap.Select(h => EtnBlockMap.HashToHex(EtnBlockMap.TruncateSecond(h))).ToList();
+        int rcBlockCount = EtnBlockMap.BlockCount(rcBlockFlat);
+        index.Fss6RcBlockMap = HexListFromSecondFlat(rcBlockFlat, rcBlockCount);
+
+        index.Fss6FragentBlockMaps = new List<List<string>>();
+        for (int i = 0; i < fragmentBlockFlats.Length; i++)
+        {
+            int fc = EtnBlockMap.BlockCount(fragmentBlockFlats[i]);
+            index.Fss6FragentBlockMaps.Add(HexListFromSecondFlat(fragmentBlockFlats[i], fc));
+        }
 
         return IndexManager.SerializeIndex(index);
     }
@@ -107,6 +116,14 @@ public class Fss6Etn : IFssStrategy
     {
         var precision = EtnPrecision.Analyze(indexBytes, rcBytes, fragmentsWithTrailers);
         return CrossValidationResult.FromPrecision(precision);
+    }
+
+    private static List<string> HexListFromSecondFlat(byte[] flat, int blockCount)
+    {
+        var list = new List<string>(blockCount);
+        for (int i = 0; i < blockCount; i++)
+            list.Add(EtnBlockMap.HashToHex(EtnBlockMap.TruncateSecond(flat, i)));
+        return list;
     }
 }
 
