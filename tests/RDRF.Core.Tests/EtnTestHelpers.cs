@@ -89,7 +89,7 @@ public static class EtnTestHelpers
 
     public static byte[] CorruptFragmentData(byte[] fragmentWithTrailer)
     {
-        var (data, _, _) = Fss6Etn.ParseTrailer(fragmentWithTrailer);
+        var (data, _, _, _, _) = Fss6Etn.ParseTrailer(fragmentWithTrailer);
         if (data.Length == 0)
             throw new InvalidOperationException("Cannot corrupt empty fragment data");
 
@@ -101,7 +101,7 @@ public static class EtnTestHelpers
 
     public static byte[] CorruptFragmentDataAt(byte[] fragmentWithTrailer, int dataOffset)
     {
-        var (data, _, _) = Fss6Etn.ParseTrailer(fragmentWithTrailer);
+        var (data, _, _, _, _) = Fss6Etn.ParseTrailer(fragmentWithTrailer);
         if (data.Length == 0 || dataOffset > data.Length)
             throw new InvalidOperationException($"Invalid corruption offset {dataOffset} (data length {data.Length})");
 
