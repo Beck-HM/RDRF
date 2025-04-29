@@ -65,14 +65,14 @@ void RunStandardDemo()
         byte[] indexJson = IndexManager.SerializeIndex(index);
         var baselineCheck = Fss6Etn.CrossValidate(indexJson, baseline, rcPlain);
         AssertOrDie(baselineCheck.IsValid, "Baseline backup is incomplete — cannot continue");
-        int indexBmCount = EtnBlockMap.Build(Fss6Etn.StripEtnFieldsFromIndexJson(indexJson)).Count;
-        int rcBmCount = EtnBlockMap.Build(rcPlain).Count;
+        int indexBmCount = EtnBlockMap.BlockCount(EtnBlockMap.Build(Fss6Etn.StripEtnFieldsFromIndexJson(indexJson)));
+        int rcBmCount = EtnBlockMap.BlockCount(EtnBlockMap.Build(rcPlain));
         Print($"  Index BM: {indexBmCount} entries → stored in RC (8B each)");
         Print($"  RC   BM: {rcBmCount} entries → stored in Index (8B each)");
         for (int i = 0; i < baseline.Count; i++)
         {
-            var (raw, _, _) = Fss6Etn.ParseTrailer(baseline[i]);
-            int blockCount = EtnBlockMap.Build(raw).Count;
+            var (raw, _, _, _, _) = Fss6Etn.ParseTrailer(baseline[i]);
+            int blockCount = EtnBlockMap.BlockCount(EtnBlockMap.Build(raw));
             int trailerBytes = baseline[i].Length - raw.Length;
             Print($"  Fragment[{i}]: {raw.Length:N0} B, {blockCount} blocks, trailer {trailerBytes} B (2B/block)");
         }
@@ -330,16 +330,12 @@ bool Scenario3_ByzantineMetadata(string logFile, System.Text.StringBuilder csv)
         string f0 = $"{prefix}_0.rdrf";
         byte[] enc0 = storage.ReadFragment(f0);
         var (emb0, d0) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc0, fragmentKey);
-        var (raw0, idxBm, rcBm) = Fss6Etn.ParseTrailer(d0);
-        // Corrupt the last trailer indexBM hash (flip one byte)
-        if (idxBm.Count > 0)
-        {
-            byte[] corruptedHash = (byte[])idxBm[idxBm.Count - 1].Clone();
-            corruptedHash[0] ^= 0xFF;
-            idxBm[idxBm.Count - 1] = corruptedHash;
-        }
-        var fragBm0 = Fss6Etn.BuildBlockMap(raw0).Select(EtnBlockMap.TruncateFirst).ToList();
-        byte[] newTrailer = Fss6Etn.BuildTrailer(fragBm0, idxBm, rcBm, raw0.Length);
+        var (raw0, idxFlat, idxCnt, rcFlat, rcCnt) = Fss6Etn.ParseTrailer(d0);
+        // Corrupt the last trailer indexBM hash (flip first byte)
+        if (idxCnt > 0)
+            idxFlat[(idxCnt - 1) * EtnBlockMap.TrailerHashLen] ^= 0xFF;
+        byte[] fragFlat = Fss6Etn.BuildBlockMap(raw0);
+        byte[] newTrailer = Fss6Etn.BuildTrailer(fragFlat, EtnBlockMap.BlockCount(fragFlat), idxFlat, idxCnt, rcFlat, rcCnt, raw0.Length);
         byte[] newFrag0 = new byte[raw0.Length + newTrailer.Length];
         Buffer.BlockCopy(raw0, 0, newFrag0, 0, raw0.Length);
         Buffer.BlockCopy(newTrailer, 0, newFrag0, raw0.Length, newTrailer.Length);
@@ -369,7 +365,7 @@ bool Scenario4_RecoveryResidual(string logFile, System.Text.StringBuilder csv)
         byte[] enc0 = storage.ReadFragment(f0);
         var (emb0, d0) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc0, fragmentKey);
         // d0 = fragment data WITH trailer. Parse trailer to find raw data boundary.
-        var (rawData, _, _) = Fss6Etn.ParseTrailer(d0);
+        var (rawData, _, _, _, _) = Fss6Etn.ParseTrailer(d0);
         int mid = rawData.Length / 2;
         int blk = mid / 256;
         // Corrupt within raw data area
@@ -401,7 +397,7 @@ bool Scenario5_BlockSaturation(string logFile, System.Text.StringBuilder csv)
         string f = $"{prefix}_0.rdrf";
         byte[] enc = storage.ReadFragment(f);
         var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, fragmentKey);
-        var (rawOnly, _, _) = Fss6Etn.ParseTrailer(data);
+        var (rawOnly, _, _, _, _) = Fss6Etn.ParseTrailer(data);
         int rawBlocks = rawOnly.Length / 256;
 
         var expectedBlocks = new HashSet<int>();
@@ -504,7 +500,7 @@ bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv, int size
             string ff = $"{prefix}_{fi}.rdrf";
             byte[] enc = storage.ReadFragment(ff);
             var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, fragmentKey);
-            var (rawOnly, _, _) = Fss6Etn.ParseTrailer(data);
+            var (rawOnly, _, _, _, _) = Fss6Etn.ParseTrailer(data);
             if (!blockTargets.ContainsKey(fi))
                 blockTargets[fi] = new HashSet<int>();
             int rawBlocks = rawOnly.Length / 256;
@@ -561,7 +557,7 @@ bool Scenario8_ExtremeBitRot(string logFile, System.Text.StringBuilder csv, int 
             string f = $"{prefix}_{i}.rdrf";
             byte[] enc = storage.ReadFragment(f);
             var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, aesKey);
-            var (rawOnly, _, _) = Fss6Etn.ParseTrailer(data);
+            var (rawOnly, _, _, _, _) = Fss6Etn.ParseTrailer(data);
             int rotBytes = Math.Max(1, rawOnly.Length / 10000);
             var flippedBlocks = new HashSet<int>();
             for (int b = 0; b < rotBytes; b++)
@@ -611,7 +607,7 @@ bool Scenario9_ContiguousStripeKill(string logFile, System.Text.StringBuilder cs
             string f = $"{prefix}_{fi}.rdrf";
             byte[] enc = storage.ReadFragment(f);
             var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, aesKey);
-            var (rawOnly, _, _) = Fss6Etn.ParseTrailer(data);
+            var (rawOnly, _, _, _, _) = Fss6Etn.ParseTrailer(data);
             int rawBlocks = rawOnly.Length / 256;
             if (rawBlocks < 10) continue;
 
@@ -661,7 +657,7 @@ bool Scenario10_CombinedAttack(string logFile, System.Text.StringBuilder csv, in
             string f = $"{prefix}_{i}.rdrf";
             byte[] enc = storage.ReadFragment(f);
             var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, aesKey);
-            var (rawOnly, _, _) = Fss6Etn.ParseTrailer(data);
+            var (rawOnly, _, _, _, _) = Fss6Etn.ParseTrailer(data);
             int rotBytes = Math.Max(1, rawOnly.Length / 20000);
             var flipped = new HashSet<int>();
             for (int b = 0; b < rotBytes; b++)
@@ -694,13 +690,13 @@ bool Scenario10_CombinedAttack(string logFile, System.Text.StringBuilder csv, in
             string tf = $"{prefix}_{ti}.rdrf";
             byte[] tenc = storage.ReadFragment(tf);
             var (temb, tdata) = FragmentFileHeader.DecryptWithEmbeddedIndex(tenc, aesKey);
-            var (rawData, idxBm, rcBm) = Fss6Etn.ParseTrailer(tdata);
-            if (idxBm.Count > 0)
+            var (rawData, idxFlat, idxCnt, rcFlat, rcCnt) = Fss6Etn.ParseTrailer(tdata);
+            if (idxCnt > 0)
             {
-                byte[] h = (byte[])idxBm[rand.Next(idxBm.Count)].Clone();
-                h[0] ^= 0xFF;
-                byte[] newTrailer = Fss6Etn.BuildTrailer(
-                    Fss6Etn.BuildBlockMap(rawData).Select(EtnBlockMap.TruncateFirst).ToList(), idxBm, rcBm, rawData.Length);
+                int hi = rand.Next(idxCnt);
+                idxFlat[hi * EtnBlockMap.TrailerHashLen] ^= 0xFF;
+                byte[] fragFlat = Fss6Etn.BuildBlockMap(rawData);
+                byte[] newTrailer = Fss6Etn.BuildTrailer(fragFlat, EtnBlockMap.BlockCount(fragFlat), idxFlat, idxCnt, rcFlat, rcCnt, rawData.Length);
                 byte[] newFrag = new byte[rawData.Length + newTrailer.Length];
                 Buffer.BlockCopy(rawData, 0, newFrag, 0, rawData.Length);
                 Buffer.BlockCopy(newTrailer, 0, newFrag, rawData.Length, newTrailer.Length);
@@ -742,17 +738,18 @@ bool Scenario11_TrailerFPStress(string logFile, System.Text.StringBuilder csv, i
             string f = $"{prefix}_{i}.rdrf";
             byte[] enc = storage.ReadFragment(f);
             var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, aesKey);
-            var (rawData, tFragBm, tIdxBm, tRcBm) = EtnTrailer.Parse(data);
-            if (tFragBm.Count == 0) continue;
+            var (rawData, tFragFlat, tFragCnt, tIdxFlat, tIdxCnt, tRcFlat, tRcCnt) = EtnTrailer.Parse(data);
+            if (tFragCnt == 0) continue;
 
             for (int h = 0; h < 2; h++)
             {
-                int flipIdx = rand.Next(tFragBm.Count);
-                tFragBm[flipIdx] = new byte[] { (byte)rand.Next(256), (byte)rand.Next(256) };
+                int flipIdx = rand.Next(tFragCnt);
+                tFragFlat[flipIdx * EtnBlockMap.TrailerHashLen] = (byte)rand.Next(256);
+                tFragFlat[flipIdx * EtnBlockMap.TrailerHashLen + 1] = (byte)rand.Next(256);
                 fpBlocks++;
             }
 
-            byte[] newTrailer = EtnTrailer.Build(tFragBm, tIdxBm, tRcBm, rawData.Length);
+            byte[] newTrailer = EtnTrailer.Build(tFragFlat, tFragCnt, tIdxFlat, tIdxCnt, tRcFlat, tRcCnt, rawData.Length);
             byte[] newFrag = new byte[rawData.Length + newTrailer.Length];
             Buffer.BlockCopy(rawData, 0, newFrag, 0, rawData.Length);
             Buffer.BlockCopy(newTrailer, 0, newFrag, rawData.Length, newTrailer.Length);
