@@ -215,12 +215,7 @@ public static class EtnPrecision
     {
         if (trailerFlats.Length == 0) return null;
         if (trailerFlats.Length == 1)
-        {
-            var list = new List<byte[]>(trailerCounts[0]);
-            for (int j = 0; j < trailerCounts[0]; j++)
-                list.Add(EtnBlockMap.TruncateFirst(trailerFlats[0], j));
-            return list;
-        }
+            return ToListOfBytes(trailerFlats[0], trailerCounts[0]);
         var reference = ToListOfBytes(trailerFlats[0], trailerCounts[0]);
         for (int i = 1; i < trailerFlats.Length; i++)
             if (EtnBlockMap.DiffTrimmed(trailerFlats[i], trailerCounts[i], EtnBlockMap.TrailerHashLen, reference).Count != 0) return null;
