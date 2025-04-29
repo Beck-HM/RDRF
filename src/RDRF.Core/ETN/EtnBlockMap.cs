@@ -27,12 +27,16 @@ public static class EtnBlockMap
     public static byte[] TruncateFirst(byte[] flat, int blockIndex)
     {
         int off = blockIndex * FullHashLen;
+        if (off + TrailerHashLen > flat.Length)
+            return new byte[TrailerHashLen];
         return new byte[] { flat[off], flat[off + 1] };
     }
 
     public static byte[] TruncateSecond(byte[] flat, int blockIndex)
     {
         int off = blockIndex * FullHashLen;
+        if (off + SecondHashLen > flat.Length)
+            return new byte[SecondHashLen];
         byte[] result = new byte[SecondHashLen];
         Buffer.BlockCopy(flat, off, result, 0, SecondHashLen);
         return result;
