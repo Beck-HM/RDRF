@@ -15,11 +15,13 @@ public static class EtnBlockMap
     {
         int blockCount = (data.Length + BlockSize - 1) / BlockSize;
         byte[] flat = new byte[blockCount * FullHashLen];
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         for (int i = 0; i < blockCount; i++)
         {
             int offset = i * BlockSize;
             int len = Math.Min(BlockSize, data.Length - offset);
-            SHA256.HashData(data.AsSpan(offset, len), flat.AsSpan(i * FullHashLen, FullHashLen));
+            hash.AppendData(data.AsSpan(offset, len));
+            hash.GetHashAndReset(flat.AsSpan(i * FullHashLen, FullHashLen));
         }
         return flat;
     }
