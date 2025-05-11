@@ -33,7 +33,7 @@ void RunStandardDemo()
     string demoDir = CreateTempDir(_outDir);
     try
     {
-        Step("1/9  生成测试代码文件");
+        Step("1/9  Generate test file");
         string testFile = GenerateTestFile(demoDir, _sizeMB);
         byte[] originalHash = SHA256.HashData(File.ReadAllBytes(testFile));
         Print($"  File: {Path.GetFileName(testFile)}");
@@ -42,7 +42,7 @@ void RunStandardDemo()
         Print($"  SHA256: {Convert.ToHexString(originalHash).ToLowerInvariant()}");
         WaitRun();
 
-        Step("2/9  执行 FSS6 备份");
+        Step("2/9  Run FSS6 backup");
         byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
         byte[] rcCodeSave = (byte[])rcCode.Clone();
         var storage = new LocalFileAdapter(demoDir);
@@ -59,7 +59,7 @@ void RunStandardDemo()
         Print($"  Directory: {demoDir}");
         WaitRun();
 
-        Step("3/9  解密备份数据 (基准准备)");
+        Step("3/9  Decrypt backup data (baseline)");
         var baseline = DecryptFragments(index, storage, aesKey);
         byte[] rcPlain = DecryptRc(storage, fingerprint, aesKey);
         byte[] indexJson = IndexManager.SerializeIndex(index);
@@ -80,7 +80,7 @@ void RunStandardDemo()
 
         var records = new List<CorruptionRecord>();
 
-        Step("4/9  篡改 Fragment 数据");
+        Step("4/9  Corrupt fragment data");
         string prefix = index.CustomName ?? fingerprint;
         string fragFile = $"{prefix}_{targetFrag}.rdrf";
         byte[] encFrag = storage.ReadFragment(fragFile);
@@ -96,7 +96,7 @@ void RunStandardDemo()
         Print($"  Fragment[{targetFrag}], byte {corruptOffset}, block #{expectedBlock}");
         WaitRun();
 
-        Step("5/9  篡改 Index OriginalName");
+        Step("5/9  Corrupt Index OriginalName");
         byte[] encIdx = storage.ReadIndex(fingerprint);
         var idx = IndexManager.DecryptIndexWithKey(encIdx, aesKey);
         idx.OriginalName += "_TAMPERED";
@@ -105,7 +105,7 @@ void RunStandardDemo()
         Print($"  OriginalName => {idx.OriginalName}");
         WaitRun();
 
-        Step("6/9  篡改 RC Version");
+        Step("6/9  Corrupt RC Version");
         rcPlain = DecryptRc(storage, fingerprint, aesKey);
         var rc = RcFile.FromCbor(rcPlain);
         rc.Version = 999;
@@ -115,7 +115,7 @@ void RunStandardDemo()
         Print($"  Version -> 999");
         WaitRun();
 
-        Step("7/9  重新解密 (模拟恢复)");
+        Step("7/9  Re-decrypt (simulate restore)");
         encIdx = storage.ReadIndex(fingerprint);
         var restoredIndex = IndexManager.DecryptIndexWithKey(encIdx, aesKey);
         indexJson = IndexManager.SerializeIndex(restoredIndex);
@@ -126,14 +126,14 @@ void RunStandardDemo()
         Print($"  RC JSON: {rcPlain.Length:N0} B");
         WaitRun();
 
-        Step("8/9  ETN 精密交叉校验");
+        Step("8/9  ETN precision cross-validation");
         var swEtn = System.Diagnostics.Stopwatch.StartNew();
         var result = Fss6Etn.CrossValidate(indexJson, restored, rcPlain);
         swEtn.Stop();
         Print($"  2-tier ETN: {swEtn.Elapsed.TotalMilliseconds:F1} ms");
         PrintResult(result, restored.Count, records);
 
-        Step("9/9  总结报告");
+        Step("9/9  Summary report");
         int detected = records.Count(r => r.Check(result));
         Print($"  Detected: {detected}/{records.Count}");
         int totalSusp = result.SuspiciousFragmentBlocks.Values.Sum(l => l.Count);

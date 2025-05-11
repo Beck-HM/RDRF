@@ -10,8 +10,8 @@ namespace RDRF.Core.Tests;
 
 [Collection("EtnSerial")]
 /// <summary>
-/// Phase 6 鈥?End>to>end integration tests.
-/// Full backup 鈫?tamper 鈫?restore 鈫?ETN detection cycle.
+/// Phase 6 - End-to-end integration tests.
+/// Full backup -> tamper -> restore -> ETN detection cycle.
 /// </summary>
 public class EtnIntegrationTests
 {
@@ -79,7 +79,7 @@ public class EtnIntegrationTests
             var index = IndexManager.DecryptIndexWithKey(encryptedIndex, aesKey);
             string prefix = index.CustomName ?? fingerprint;
 
-            // Tamper with fragment[1] at encrypted level (decrypt 鈫?corrupt data 鈫?re>encrypt)
+            // Tamper with fragment[1] at encrypted level (decrypt  -> corrupt data  -> re>encrypt)
             string fragFile = $"{prefix}_1.rdrf";
             byte[] encryptedFrag = storage.ReadFragment(fragFile);
             var (embeddedIndex, fragmentData) = FragmentFileHeader.DecryptWithEmbeddedIndex(encryptedFrag, aesKey);
@@ -93,7 +93,7 @@ public class EtnIntegrationTests
                 fragmentData, embeddedIndex!, aesKey);
             storage.WriteFragment(fragFile, newEncrypted);
 
-            // Restore 鈥?should detect corruption via ETN
+            // Restore  - should detect corruption via ETN
             string restorePath = Path.Combine(EtnTestHelpers.TestOutputDir, $"recov_{Guid.NewGuid():N}.mp4");
             using (var engine = new RDRFEngine(rcCodeClone, storage))
             {
@@ -135,7 +135,7 @@ public class EtnIntegrationTests
             byte[] tamperedIndex = IndexManager.EncryptIndexWithKey(index, aesKey);
             storage.WriteIndex(fingerprint, tamperedIndex);
 
-            // Restore 鈥?should detect index corruption via ETN
+            // Restore  - should detect index corruption via ETN
             byte[] rcCodeClone = (byte[])rcCode.Clone();
             using (var engine = new RDRFEngine(rcCodeClone, storage))
             {
@@ -171,7 +171,7 @@ public class EtnIntegrationTests
             // Tamper RC on disk
             EtnTestHelpers.CorruptRcFileOnDisk(storageDir, fingerprint, rcCodeClone);
 
-            // Restore 鈥?should either detect corruption or fall back gracefully
+            // Restore  - should either detect corruption or fall back gracefully
             using (var engine = new RDRFEngine(rcCodeClone, storage))
             {
                 engine.RestoreFile(fingerprint, Path.Combine(storageDir, "restored.mp4"));
@@ -248,7 +248,7 @@ public class EtnIntegrationTests
                 _output.WriteLine("  Wrong key correctly rejected with auth exception");
             }
 
-            _output.WriteLine("PASS: Wrong password 鈫?graceful auth failure");
+            _output.WriteLine("PASS: Wrong password  -> graceful auth failure");
         }
         finally
         {
@@ -260,7 +260,7 @@ public class EtnIntegrationTests
     public void RcFile_EncryptedNonce_Randomness()
     {
         // Verify that EncryptFragmentWithKey uses random nonces by encrypting the same
-        // data twice 鈥?output must differ even with the same key.
+        // data twice  - output must differ even with the same key.
         byte[] plaintext = System.Text.Encoding.UTF8.GetBytes("test RC content");
         byte[] aesKey = new byte[32];
         RandomNumberGenerator.Fill(aesKey);

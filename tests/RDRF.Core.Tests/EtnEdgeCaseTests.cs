@@ -12,7 +12,7 @@ namespace RDRF.Core.Tests;
 
 [Collection("EtnSerial")]
 /// <summary>
-/// Phase 4 鈥?Edge cases and boundary conditions for ETN.
+/// Phase 4  - Edge cases and boundary conditions for ETN.
 /// </summary>
 public class EtnEdgeCaseTests
 {
@@ -39,7 +39,7 @@ public class EtnEdgeCaseTests
             File.Delete(rcPath);
             Assert.False(storage.RcExists(fingerprint));
 
-            // Verify restore still succeeds 鈥?full end>to>end
+            // Verify restore still succeeds  - full end>to>end
             byte[] aesKey = EncryptionLayer.DeriveKey(rcCode);
             byte[] encryptedIndex = storage.ReadIndex(fingerprint);
             var index = IndexManager.DecryptIndexWithKey(encryptedIndex, aesKey);
