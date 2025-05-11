@@ -10,7 +10,7 @@ namespace RDRF.Core.Tests;
 
 [Collection("EtnSerial")]
 /// <summary>
-/// Phase 5 鈥?Cross>FSS strategy compatibility with ETN.
+/// Phase 5  - Cross>FSS strategy compatibility with ETN.
 /// Verifies that ETN works with FSS1/3/5 without breaking core backup/restore.
 /// </summary>
 public class EtnCrossStrategyTests
@@ -151,7 +151,7 @@ public class EtnCrossStrategyTests
             File.Delete(fragPath);
             _output.WriteLine($"  Deleted {fragToDelete}");
 
-            // Restore with recovery 鈥?FSS3 should reconstruct the missing fragment
+            // Restore with recovery  - FSS3 should reconstruct the missing fragment
             string restorePath = Path.Combine(EtnTestHelpers.TestOutputDir, $"recov_{Guid.NewGuid():N}.mp4");
             using (var engine = new RDRFEngine(rcCodeClone, storage))
             {
