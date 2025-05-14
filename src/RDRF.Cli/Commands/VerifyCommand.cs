@@ -5,6 +5,7 @@ using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
 using RDRF.Cli.Services;
 using System.CommandLine;
+using System.Text;
 
 namespace RDRF.Cli.Commands;
 
@@ -13,20 +14,24 @@ public class VerifyCommand : Command
     public VerifyCommand() : base("verify", "Verify backup integrity via ETN cross-validation")
     {
         var indexArg = new Argument<FileInfo>("indexFile");
+        var passwordOpt = new Option<string?>("-password", "Password (skip interactive prompt)");
 
         Arguments.Add(indexArg);
+        Options.Add(passwordOpt);
 
         SetAction((ParseResult parseResult) =>
         {
             var indexFile = parseResult.GetValue(indexArg);
+            var pwd = parseResult.GetValue(passwordOpt);
+
             if (!indexFile.Exists)
             {
                 Console.Error.WriteLine($"Error: index file not found: {indexFile.FullName}");
                 return 1;
             }
 
+            byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
             byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
-            byte[] password = PasswordProvider.ReadInteractive();
 
             RdrfIndex index;
             try
