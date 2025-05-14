@@ -1,6 +1,7 @@
 using RDRF.Core;
 using RDRF.Core.Storage;
 using RDRF.Cli.Services;
+using Spectre.Console;
 using System.CommandLine;
 
 namespace RDRF.Cli.Commands;
@@ -23,7 +24,7 @@ public class BackupCommand : Command
         Add(fss1); Add(fss2); Add(fss2r);
         Add(fss3); Add(fss5); Add(fss5p);
 
-        SetAction((ParseResult parseResult) =>
+        SetAction(async (ParseResult parseResult) =>
         {
             var source = parseResult.GetValue(sourceArg);
             var outputDir = parseResult.GetValue(outputOpt);
@@ -56,17 +57,36 @@ public class BackupCommand : Command
 
             if (source is FileInfo file)
             {
-                firstFp = engine.BackupFile(file.FullName, strategy);
+                await ProgressReporter.Run($"Backing up {file.Name}", async progress =>
+                {
+                    firstFp = await engine.BackupFileAsync(file.FullName, strategy, progress: progress);
+                });
                 count = 1;
             }
             else if (source is DirectoryInfo dir)
             {
-                foreach (var f in dir.EnumerateFiles("*", SearchOption.AllDirectories))
-                {
-                    var fp = engine.BackupFile(f.FullName, strategy);
-                    firstFp ??= fp;
-                    count++;
-                }
+                var files = dir.EnumerateFiles("*", SearchOption.AllDirectories).ToList();
+                await AnsiConsole.Progress()
+                    .Columns(new ProgressColumn[]
+                    {
+                        new TaskDescriptionColumn(),
+                        new ProgressBarColumn(),
+                        new PercentageColumn(),
+                        new ElapsedTimeColumn(),
+                    })
+                    .StartAsync(async ctx =>
+                    {
+                        var task = ctx.AddTask($"Backing up {files.Count} files");
+                        task.MaxValue = files.Count;
+                        foreach (var f in files)
+                        {
+                            var fp = await engine.BackupFileAsync(f.FullName, strategy);
+                            firstFp ??= fp;
+                            count++;
+                            task.Value = count;
+                            task.Description = $"{f.Name} ({count}/{files.Count})";
+                        }
+                    });
             }
 
             Console.WriteLine($"Fingerprint: {firstFp}");

@@ -15,7 +15,7 @@ public class RestoreCommand : Command
         Arguments.Add(indexArg);
         Options.Add(outputOpt);
 
-        SetAction((ParseResult parseResult) =>
+        SetAction(async (ParseResult parseResult) =>
         {
             var indexFile = parseResult.GetValue(indexArg);
             var output = parseResult.GetValue(outputOpt);
@@ -41,7 +41,11 @@ public class RestoreCommand : Command
             var index = RDRFEngine.DecryptIndex(encryptedIndex, password);
             string prefix = index.CustomName ?? index.FileFingerprint;
 
-            bool success = engine.RestoreFile(index.FileFingerprint, output.FullName, filePrefix: prefix);
+            bool success = false;
+            await ProgressReporter.Run($"Restoring {index.OriginalName}", async progress =>
+            {
+                success = await engine.RestoreFileAsync(index.FileFingerprint, output.FullName, filePrefix: prefix, progress: progress);
+            });
 
             if (success)
             {
