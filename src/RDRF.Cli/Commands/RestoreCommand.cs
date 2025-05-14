@@ -2,6 +2,7 @@ using RDRF.Core;
 using RDRF.Core.Storage;
 using RDRF.Cli.Services;
 using System.CommandLine;
+using System.Text;
 
 namespace RDRF.Cli.Commands;
 
@@ -11,14 +12,17 @@ public class RestoreCommand : Command
     {
         var indexArg = new Argument<FileInfo>("indexFile");
         var outputOpt = new Option<FileInfo>("-o") { Description = "Output file path" };
+        var passwordOpt = new Option<string?>("-password", "Password (skip interactive prompt)");
 
         Arguments.Add(indexArg);
         Options.Add(outputOpt);
+        Options.Add(passwordOpt);
 
         SetAction(async (ParseResult parseResult) =>
         {
             var indexFile = parseResult.GetValue(indexArg);
             var output = parseResult.GetValue(outputOpt);
+            var pwd = parseResult.GetValue(passwordOpt);
 
             if (!indexFile.Exists)
             {
@@ -31,9 +35,10 @@ public class RestoreCommand : Command
                 return 1;
             }
 
+            byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
+
             string storageDir = indexFile.DirectoryName!;
             byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
-            byte[] password = PasswordProvider.ReadInteractive();
 
             var storage = new LocalFileAdapter(storageDir);
             using var engine = new RDRFEngine(password, storage);
