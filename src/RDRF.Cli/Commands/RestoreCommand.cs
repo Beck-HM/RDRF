@@ -12,7 +12,7 @@ public class RestoreCommand : Command
     {
         var indexArg = new Argument<FileInfo>("indexFile");
         var outputOpt = new Option<FileInfo>("-o") { Description = "Output file path" };
-        var passwordOpt = new Option<string?>("-password", "Password (skip interactive prompt)");
+        var passwordOpt = new Option<string?>("-password") { Description = "Password (skip interactive prompt)" };
 
         Arguments.Add(indexArg);
         Options.Add(outputOpt);
