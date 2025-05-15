@@ -10,6 +10,7 @@ class Program
         root.Subcommands.Add(new RestoreCommand());
         root.Subcommands.Add(new InfoCommand());
         root.Subcommands.Add(new VerifyCommand());
+        root.Subcommands.Add(new StatusCommand());
         var parseResult = root.Parse(args);
         return await parseResult.InvokeAsync();
     }

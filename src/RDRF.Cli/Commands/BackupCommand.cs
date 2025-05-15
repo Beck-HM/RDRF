@@ -13,7 +13,7 @@ public class BackupCommand : Command
     {
         var sourceArg = new Argument<FileSystemInfo>("source");
         var outputOpt = new Option<DirectoryInfo?>("-o") { Description = "Storage directory (default: ./backup/)" };
-        var passwordOpt = new Option<string?>("-password", "Password (skip interactive prompt)");
+        var passwordOpt = new Option<string?>("-password") { Description = "Password (skip interactive prompt)" };
         var fss1 = new Option<bool>("--fss1") { Description = "FSS1 strategy" };
         var fss2 = new Option<bool>("--fss2") { Description = "FSS2 strategy" };
         var fss2r = new Option<bool>("--fss2r") { Description = "FSS2R strategy" };

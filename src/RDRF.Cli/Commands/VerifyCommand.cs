@@ -14,7 +14,7 @@ public class VerifyCommand : Command
     public VerifyCommand() : base("verify", "Verify backup integrity via ETN cross-validation")
     {
         var indexArg = new Argument<FileInfo>("indexFile");
-        var passwordOpt = new Option<string?>("-password", "Password (skip interactive prompt)");
+        var passwordOpt = new Option<string?>("-password") { Description = "Password (skip interactive prompt)" };
 
         Arguments.Add(indexArg);
         Options.Add(passwordOpt);
