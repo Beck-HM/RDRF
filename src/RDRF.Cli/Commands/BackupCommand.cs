@@ -14,6 +14,8 @@ public class BackupCommand : Command
         var sourceArg = new Argument<FileSystemInfo>("source");
         var outputOpt = new Option<DirectoryInfo?>("-o") { Description = "Storage directory (default: ./backup/)" };
         var passwordOpt = new Option<string?>("-password") { Description = "Password (skip interactive prompt)" };
+        var sizeOpt = new Option<int?>("-size") { Description = "Fragment size in MB (default: 1)" };
+        var nameOpt = new Option<string?>("-name") { Description = "Custom name for the backup" };
         var fss1 = new Option<bool>("--fss1") { Description = "FSS1 strategy" };
         var fss2 = new Option<bool>("--fss2") { Description = "FSS2 strategy" };
         var fss2r = new Option<bool>("--fss2r") { Description = "FSS2R strategy" };
@@ -24,6 +26,8 @@ public class BackupCommand : Command
         Arguments.Add(sourceArg);
         Options.Add(outputOpt);
         Options.Add(passwordOpt);
+        Options.Add(sizeOpt);
+        Options.Add(nameOpt);
         Add(fss1); Add(fss2); Add(fss2r);
         Add(fss3); Add(fss5); Add(fss5p);
 
@@ -32,6 +36,8 @@ public class BackupCommand : Command
             var source = parseResult.GetValue(sourceArg);
             var outputDir = parseResult.GetValue(outputOpt);
             var pwd = parseResult.GetValue(passwordOpt);
+            var sizeMb = parseResult.GetValue(sizeOpt);
+            var customName = parseResult.GetValue(nameOpt);
 
             var flags = new[]
             {
@@ -55,6 +61,8 @@ public class BackupCommand : Command
             string storagePath = outputDir?.FullName ?? Path.Combine(AppContext.BaseDirectory, "backup");
             var storage = new LocalFileAdapter(storagePath);
 
+            int fragmentSize = sizeMb.HasValue ? sizeMb.Value * 1024 * 1024 : 0;
+
             using var engine = new RDRFEngine(password, storage);
             int count = 0;
             string? firstFp = null;
@@ -63,7 +71,8 @@ public class BackupCommand : Command
             {
                 await ProgressReporter.Run($"Backing up {file.Name}", async progress =>
                 {
-                    firstFp = await engine.BackupFileAsync(file.FullName, strategy, progress: progress);
+                    firstFp = await engine.BackupFileAsync(file.FullName, strategy,
+                        fragmentSize: fragmentSize, customName: customName, progress: progress);
                 });
                 count = 1;
             }
@@ -84,7 +93,8 @@ public class BackupCommand : Command
                         task.MaxValue = files.Count;
                         foreach (var f in files)
                         {
-                            var fp = await engine.BackupFileAsync(f.FullName, strategy);
+                            var fp = await engine.BackupFileAsync(f.FullName, strategy,
+                                fragmentSize: fragmentSize, customName: customName);
                             firstFp ??= fp;
                             count++;
                             task.Value = count;
