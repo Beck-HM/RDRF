@@ -56,7 +56,7 @@ public class VerifyCommand : Command
             string prefix = index.CustomName ?? index.FileFingerprint;
 
             // Read and decrypt RC file
-            byte[] encryptedRc = storage.ReadRc(index.FileFingerprint);
+            byte[] encryptedRc = storage.ReadRc(prefix);
             byte[] rcBytes = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, aesKey);
 
             // Read and decrypt all fragments

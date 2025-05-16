@@ -100,10 +100,11 @@ public class RestoreOrchestrator : IDisposable
         IProgress<RdrfProgressReport>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        if (!_storage.IndexExists(fileFingerprint))
-            throw new FileNotFoundException($"Index not found for fingerprint: {fileFingerprint}");
+        string lookupKey = filePrefix ?? fileFingerprint;
+        if (!_storage.IndexExists(lookupKey))
+            throw new FileNotFoundException($"Index not found: {lookupKey}");
 
-        byte[] encryptedIndex = await _storage.ReadIndexAsync(fileFingerprint, cancellationToken).ConfigureAwait(false);
+        byte[] encryptedIndex = await _storage.ReadIndexAsync(lookupKey, cancellationToken).ConfigureAwait(false);
         var index = IndexManager.DecryptIndexWithKey(encryptedIndex, _aesKey);
         string prefix = filePrefix ?? fileFingerprint;
         return await RestoreCoreAsync(index, prefix, outputPath, allowFssRecovery, progress, cancellationToken).ConfigureAwait(false);

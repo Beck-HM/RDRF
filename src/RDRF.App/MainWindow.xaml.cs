@@ -47,6 +47,13 @@ public partial class MainWindow : Window
         _decryptVM.RequestShowWarning += (title, msg) =>
             Dispatcher.Invoke(() => RdrfMessageBox.Show(msg, title, RdrfMessageBox.DialogIcon.Warning));
         _decryptVM.RequestSaveConfig += () => Dispatcher.Invoke(SaveConfig);
+
+        FragmentSizeMB.TextChanged += (_, _) => UpdateFragmentPreview();
+        _encryptVM.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(EncryptViewModel.EncryptFilePath))
+                UpdateFragmentPreview();
+        };
     }
 
     private void InitializeConfig()
@@ -221,6 +228,26 @@ public partial class MainWindow : Window
 
     private void EncryptBrowse_Click(object sender, RoutedEventArgs e) => _encryptVM.BrowseFileCommand.Execute(null);
     private void EncryptOutputBrowse_Click(object sender, RoutedEventArgs e) => _encryptVM.BrowseOutputCommand.Execute(null);
+
+    private void UpdateFragmentPreview()
+    {
+        string? filePath = _encryptVM.EncryptFilePath;
+        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+        {
+            FragmentPreviewText.Text = "Select a file to preview fragment layout";
+            FragmentPreviewDetail.Text = "";
+            return;
+        }
+
+        var fileInfo = new FileInfo(filePath);
+        long fileSize = fileInfo.Length;
+        int fragSizeMB = int.TryParse(FragmentSizeMB.Text, out int mb) && mb >= 1 ? mb : 1;
+        int fragSizeBytes = fragSizeMB * 1024 * 1024;
+        int dataFrags = RDRF.Core.FragmentEngine.Frags.GetFragentCount(fileSize, fragSizeBytes);
+
+        FragmentPreviewText.Text = $"{fileSize / 1024.0 / 1024.0:F1} MB  ->  {dataFrags} fragments  x  {fragSizeMB} MB";
+        FragmentPreviewDetail.Text = $"File: {fileInfo.Name}";
+    }
 
     private void StartEncrypt_Click(object sender, RoutedEventArgs e)
     {
