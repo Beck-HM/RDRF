@@ -587,6 +587,7 @@
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
@@ -640,7 +641,27 @@
                                         </Grid>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Row="1" Grid.ColumnSpan="2"
+                                    <!-- Fragment Preview -->
+                                    <Border Grid.Row="1" Grid.ColumnSpan="2"
+                                            Background="{StaticResource BackgroundBrush}"
+                                            CornerRadius="6"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="1"
+                                            Padding="12"
+                                            Margin="0,12,0,0">
+                                        <StackPanel>
+                                            <TextBlock x:Name="FragmentPreviewText"
+                                                       Text="Select a file and enter fragment size to preview"
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource TextSecondaryBrush}" />
+                                            <TextBlock x:Name="FragmentPreviewDetail"
+                                                       FontSize="11"
+                                                       Foreground="{StaticResource TextTertiaryBrush}"
+                                                       Margin="0,2,0,0" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <StackPanel Grid.Row="2" Grid.ColumnSpan="2"
                                                 Margin="0,16,0,0">
                                         <TextBlock Text="Custom Name (optional)"
                                                    FontSize="13"

@@ -48,28 +48,31 @@ public class StatusCommand : Command
             var storage = new LocalFileAdapter(storageDir);
             byte[] aesKey = EncryptionLayer.DeriveKey(password);
             string prefix = index.CustomName ?? index.FileFingerprint;
+            string lookupKey = index.CustomName ?? index.FileFingerprint;
 
             // Check index and RC presence
             bool indexOk = true;
-            bool rcOk = storage.RcExists(index.FileFingerprint);
+            bool rcOk = storage.RcExists(lookupKey);
             if (rcOk)
             {
                 try
                 {
-                    byte[] encryptedRc = storage.ReadRc(index.FileFingerprint);
+                    byte[] encryptedRc = storage.ReadRc(lookupKey);
                     EncryptionLayer.DecryptFragmentWithKey(encryptedRc, aesKey);
                 }
                 catch { rcOk = false; }
             }
 
+            bool hasEtn = index.Fss6FragentBlockMaps != null || index.Fss6RcBlockMap != null;
+
             Console.WriteLine();
             Console.WriteLine($"Fingerprint:  {index.FileFingerprint}");
             Console.WriteLine($"File:         {index.OriginalName}");
-            Console.WriteLine($"Strategy:     {index.FssStrategy}{(index.Fss6FragentBlockMaps != null ? " + FSS6" : "")}");
+            Console.WriteLine($"Strategy:     {index.FssStrategy}{(hasEtn ? " + FSS6" : "")}");
             Console.WriteLine();
             Console.WriteLine("Backup Infrastructure:");
             Console.WriteLine($"  Index:       {(indexOk ? "OK" : "MISSING")}");
-            Console.WriteLine($"  RC:          {(rcOk ? "OK" : (storage.RcExists(index.FileFingerprint) ? "CORRUPTED" : "MISSING"))}");
+            Console.WriteLine($"  RC:          {(rcOk ? "OK" : (storage.RcExists(lookupKey) ? "CORRUPTED" : "MISSING"))}");
             Console.WriteLine();
 
             // Scan fragments
@@ -98,6 +101,12 @@ public class StatusCommand : Command
                         int idxLen = BitConverter.ToInt32(decrypted.AsSpan(0, 4));
                         if (idxLen > 4 && idxLen <= decrypted.Length - 4)
                             decrypted = decrypted[(4 + idxLen)..];
+                    }
+
+                    if (hasEtn)
+                    {
+                        var (rawData, _, _, _, _, _, _) = RDRF.Core.ETN.EtnTrailer.Parse(decrypted);
+                        decrypted = rawData;
                     }
 
                     string actualHash = IntegrityChecker.HashBytes(decrypted);
