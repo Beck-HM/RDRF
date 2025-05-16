@@ -59,7 +59,7 @@ public class DecryptService : IDisposable
         IsFragmentMode = false;
         _encryptedIndex = File.ReadAllBytes(indexPath);
 
-        var index = RDRFEngine.DecryptIndex(_encryptedIndex, _aesKey);
+        var index = RDRFEngine.DecryptIndexWithKey(_encryptedIndex, _aesKey);
         LoadResult = ToResult(index);
         return LoadResult;
     }

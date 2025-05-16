@@ -116,7 +116,10 @@ public class RDRFEngine : IDisposable
 
     // ── Metadata helpers for UI layer ──
 
-    public static RdrfIndex DecryptIndex(byte[] encryptedIndex, byte[] aesKey)
+    public static RdrfIndex DecryptIndex(byte[] encryptedIndex, byte[] rcCode)
+        => IndexManager.DecryptIndex(encryptedIndex, rcCode);
+
+    public static RdrfIndex DecryptIndexWithKey(byte[] encryptedIndex, byte[] aesKey)
         => IndexManager.DecryptIndexWithKey(encryptedIndex, aesKey);
 
     public static (byte[]? embeddedIndex, byte[] fragmentData) DecryptFragment(byte[] encryptedFrag, byte[] aesKey)
