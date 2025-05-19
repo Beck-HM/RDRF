@@ -642,22 +642,79 @@
                                     </StackPanel>
 
                                     <!-- Fragment Preview -->
-                                    <Border Grid.Row="1" Grid.ColumnSpan="2"
-                                            Background="{StaticResource BackgroundBrush}"
-                                            CornerRadius="6"
-                                            BorderBrush="{StaticResource BorderBrush}"
-                                            BorderThickness="1"
-                                            Padding="12"
-                                            Margin="0,12,0,0">
+                                    <Border x:Name="EncryptFragmentPreviewCard"
+                                            Grid.Row="1" Grid.ColumnSpan="2"
+                                            Style="{StaticResource CardStyle}"
+                                            Margin="0,12,0,0"
+                                            Visibility="Collapsed">
                                         <StackPanel>
-                                            <TextBlock x:Name="FragmentPreviewText"
-                                                       Text="Select a file and enter fragment size to preview"
-                                                       FontSize="12"
-                                                       Foreground="{StaticResource TextSecondaryBrush}" />
-                                            <TextBlock x:Name="FragmentPreviewDetail"
-                                                       FontSize="11"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                                       Margin="0,2,0,0" />
+                                            <StackPanel Orientation="Horizontal"
+                                                        Margin="0,0,0,12">
+                                                <TextBlock Text="Fragment Preview"
+                                                           FontSize="15"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock x:Name="EncryptFragmentSummary"
+                                                           FontSize="12"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           Margin="12,0,0,0"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
+
+                                            <!-- Legend -->
+                                            <StackPanel Orientation="Horizontal"
+                                                        Margin="0,0,0,12">
+                                                <StackPanel Orientation="Horizontal"
+                                                            Margin="0,0,16,0">
+                                                    <Ellipse Width="8"
+                                                             Height="8"
+                                                             Fill="{StaticResource SurfaceHighlightBrush}"
+                                                             Margin="0,0,4,0"
+                                                             VerticalAlignment="Center" />
+                                                    <TextBlock Text="Fragment"
+                                                               FontSize="11"
+                                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                                               VerticalAlignment="Center" />
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Rectangle Width="8"
+                                                               Height="8"
+                                                               Fill="{StaticResource TextSecondaryBrush}"
+                                                               Margin="0,0,4,0"
+                                                               VerticalAlignment="Center" />
+                                                    <TextBlock Text="Per fragment size"
+                                                               FontSize="11"
+                                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                                               VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <!-- Fragment Grid -->
+                                            <ItemsControl x:Name="EncryptFragmentGrid">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <WrapPanel Orientation="Horizontal" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Width="40"
+                                                                Height="40"
+                                                                CornerRadius="6"
+                                                                Background="{StaticResource SurfaceHighlightBrush}"
+                                                                BorderBrush="{StaticResource BorderBrush}"
+                                                                BorderThickness="1"
+                                                                Margin="0,0,6,6">
+                                                            <TextBlock Text="{Binding Index}"
+                                                                       FontSize="11"
+                                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center" />
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
                                         </StackPanel>
                                     </Border>
 
