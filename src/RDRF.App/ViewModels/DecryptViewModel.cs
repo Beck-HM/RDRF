@@ -423,7 +423,7 @@ public class DecryptViewModel : ViewModelBase, IDisposable
 
     private void StartDecrypt()
     {
-        if (string.IsNullOrEmpty(_decryptIndexPath) || _decryptService == null)
+        if (string.IsNullOrEmpty(_decryptIndexPath) || _decryptService == null || _pendingPassword == null || _pendingPassword.Length == 0)
         {
             RequestShowError?.Invoke("Validation", "Please select and load a backup file.");
             return;

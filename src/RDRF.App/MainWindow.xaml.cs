@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using RDRF.App.ViewModels;
 
 namespace RDRF.App;
@@ -48,12 +49,17 @@ public partial class MainWindow : Window
             Dispatcher.Invoke(() => RdrfMessageBox.Show(msg, title, RdrfMessageBox.DialogIcon.Warning));
         _decryptVM.RequestSaveConfig += () => Dispatcher.Invoke(SaveConfig);
 
-        FragmentSizeMB.TextChanged += (_, _) => UpdateFragmentPreview();
+        FragmentSizeMB.TextChanged += (_, _) => QueuePreviewUpdate();
         _encryptVM.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(EncryptViewModel.EncryptFilePath))
-                UpdateFragmentPreview();
+                QueuePreviewUpdate();
         };
+    }
+
+    private void QueuePreviewUpdate()
+    {
+        Dispatcher.BeginInvoke(new Action(UpdateFragmentPreview), DispatcherPriority.Background);
     }
 
     private void InitializeConfig()

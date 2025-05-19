@@ -31,6 +31,11 @@ public class StatusCommand : Command
             }
 
             byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
+            if (password.Length == 0)
+            {
+                Console.Error.WriteLine("Error: password cannot be empty");
+                return 1;
+            }
             byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
 
             RdrfIndex index;

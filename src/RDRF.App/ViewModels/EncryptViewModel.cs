@@ -292,7 +292,7 @@ public class EncryptViewModel : ViewModelBase
             return;
         }
 
-        if (_pendingPassword == null)
+        if (_pendingPassword == null || _pendingPassword.Length == 0)
         {
             RequestShowError?.Invoke("Validation", "Please enter an encryption key.");
             return;
