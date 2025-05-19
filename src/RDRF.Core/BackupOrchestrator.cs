@@ -38,6 +38,8 @@ public class BackupOrchestrator : IDisposable
         bool preDerived = false,
         byte[]? recoveryCode = null)
     {
+        if (key == null || key.Length == 0)
+            throw new ArgumentException("Key cannot be null or empty", nameof(key));
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _fss = fssEngine ?? new FSSEngine();
         _fsa = new FsaEngine();

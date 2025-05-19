@@ -57,6 +57,11 @@ public class BackupCommand : Command
             }
             string strategy = selected[0];
             byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
+            if (password.Length == 0)
+            {
+                Console.Error.WriteLine("Error: password cannot be empty");
+                return 1;
+            }
 
             string storagePath = outputDir?.FullName ?? Path.Combine(AppContext.BaseDirectory, "backup");
             var storage = new LocalFileAdapter(storagePath);

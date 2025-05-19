@@ -12,7 +12,9 @@ public class RDRFEngine : IDisposable
 
     public RDRFEngine(byte[] key, StorageAdapter storage, FSS.FSSEngine? fssEngine = null)
     {
-        _rcCode = key ?? throw new ArgumentNullException(nameof(key));
+        if (key == null || key.Length == 0)
+            throw new ArgumentException("Key cannot be null or empty", nameof(key));
+        _rcCode = key;
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _backup = new BackupOrchestrator(key, storage, fssEngine);
         _restore = new RestoreOrchestrator(key, storage, fssEngine);
@@ -20,6 +22,8 @@ public class RDRFEngine : IDisposable
 
     public RDRFEngine(byte[] key, StorageAdapter storage, bool preDerived, byte[]? recoveryCode, FSS.FSSEngine? fssEngine = null)
     {
+        if ((key == null || key.Length == 0) && (recoveryCode == null || recoveryCode.Length == 0))
+            throw new ArgumentException("Key cannot be null or empty", nameof(key));
         _rcCode = recoveryCode ?? key ?? throw new ArgumentNullException(nameof(key));
         _storage = storage;
         _backup = new BackupOrchestrator(key, storage, fssEngine, preDerived, recoveryCode);
