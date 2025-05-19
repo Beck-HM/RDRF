@@ -234,8 +234,7 @@ public partial class MainWindow : Window
         string? filePath = _encryptVM.EncryptFilePath;
         if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
         {
-            FragmentPreviewText.Text = "Select a file to preview fragment layout";
-            FragmentPreviewDetail.Text = "";
+            EncryptFragmentPreviewCard.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -245,8 +244,15 @@ public partial class MainWindow : Window
         int fragSizeBytes = fragSizeMB * 1024 * 1024;
         int dataFrags = RDRF.Core.FragmentEngine.Frags.GetFragentCount(fileSize, fragSizeBytes);
 
-        FragmentPreviewText.Text = $"{fileSize / 1024.0 / 1024.0:F1} MB  ->  {dataFrags} fragments  x  {fragSizeMB} MB";
-        FragmentPreviewDetail.Text = $"File: {fileInfo.Name}";
+        EncryptFragmentSummary.Text = $"{fileSize / 1024.0 / 1024.0:F1} MB  ->  {dataFrags} fragments  x  {fragSizeMB} MB";
+
+        var items = new List<object>();
+        int maxShow = Math.Min(dataFrags, 48);
+        for (int i = 0; i < maxShow; i++)
+            items.Add(new { Index = i.ToString() });
+
+        EncryptFragmentGrid.ItemsSource = items;
+        EncryptFragmentPreviewCard.Visibility = Visibility.Visible;
     }
 
     private void StartEncrypt_Click(object sender, RoutedEventArgs e)
