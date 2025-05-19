@@ -656,7 +656,7 @@
                                                        Foreground="{StaticResource TextSecondaryBrush}" />
                                             <TextBlock x:Name="FragmentPreviewDetail"
                                                        FontSize="11"
-                                                       Foreground="{StaticResource TextTertiaryBrush}"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"
                                                        Margin="0,2,0,0" />
                                         </StackPanel>
                                     </Border>
