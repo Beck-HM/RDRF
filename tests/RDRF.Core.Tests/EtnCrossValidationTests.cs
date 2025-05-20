@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
+using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.Storage;
+using RDRF.Core.ETN;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using Xunit;
@@ -351,7 +353,9 @@ public class EtnCrossValidationTests
             // Corrupt fragment[0] at data.Length/2, record the raw data length for block calc
             var (rawData, _, _, _, _) = Fss6Etn.ParseTrailer(fragments[0]);
             int targetPos = rawData.Length / 2;
-            int expectedBlock = targetPos / 256;
+            var idx = IndexManager.DeserializeIndex(indexBytes);
+            int blockSize = EtnBlockMap.GetBlockSize(idx.FileSize);
+            int expectedBlock = targetPos / blockSize;
             _output.WriteLine($"  Fragment[0] ra[{rawData.Length}, flip @ {targetPos}, expected block ~{expectedBlock}");
 
             fragments[0] = EtnTestHelpers.CorruptFragmentData(fragments[0]);
@@ -382,9 +386,10 @@ public class EtnCrossValidationTests
         try
         {
             var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
+            int bs = EtnBlockMap.GetBlockSize(IndexManager.DeserializeIndex(indexBytes).FileSize);
 
             var (rawData, _, _, _, _) = Fss6Etn.ParseTrailer(fragments[0]);
-            Assert.True(rawData.Length > 256, "Fragment must be >256 bytes for this test");
+            Assert.True(rawData.Length > bs, $"Fragment must be >{bs} bytes for this test");
 
             byte[] copy = (byte[])fragments[0].Clone();
             copy[0] ^= 0xFF; // corrupt byte 0 - block 0
@@ -395,9 +400,9 @@ public class EtnCrossValidationTests
             Assert.True(result.CorruptedFragmentBlocks.ContainsKey(0));
             Assert.Contains(0, result.CorruptedFragmentBlocks[0]);
 
-            // Also corrupt a byte at offset 256 - block 1
+            // Also corrupt a byte at offset bs - block 1
             copy = (byte[])fragments[1].Clone();
-            copy[256] ^= 0xFF;
+            copy[bs] ^= 0xFF;
             fragments[1] = copy;
 
             result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
@@ -422,17 +427,19 @@ public class EtnCrossValidationTests
             var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             // Corrupt the trailer's indexBM section in fragment[0]
-            // New trailer format: [rawSize][fragBmCount][fragFlat][indexBmCount][indexFlat][rcBmCount][rcFlat][trailerSize]
+            // Trailer format: [rawSize(4)][fragBmCount(4)][fragFlat(2×N)][indexBmCount(4)][indexFlat(2×N)][...]
             byte[] corrupted = (byte[])fragments[0].Clone();
             int trailerSize = BitConverter.ToInt32(corrupted, corrupted.Length - 4);
             int trailerStart = corrupted.Length - trailerSize;
             int fragBmCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
-            int idxBmCountPos = trailerStart + 8 + fragBmCount * 2;
-            int indexBMCount = BitConverter.ToInt32(corrupted, idxBmCountPos);
-            // Flip a byte in the middle of the first indexBM hash
-            int flipPos = idxBmCountPos + 4 + 5;
-            if (flipPos < corrupted.Length && indexBMCount > 0)
+            int idxBmCntPos = trailerStart + 8 + fragBmCount * 2;
+            int indexBMCount = BitConverter.ToInt32(corrupted, idxBmCntPos);
+            int idxFlatStart = idxBmCntPos + 4;
+            if (indexBMCount > 0)
+            {
+                int flipPos = idxFlatStart + (indexBMCount - 1) * 2; // first byte of last index hash
                 corrupted[flipPos] ^= 0xFF;
+            }
 
             fragments[0] = corrupted;
 

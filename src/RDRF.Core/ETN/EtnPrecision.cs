@@ -22,10 +22,16 @@ public static class EtnPrecision
             return result;
         }
 
+        // Parse index first to determine block size from file size
+        RdrfIndex? index = null;
+        try { index = IndexManager.DeserializeIndex(indexBytes); }
+        catch { }
+        int blockSize = index != null ? EtnBlockMap.GetBlockSize(index.FileSize) : 256;
+
         byte[] strippedIndexBytes = StripFss6Fields(indexBytes);
-        byte[] actualIndexFlat = EtnBlockMap.Build(strippedIndexBytes);
+        byte[] actualIndexFlat = EtnBlockMap.Build(strippedIndexBytes, blockSize);
         int actualIndexCount = EtnBlockMap.BlockCount(actualIndexFlat);
-        byte[] actualRcFlat = EtnBlockMap.Build(rcBytes);
+        byte[] actualRcFlat = EtnBlockMap.Build(rcBytes, blockSize);
         int actualRcCount = EtnBlockMap.BlockCount(actualRcFlat);
 
         var rcStoredIndexBm = rcFile.IndexBlockMap.Select(EtnBlockMap.HexToHash).ToList();
@@ -45,7 +51,7 @@ public static class EtnPrecision
         Parallel.For(0, n, i =>
         {
             var (data, tFragFlat, tFragCnt, tIdxFlat, tIdxCnt, tRcFlat, tRcCnt) = EtnTrailer.Parse(fragmentsWithTrailers[i]);
-            actualFragmentFlats[i] = EtnBlockMap.Build(data);
+            actualFragmentFlats[i] = EtnBlockMap.Build(data, blockSize);
             fragmentBlockCounts[i] = EtnBlockMap.BlockCount(actualFragmentFlats[i]);
             trailerFragmentFlats[i] = tFragFlat;
             trailerFragmentCounts[i] = tFragCnt;
@@ -54,10 +60,6 @@ public static class EtnPrecision
             trailerRcFlats[i] = tRcFlat;
             trailerRcCounts[i] = tRcCnt;
         });
-
-        RdrfIndex? index = null;
-        try { index = IndexManager.DeserializeIndex(indexBytes); }
-        catch { }
 
         var indexStoredRcBm = index?.Fss6RcBlockMap?.Select(EtnBlockMap.HexToHash).ToList() ?? new List<byte[]>();
         var indexStoredFragmentBms = index?.Fss6FragentBlockMaps

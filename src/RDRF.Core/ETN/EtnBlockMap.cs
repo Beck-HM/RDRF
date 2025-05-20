@@ -11,15 +11,25 @@ public static class EtnBlockMap
 
     public static int BlockCount(byte[] flat) => flat.Length / FullHashLen;
 
-    public static byte[] Build(byte[] data)
+    public static int GetBlockSize(long fileSize)
     {
-        int blockCount = (data.Length + BlockSize - 1) / BlockSize;
+        if (fileSize <= 100 * 1024)          return 256;
+        if (fileSize <= 1 * 1024 * 1024)     return 512;
+        if (fileSize <= 10 * 1024 * 1024)    return 1024;
+        if (fileSize <= 200 * 1024 * 1024)   return 4096;
+        if (fileSize <= 1024L * 1024 * 1024) return 8192;
+        return 16384;
+    }
+
+    public static byte[] Build(byte[] data, int blockSize = 256)
+    {
+        int blockCount = (data.Length + blockSize - 1) / blockSize;
         byte[] flat = new byte[blockCount * FullHashLen];
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         for (int i = 0; i < blockCount; i++)
         {
-            int offset = i * BlockSize;
-            int len = Math.Min(BlockSize, data.Length - offset);
+            int offset = i * blockSize;
+            int len = Math.Min(blockSize, data.Length - offset);
             hash.AppendData(data.AsSpan(offset, len));
             hash.GetHashAndReset(flat.AsSpan(i * FullHashLen, FullHashLen));
         }
