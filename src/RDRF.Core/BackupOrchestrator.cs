@@ -215,7 +215,7 @@ public class BackupOrchestrator : IDisposable
         if (hasFss6)
         {
             var (etnFragments, etnIndexJson, etnRcJson) = Fss6Etn.InjectCrossValidation(
-                fragments, serializedIndex, filePrefix);
+                fragments, serializedIndex, filePrefix, fileSize);
             fragments = etnFragments;
             serializedIndex = etnIndexJson;
             rcBytes = etnRcJson;

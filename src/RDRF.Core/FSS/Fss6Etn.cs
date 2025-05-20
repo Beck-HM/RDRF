@@ -49,15 +49,16 @@ public class Fss6Etn : IFssStrategy
         => EtnPrecision.StripFss6Fields(indexBytes);
 
     public static (List<byte[]> Fragments, byte[] IndexJson, byte[] RcJson) InjectCrossValidation(
-        List<byte[]> fragments, byte[] indexBytes, string fileFingerprint)
+        List<byte[]> fragments, byte[] indexBytes, string fileFingerprint, long fileSize)
     {
-        byte[] indexBlockFlat = EtnBlockMap.Build(indexBytes);
+        int bs = EtnBlockMap.GetBlockSize(fileSize);
+        byte[] indexBlockFlat = EtnBlockMap.Build(indexBytes, bs);
         int idxBlockCount = EtnBlockMap.BlockCount(indexBlockFlat);
 
         var fragmentBlockFlats = new byte[fragments.Count][];
         Parallel.For(0, fragments.Count, i =>
         {
-            fragmentBlockFlats[i] = EtnBlockMap.Build(fragments[i]);
+            fragmentBlockFlats[i] = EtnBlockMap.Build(fragments[i], bs);
         });
 
         var rcFile = new RcFile
@@ -69,7 +70,7 @@ public class Fss6Etn : IFssStrategy
             CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         };
         byte[] rcBytes = rcFile.ToCborBytes();
-        byte[] rcBlockFlat = EtnBlockMap.Build(rcBytes);
+        byte[] rcBlockFlat = EtnBlockMap.Build(rcBytes, bs);
         int rcBlockCount = EtnBlockMap.BlockCount(rcBlockFlat);
 
         for (int i = 0; i < fragments.Count; i++)
