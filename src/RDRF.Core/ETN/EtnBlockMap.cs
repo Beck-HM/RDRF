@@ -12,13 +12,35 @@ public static class EtnBlockMap
     public static int BlockCount(byte[] flat) => flat.Length / FullHashLen;
 
     public static int GetBlockSize(long fileSize)
+        => GetBlockSize(fileSize, null);
+
+    public static int GetBlockSize(long fileSize, string? strategy)
     {
-        if (fileSize <= 100 * 1024)          return 256;
-        if (fileSize <= 1 * 1024 * 1024)     return 512;
-        if (fileSize <= 10 * 1024 * 1024)    return 1024;
-        if (fileSize <= 200 * 1024 * 1024)   return 4096;
-        if (fileSize <= 1024L * 1024 * 1024) return 8192;
-        return 16384;
+        int tier = strategy switch
+        {
+            "FSS3" => 0,
+            "FSS5" => 2,
+            _ => 1,
+        };
+
+        int[][] table =
+        [
+            [ 256, 256, 256,  512, 1024, 2048 ],  // tier 0 (FSS3)
+            [ 256, 256, 512, 1024, 2048, 4096 ],  // tier 1 (FSS1/2/2R/5+)
+            [ 256, 256, 256,  256,  512, 1024 ],  // tier 2 (FSS5)
+        ];
+
+        int idx = fileSize switch
+        {
+            <= 100 * 1024              => 0,
+            <= 1 * 1024 * 1024        => 1,
+            <= 10 * 1024 * 1024       => 2,
+            <= 200 * 1024 * 1024      => 3,
+            <= 1024L * 1024 * 1024    => 4,
+            _                          => 5,
+        };
+
+        return table[tier][idx];
     }
 
     public static byte[] Build(byte[] data, int blockSize = 256)

@@ -26,7 +26,7 @@ public static class EtnPrecision
         RdrfIndex? index = null;
         try { index = IndexManager.DeserializeIndex(indexBytes); }
         catch { }
-        int blockSize = index != null ? EtnBlockMap.GetBlockSize(index.FileSize) : 256;
+        int blockSize = index != null ? EtnBlockMap.GetBlockSize(index.FileSize, index.FssStrategy) : 256;
 
         byte[] strippedIndexBytes = StripFss6Fields(indexBytes);
         byte[] actualIndexFlat = EtnBlockMap.Build(strippedIndexBytes, blockSize);

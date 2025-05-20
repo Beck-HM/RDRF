@@ -49,9 +49,9 @@ public class Fss6Etn : IFssStrategy
         => EtnPrecision.StripFss6Fields(indexBytes);
 
     public static (List<byte[]> Fragments, byte[] IndexJson, byte[] RcJson) InjectCrossValidation(
-        List<byte[]> fragments, byte[] indexBytes, string fileFingerprint, long fileSize)
+        List<byte[]> fragments, byte[] indexBytes, string fileFingerprint, long fileSize, string strategy)
     {
-        int bs = EtnBlockMap.GetBlockSize(fileSize);
+        int bs = EtnBlockMap.GetBlockSize(fileSize, strategy);
         byte[] indexBlockFlat = EtnBlockMap.Build(indexBytes, bs);
         int idxBlockCount = EtnBlockMap.BlockCount(indexBlockFlat);
 
