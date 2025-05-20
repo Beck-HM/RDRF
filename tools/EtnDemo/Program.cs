@@ -51,6 +51,7 @@ void RunStandardDemo()
             fingerprint = engine.BackupFile(testFile, "FSS6");
         byte[] aesKey = EncryptionLayer.DeriveKey(rcCodeSave);
         var index = IndexManager.DecryptIndexWithKey(storage.ReadIndex(fingerprint), aesKey);
+        int etnBlockSize = EtnBlockMap.GetBlockSize(index.FileSize);
         int targetFrag = index.FragentCount > 1 ? 1 : 0;
         Print($"  Fingerprint: {fingerprint}");
         Print($"  Strategy: FSS6");
@@ -65,14 +66,15 @@ void RunStandardDemo()
         byte[] indexJson = IndexManager.SerializeIndex(index);
         var baselineCheck = Fss6Etn.CrossValidate(indexJson, baseline, rcPlain);
         AssertOrDie(baselineCheck.IsValid, "Baseline backup is incomplete — cannot continue");
-        int indexBmCount = EtnBlockMap.BlockCount(EtnBlockMap.Build(Fss6Etn.StripEtnFieldsFromIndexJson(indexJson)));
-        int rcBmCount = EtnBlockMap.BlockCount(EtnBlockMap.Build(rcPlain));
+        int indexBmCount = EtnBlockMap.BlockCount(EtnBlockMap.Build(Fss6Etn.StripEtnFieldsFromIndexJson(indexJson), etnBlockSize));
+        int rcBmCount = EtnBlockMap.BlockCount(EtnBlockMap.Build(rcPlain, etnBlockSize));
         Print($"  Index BM: {indexBmCount} entries → stored in RC (8B each)");
         Print($"  RC   BM: {rcBmCount} entries → stored in Index (8B each)");
+        Print($"  Block size: {etnBlockSize}B");
         for (int i = 0; i < baseline.Count; i++)
         {
             var (raw, _, _, _, _) = Fss6Etn.ParseTrailer(baseline[i]);
-            int blockCount = EtnBlockMap.BlockCount(EtnBlockMap.Build(raw));
+            int blockCount = EtnBlockMap.BlockCount(EtnBlockMap.Build(raw, etnBlockSize));
             int trailerBytes = baseline[i].Length - raw.Length;
             Print($"  Fragment[{i}]: {raw.Length:N0} B, {blockCount} blocks, trailer {trailerBytes} B (2B/block)");
         }
@@ -86,7 +88,7 @@ void RunStandardDemo()
         byte[] encFrag = storage.ReadFragment(fragFile);
         var (embIdx, fragData) = FragmentFileHeader.DecryptWithEmbeddedIndex(encFrag, aesKey);
         int corruptOffset = Math.Min(4096, fragData.Length > 1 ? 4096 : fragData.Length / 2);
-        int expectedBlock = corruptOffset / 256;
+        int expectedBlock = corruptOffset / etnBlockSize;
         byte orig = fragData[corruptOffset];
         fragData[corruptOffset] ^= 0xFF;
         bool needsCtr = encFrag.Length > 5 && encFrag[5] == 1;
@@ -240,7 +242,7 @@ bool Scenario1_MultiFragmentCascade(string logFile, System.Text.StringBuilder cs
     string dir = CreateTempDir(_outDir);
     try
     {
-        var (storage, fingerprint, aesKey, fragmentKey, index) = QuickBackup(dir);
+        var (storage, fingerprint, aesKey, fragmentKey, index, _) = QuickBackup(dir); int blockSize = EtnBlockMap.GetBlockSize(index.FileSize);
         var decrypted = DecryptFragments(index, storage, fragmentKey);
         string prefix = index.CustomName ?? fingerprint;
 
@@ -254,7 +256,7 @@ bool Scenario1_MultiFragmentCascade(string logFile, System.Text.StringBuilder cs
             byte[] enc = storage.ReadFragment(f);
             var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, fragmentKey);
             int pos = rand.Next(data.Length);
-            int blk = pos / 256;
+            int blk = pos / blockSize;
             data[pos] ^= 0xFF;
             bool nc = enc.Length > 5 && enc[5] == 1;
             byte[] nonce = RandomNumberGenerator.GetBytes(12);
@@ -284,16 +286,16 @@ bool Scenario2_CrossBlockBoundary(string logFile, System.Text.StringBuilder csv)
     string dir = CreateTempDir(_outDir);
     try
     {
-        var (storage, fingerprint, aesKey, fragmentKey, index) = QuickBackup(dir);
+        var (storage, fingerprint, aesKey, fragmentKey, index, _) = QuickBackup(dir); int blockSize = EtnBlockMap.GetBlockSize(index.FileSize);
         var decrypted = DecryptFragments(index, storage, fragmentKey);
         string prefix = index.CustomName ?? fingerprint;
         string f = $"{prefix}_0.rdrf";
         byte[] enc = storage.ReadFragment(f);
         var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, fragmentKey);
 
-        // byte 255 = last byte of block 0; byte 256 = first byte of block 1
-        data[255] ^= 0xFF;
-        data[256] ^= 0xFF;
+        // byte blockSize-1 = last byte of block 0; byte blockSize = first byte of block 1
+        data[blockSize - 1] ^= 0xFF;
+        data[blockSize] ^= 0xFF;
         bool nc = enc.Length > 5 && enc[5] == 1;
         byte[] nonce = RandomNumberGenerator.GetBytes(12);
         storage.WriteFragment(f, FragmentFileHeader.EncryptWithEmbeddedIndex(data, emb!, fragmentKey));
@@ -316,7 +318,7 @@ bool Scenario3_ByzantineMetadata(string logFile, System.Text.StringBuilder csv)
     string dir = CreateTempDir(_outDir);
     try
     {
-        var (storage, fingerprint, aesKey, fragmentKey, index) = QuickBackup(dir);
+        var (storage, fingerprint, aesKey, fragmentKey, index, _) = QuickBackup(dir); int blockSize = EtnBlockMap.GetBlockSize(index.FileSize);
         string prefix = index.CustomName ?? fingerprint;
 
         // Make Index, RC, and trailers all disagree about the index BM
@@ -335,7 +337,12 @@ bool Scenario3_ByzantineMetadata(string logFile, System.Text.StringBuilder csv)
         if (idxCnt > 0)
             idxFlat[(idxCnt - 1) * EtnBlockMap.TrailerHashLen] ^= 0xFF;
         byte[] fragFlat = Fss6Etn.BuildBlockMap(raw0);
-        byte[] newTrailer = Fss6Etn.BuildTrailer(fragFlat, EtnBlockMap.BlockCount(fragFlat), idxFlat, idxCnt, rcFlat, rcCnt, raw0.Length);
+        // BuildTrailer expects 32B stride source arrays, but idxFlat/rcFlat from
+        // ParseTrailer are 2B stride. Expand to 32B stride (zero-padded) for
+        // AppendTruncated to read correctly.
+        byte[] idxFull = ExpandTruncatedFlat(idxFlat, idxCnt, EtnBlockMap.FullHashLen);
+        byte[] rcFull = ExpandTruncatedFlat(rcFlat, rcCnt, EtnBlockMap.FullHashLen);
+        byte[] newTrailer = Fss6Etn.BuildTrailer(fragFlat, EtnBlockMap.BlockCount(fragFlat), idxFull, idxCnt, rcFull, rcCnt, raw0.Length);
         byte[] newFrag0 = new byte[raw0.Length + newTrailer.Length];
         Buffer.BlockCopy(raw0, 0, newFrag0, 0, raw0.Length);
         Buffer.BlockCopy(newTrailer, 0, newFrag0, raw0.Length, newTrailer.Length);
@@ -359,7 +366,7 @@ bool Scenario4_RecoveryResidual(string logFile, System.Text.StringBuilder csv)
     string dir = CreateTempDir(_outDir);
     try
     {
-        var (storage, fp, aesKey, fragmentKey, index) = QuickBackup(dir);
+        var (storage, fp, aesKey, fragmentKey, index, _) = QuickBackup(dir); int blockSize = index.FileSize > 0 ? EtnBlockMap.GetBlockSize(index.FileSize) : 256;
         string prefix = index.CustomName ?? fp;
         string f0 = $"{prefix}_0.rdrf";
         byte[] enc0 = storage.ReadFragment(f0);
@@ -367,7 +374,7 @@ bool Scenario4_RecoveryResidual(string logFile, System.Text.StringBuilder csv)
         // d0 = fragment data WITH trailer. Parse trailer to find raw data boundary.
         var (rawData, _, _, _, _) = Fss6Etn.ParseTrailer(d0);
         int mid = rawData.Length / 2;
-        int blk = mid / 256;
+        int blk = mid / blockSize;
         // Corrupt within raw data area
         d0[mid] ^= 0xFF;
         bool nc0 = enc0.Length > 5 && enc0[5] == 1;
@@ -391,24 +398,24 @@ bool Scenario5_BlockSaturation(string logFile, System.Text.StringBuilder csv)
     string dir = CreateTempDir(_outDir);
     try
     {
-        var (storage, fingerprint, aesKey, fragmentKey, index) = QuickBackup(dir);
+        var (storage, fingerprint, aesKey, fragmentKey, index, _) = QuickBackup(dir); int blockSize = EtnBlockMap.GetBlockSize(index.FileSize);
         var decrypted = DecryptFragments(index, storage, fragmentKey);
         string prefix = index.CustomName ?? fingerprint;
         string f = $"{prefix}_0.rdrf";
         byte[] enc = storage.ReadFragment(f);
         var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, fragmentKey);
         var (rawOnly, _, _, _, _) = Fss6Etn.ParseTrailer(data);
-        int rawBlocks = rawOnly.Length / 256;
+        int rawBlocks = rawOnly.Length / blockSize;
 
         var expectedBlocks = new HashSet<int>();
         var rand = new Random(99);
-        int actualMax = Math.Min(data.Length / 256 - 1, rawBlocks - 1);
+        int actualMax = Math.Min(data.Length / blockSize - 1, rawBlocks - 1);
         while (expectedBlocks.Count < 40 && expectedBlocks.Count < actualMax)
             expectedBlocks.Add(rand.Next(actualMax + 1));
 
         foreach (int blk in expectedBlocks)
         {
-            int pos = blk * 256;
+            int pos = blk * blockSize;
             data[pos] ^= 0xFF;
         }
         bool nc = enc.Length > 5 && enc[5] == 1;
@@ -486,6 +493,7 @@ bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv, int size
 
         byte[] aesKey = EncryptionLayer.DeriveKey(rcCopy);
         var index = IndexManager.DecryptIndexWithKey(storage.ReadIndex(fp), aesKey);
+        int blockSize = EtnBlockMap.GetBlockSize(index.FileSize);
         byte[] fragmentKey = aesKey;
         string prefix = index.CustomName ?? fp;
 
@@ -503,9 +511,9 @@ bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv, int size
             var (rawOnly, _, _, _, _) = Fss6Etn.ParseTrailer(data);
             if (!blockTargets.ContainsKey(fi))
                 blockTargets[fi] = new HashSet<int>();
-            int rawBlocks = rawOnly.Length / 256;
+            int rawBlocks = rawOnly.Length / blockSize;
             int blk = rand.Next(rawBlocks);
-            int pos = blk * 256;
+            int pos = blk * blockSize;
             // Only corrupt if this block hasn't been corrupted yet in this fragment
             if (blockTargets[fi].Add(blk))
             {
@@ -547,7 +555,7 @@ bool Scenario8_ExtremeBitRot(string logFile, System.Text.StringBuilder csv, int 
     string dir = CreateTempDir(_outDir);
     try
     {
-        var (storage, fingerprint, aesKey, _, index) = QuickBackup(dir, sizeMB);
+        var (storage, fingerprint, aesKey, _, index, blockSize) = QuickBackup(dir, sizeMB);
         string prefix = index.CustomName ?? fingerprint;
         var rand = new Random(42);
         var records = new List<CorruptionRecord>();
@@ -563,7 +571,7 @@ bool Scenario8_ExtremeBitRot(string logFile, System.Text.StringBuilder csv, int 
             for (int b = 0; b < rotBytes; b++)
             {
                 int pos = rand.Next(rawOnly.Length);
-                int blk = pos / 256;
+                int blk = pos / blockSize;
                 data[pos] ^= (byte)(1 << rand.Next(8));
                 flippedBlocks.Add(blk);
             }
@@ -595,7 +603,7 @@ bool Scenario9_ContiguousStripeKill(string logFile, System.Text.StringBuilder cs
     string dir = CreateTempDir(_outDir);
     try
     {
-        var (storage, fingerprint, aesKey, _, index) = QuickBackup(dir, sizeMB);
+        var (storage, fingerprint, aesKey, _, index, blockSize) = QuickBackup(dir, sizeMB);
         string prefix = index.CustomName ?? fingerprint;
         var rand = new Random(77);
         var records = new List<CorruptionRecord>();
@@ -608,11 +616,12 @@ bool Scenario9_ContiguousStripeKill(string logFile, System.Text.StringBuilder cs
             byte[] enc = storage.ReadFragment(f);
             var (emb, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(enc, aesKey);
             var (rawOnly, _, _, _, _) = Fss6Etn.ParseTrailer(data);
-            int rawBlocks = rawOnly.Length / 256;
-            if (rawBlocks < 10) continue;
+            int rawBlocks = rawOnly.Length / blockSize;
+            if (rawBlocks < 100) continue;
 
             int startBlk = rand.Next(rawBlocks / 2);
-            int killBlocks = Math.Min(rawBlocks - startBlk, rand.Next(100, Math.Min(500, rawBlocks / 4)));
+            int maxKill = Math.Min(500, rawBlocks / 4);
+            int killBlocks = Math.Min(rawBlocks - startBlk, rand.Next(100, Math.Max(101, maxKill)));
             for (int b = startBlk; b < startBlk + killBlocks; b++)
             {
                 int pos = b * 256;
@@ -646,7 +655,7 @@ bool Scenario10_CombinedAttack(string logFile, System.Text.StringBuilder csv, in
     string dir = CreateTempDir(_outDir);
     try
     {
-        var (storage, fingerprint, aesKey, _, index) = QuickBackup(dir, sizeMB);
+        var (storage, fingerprint, aesKey, _, index, blockSize) = QuickBackup(dir, sizeMB);
         string prefix = index.CustomName ?? fingerprint;
         var rand = new Random(2024);
         var records = new List<CorruptionRecord>();
@@ -663,7 +672,7 @@ bool Scenario10_CombinedAttack(string logFile, System.Text.StringBuilder csv, in
             for (int b = 0; b < rotBytes; b++)
             {
                 int pos = rand.Next(rawOnly.Length);
-                int blk = pos / 256;
+                int blk = pos / blockSize;
                 data[pos] ^= (byte)(1 << rand.Next(8));
                 flipped.Add(blk);
             }
@@ -696,7 +705,9 @@ bool Scenario10_CombinedAttack(string logFile, System.Text.StringBuilder csv, in
                 int hi = rand.Next(idxCnt);
                 idxFlat[hi * EtnBlockMap.TrailerHashLen] ^= 0xFF;
                 byte[] fragFlat = Fss6Etn.BuildBlockMap(rawData);
-                byte[] newTrailer = Fss6Etn.BuildTrailer(fragFlat, EtnBlockMap.BlockCount(fragFlat), idxFlat, idxCnt, rcFlat, rcCnt, rawData.Length);
+                byte[] idxFull = ExpandTruncatedFlat(idxFlat, idxCnt, EtnBlockMap.FullHashLen);
+                byte[] rcFull = ExpandTruncatedFlat(rcFlat, rcCnt, EtnBlockMap.FullHashLen);
+                byte[] newTrailer = Fss6Etn.BuildTrailer(fragFlat, EtnBlockMap.BlockCount(fragFlat), idxFull, idxCnt, rcFull, rcCnt, rawData.Length);
                 byte[] newFrag = new byte[rawData.Length + newTrailer.Length];
                 Buffer.BlockCopy(rawData, 0, newFrag, 0, rawData.Length);
                 Buffer.BlockCopy(newTrailer, 0, newFrag, rawData.Length, newTrailer.Length);
@@ -728,7 +739,7 @@ bool Scenario11_TrailerFPStress(string logFile, System.Text.StringBuilder csv, i
     string dir = CreateTempDir(_outDir);
     try
     {
-        var (storage, fingerprint, aesKey, _, index) = QuickBackup(dir, sizeMB);
+        var (storage, fingerprint, aesKey, _, index, blockSize) = QuickBackup(dir, sizeMB);
         string prefix = index.CustomName ?? fingerprint;
         var rand = new Random(2024);
         int fpBlocks = 0;
@@ -749,7 +760,10 @@ bool Scenario11_TrailerFPStress(string logFile, System.Text.StringBuilder csv, i
                 fpBlocks++;
             }
 
-            byte[] newTrailer = EtnTrailer.Build(tFragFlat, tFragCnt, tIdxFlat, tIdxCnt, tRcFlat, tRcCnt, rawData.Length);
+            byte[] fragFull = ExpandTruncatedFlat(tFragFlat, tFragCnt, EtnBlockMap.FullHashLen);
+            byte[] idxFull = ExpandTruncatedFlat(tIdxFlat, tIdxCnt, EtnBlockMap.FullHashLen);
+            byte[] rcFull = ExpandTruncatedFlat(tRcFlat, tRcCnt, EtnBlockMap.FullHashLen);
+            byte[] newTrailer = EtnTrailer.Build(fragFull, tFragCnt, idxFull, tIdxCnt, rcFull, tRcCnt, rawData.Length);
             byte[] newFrag = new byte[rawData.Length + newTrailer.Length];
             Buffer.BlockCopy(rawData, 0, newFrag, 0, rawData.Length);
             Buffer.BlockCopy(newTrailer, 0, newFrag, rawData.Length, newTrailer.Length);
@@ -777,7 +791,7 @@ bool Scenario11_TrailerFPStress(string logFile, System.Text.StringBuilder csv, i
 // ═══════════════════════════════════════════════
 //  Shared Helpers
 // ═══════════════════════════════════════════════
-(LocalFileAdapter storage, string fingerprint, byte[] aesKey, byte[] fragmentKey, RdrfIndex index) QuickBackup(string dir, int sizeMB = 0)
+(LocalFileAdapter storage, string fingerprint, byte[] aesKey, byte[] fragmentKey, RdrfIndex index, int blockSize) QuickBackup(string dir, int sizeMB = 0)
 {
     var storage = new LocalFileAdapter(dir);
     byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
@@ -788,7 +802,8 @@ bool Scenario11_TrailerFPStress(string logFile, System.Text.StringBuilder csv, i
         fp = e.BackupFile(testFile, "FSS6");
     byte[] aesKey2 = EncryptionLayer.DeriveKey(rcCopy);
     var idx = IndexManager.DecryptIndexWithKey(storage.ReadIndex(fp), aesKey2);
-    return (storage, fp, aesKey2, aesKey2, idx);
+    int bs = EtnBlockMap.GetBlockSize(idx.FileSize);
+    return (storage, fp, aesKey2, aesKey2, idx, bs);
 }
 
 CrossValidationResult RunEtn(LocalFileAdapter storage, string fingerprint, byte[] aesKey,
@@ -812,6 +827,14 @@ static string CreateTempDir(string? customBase = null)
     string dir = Path.Combine(customBase ?? Path.GetTempPath(), $"EtnDemo_{Guid.NewGuid():N}");
     Directory.CreateDirectory(dir);
     return dir;
+}
+
+static byte[] ExpandTruncatedFlat(byte[] truncatedFlat, int count, int targetStride)
+{
+    byte[] result = new byte[count * targetStride];
+    for (int i = 0; i < count; i++)
+        Buffer.BlockCopy(truncatedFlat, i * EtnBlockMap.TrailerHashLen, result, i * targetStride, EtnBlockMap.TrailerHashLen);
+    return result;
 }
 
 static void Cleanup(string dir)

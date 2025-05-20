@@ -223,11 +223,14 @@ public class EtnCrossValidationTests
             int trailerSize = BitConverter.ToInt32(corrupted, corrupted.Length - 4);
             int trailerStart = corrupted.Length - trailerSize;
             int fragBmCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
-            int idxPos = trailerStart + 12 + fragBmCount * 2;
-            int indexBMCount = BitConverter.ToInt32(corrupted, idxPos);
-            int flipPos = idxPos + 4 + 5;
-            if (flipPos < corrupted.Length && indexBMCount > 0)
+            int idxBmCntPos = trailerStart + 8 + fragBmCount * 2;
+            int indexBMCount = BitConverter.ToInt32(corrupted, idxBmCntPos);
+            int idxFlatStart = idxBmCntPos + 4;
+            if (indexBMCount > 0)
+            {
+                int flipPos = idxFlatStart + (indexBMCount - 1) * 2;
                 corrupted[flipPos] ^= 0xFF;
+            }
 
             fragments[0] = corrupted;
 
