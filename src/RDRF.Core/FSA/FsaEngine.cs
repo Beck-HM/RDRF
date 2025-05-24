@@ -102,6 +102,7 @@ public class FsaEngine
         }
         plan.RestorePipeline = restore;
         plan.EstimatedOverhead = EstimateOverhead(deduped);
+        plan.IsSingleStrategy = auxiliary == null || auxiliary.Count == 0;
         return plan;
     }
 
@@ -196,6 +197,9 @@ public class FsaPlan
 
     [JsonPropertyName("family_order")]
     public List<string> FamilyOrder { get; set; } = new();
+
+    [JsonPropertyName("is_single_strategy")]
+    public bool IsSingleStrategy { get; set; }
 }
 
 public class FsaStep
