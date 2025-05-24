@@ -22,6 +22,7 @@ public class BackupCommand : Command
         var fss3 = new Option<bool>("--fss3") { Description = "FSS3 strategy" };
         var fss5 = new Option<bool>("--fss5") { Description = "FSS5 strategy" };
         var fss5p = new Option<bool>("--fss5+") { Description = "FSS5+ strategy" };
+        var fsaOpt = new Option<bool>("-fsa") { Description = "Enable multi-strategy FSA fusion mode" };
 
         Arguments.Add(sourceArg);
         Options.Add(outputOpt);
@@ -30,6 +31,7 @@ public class BackupCommand : Command
         Options.Add(nameOpt);
         Add(fss1); Add(fss2); Add(fss2r);
         Add(fss3); Add(fss5); Add(fss5p);
+        Add(fsaOpt);
 
         SetAction(async (ParseResult parseResult) =>
         {
@@ -38,6 +40,7 @@ public class BackupCommand : Command
             var pwd = parseResult.GetValue(passwordOpt);
             var sizeMb = parseResult.GetValue(sizeOpt);
             var customName = parseResult.GetValue(nameOpt);
+            bool fsaMode = parseResult.GetValue(fsaOpt);
 
             var flags = new[]
             {
@@ -50,12 +53,30 @@ public class BackupCommand : Command
             };
             var selected = flags.Where(x => x.Item1).Select(x => x.Item2).ToList();
 
-            if (selected.Count != 1)
+            if (selected.Count < 1)
             {
-                Console.Error.WriteLine("Error: exactly one -fss<level> option is required (--fss1, --fss2, --fss2r, --fss3, --fss5, --fss5+)");
+                Console.Error.WriteLine("Error: at least one -fss<level> option is required");
                 return 1;
             }
-            string strategy = selected[0];
+
+            string strategy;
+            List<string>? auxiliary = null;
+
+            if (fsaMode)
+            {
+                strategy = selected[0];
+                if (selected.Count > 1)
+                    auxiliary = selected.Skip(1).ToList();
+            }
+            else
+            {
+                if (selected.Count != 1)
+                {
+                    Console.Error.WriteLine("Error: single-strategy mode requires exactly one -fss<level> (use -fsa for multi-strategy)");
+                    return 1;
+                }
+                strategy = selected[0];
+            }
             byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
             if (password.Length == 0)
             {
@@ -77,7 +98,7 @@ public class BackupCommand : Command
                 await ProgressReporter.Run($"Backing up {file.Name}", async progress =>
                 {
                     firstFp = await engine.BackupFileAsync(file.FullName, strategy,
-                        fragmentSize: fragmentSize, customName: customName, progress: progress);
+                        fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliary, progress: progress);
                 });
                 count = 1;
             }
@@ -99,7 +120,7 @@ public class BackupCommand : Command
                         foreach (var f in files)
                         {
                             var fp = await engine.BackupFileAsync(f.FullName, strategy,
-                                fragmentSize: fragmentSize, customName: customName);
+                                fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliary);
                             firstFp ??= fp;
                             count++;
                             task.Value = count;
