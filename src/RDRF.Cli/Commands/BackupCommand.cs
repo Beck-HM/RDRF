@@ -16,12 +16,12 @@ public class BackupCommand : Command
         var passwordOpt = new Option<string?>("-password") { Description = "Password (skip interactive prompt)" };
         var sizeOpt = new Option<int?>("-size") { Description = "Fragment size in MB (default: 1)" };
         var nameOpt = new Option<string?>("-name") { Description = "Custom name for the backup" };
-        var fss1 = new Option<bool>("--fss1") { Description = "FSS1 strategy" };
-        var fss2 = new Option<bool>("--fss2") { Description = "FSS2 strategy" };
-        var fss2r = new Option<bool>("--fss2r") { Description = "FSS2R strategy" };
-        var fss3 = new Option<bool>("--fss3") { Description = "FSS3 strategy" };
-        var fss5 = new Option<bool>("--fss5") { Description = "FSS5 strategy" };
-        var fss5p = new Option<bool>("--fss5+") { Description = "FSS5+ strategy" };
+        var fss1 = new Option<bool>("-fss1", new[] { "--fss1" }) { Description = "FSS1 strategy" };
+        var fss2 = new Option<bool>("-fss2", new[] { "--fss2" }) { Description = "FSS2 strategy" };
+        var fss2r = new Option<bool>("-fss2r", new[] { "--fss2r" }) { Description = "FSS2R strategy" };
+        var fss3 = new Option<bool>("-fss3", new[] { "--fss3" }) { Description = "FSS3 strategy" };
+        var fss5 = new Option<bool>("-fss5", new[] { "--fss5" }) { Description = "FSS5 strategy" };
+        var fss5p = new Option<bool>("-fss5+", new[] { "--fss5+" }) { Description = "FSS5+ strategy" };
         var fsaOpt = new Option<bool>("-fsa") { Description = "Enable multi-strategy FSA fusion mode" };
 
         Arguments.Add(sourceArg);
