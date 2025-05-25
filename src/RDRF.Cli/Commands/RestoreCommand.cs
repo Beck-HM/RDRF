@@ -10,9 +10,9 @@ public class RestoreCommand : Command
 {
     public RestoreCommand() : base("res", "Restore a backup from its index file")
     {
-        var indexArg = new Argument<FileInfo>("indexFile");
-        var outputOpt = new Option<FileInfo>("-o") { Description = "Output file path" };
-        var passwordOpt = new Option<string?>("-password") { Description = "Password (skip interactive prompt)" };
+        var indexArg = new Argument<FileInfo>("indexFile") { Description = "Path to the .indrdrf index file" };
+        var outputOpt = new Option<FileInfo>("-o") { Description = "Output file path for the restored data (required)" };
+        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (omit for interactive prompt)" };
 
         Arguments.Add(indexArg);
         Options.Add(outputOpt);

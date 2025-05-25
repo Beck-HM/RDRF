@@ -11,10 +11,10 @@ namespace RDRF.Cli.Commands;
 
 public class VerifyCommand : Command
 {
-    public VerifyCommand() : base("verify", "Verify backup integrity via ETN cross-validation")
+    public VerifyCommand() : base("verify", "Run ETN cross-validation on FSS6 backup via index file")
     {
-        var indexArg = new Argument<FileInfo>("indexFile");
-        var passwordOpt = new Option<string?>("-password") { Description = "Password (skip interactive prompt)" };
+        var indexArg = new Argument<FileInfo>("indexFile") { Description = "Path to the .indrdrf index file" };
+        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (omit for interactive prompt)" };
 
         Arguments.Add(indexArg);
         Options.Add(passwordOpt);
