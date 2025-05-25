@@ -9,20 +9,20 @@ namespace RDRF.Cli.Commands;
 
 public class BackupCommand : Command
 {
-    public BackupCommand() : base("backup", "Backup a file or directory")
+    public BackupCommand() : base("backup", "Backup a file or directory to RDRF storage")
     {
-        var sourceArg = new Argument<FileSystemInfo>("source");
-        var outputOpt = new Option<DirectoryInfo?>("-o") { Description = "Storage directory (default: ./backup/)" };
-        var passwordOpt = new Option<string?>("-password") { Description = "Password (skip interactive prompt)" };
+        var sourceArg = new Argument<FileSystemInfo>("source") { Description = "File or directory path to backup" };
+        var outputOpt = new Option<DirectoryInfo?>("-o") { Description = "Storage directory (default: ./backup/ when omitted)" };
+        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (omit for interactive prompt)" };
         var sizeOpt = new Option<int?>("-size") { Description = "Fragment size in MB (default: 1)" };
-        var nameOpt = new Option<string?>("-name") { Description = "Custom name for the backup" };
-        var fss1 = new Option<bool>("-fss1", new[] { "--fss1" }) { Description = "FSS1 strategy" };
-        var fss2 = new Option<bool>("-fss2", new[] { "--fss2" }) { Description = "FSS2 strategy" };
-        var fss2r = new Option<bool>("-fss2r", new[] { "--fss2r" }) { Description = "FSS2R strategy" };
-        var fss3 = new Option<bool>("-fss3", new[] { "--fss3" }) { Description = "FSS3 strategy" };
-        var fss5 = new Option<bool>("-fss5", new[] { "--fss5" }) { Description = "FSS5 strategy" };
-        var fss5p = new Option<bool>("-fss5+", new[] { "--fss5+" }) { Description = "FSS5+ strategy" };
-        var fsaOpt = new Option<bool>("-fsa") { Description = "Enable multi-strategy FSA fusion mode" };
+        var nameOpt = new Option<string?>("-name") { Description = "Custom name for the backup (optional)" };
+        var fss1 = new Option<bool>("-fss1", new[] { "--fss1" }) { Description = "FSS1 strategy - single-dash for primary, double-dash for auxiliary" };
+        var fss2 = new Option<bool>("-fss2", new[] { "--fss2" }) { Description = "FSS2 strategy - single-dash for primary, double-dash for auxiliary" };
+        var fss2r = new Option<bool>("-fss2r", new[] { "--fss2r" }) { Description = "FSS2R strategy - single-dash for primary, double-dash for auxiliary" };
+        var fss3 = new Option<bool>("-fss3", new[] { "--fss3" }) { Description = "FSS3 strategy - single-dash for primary, double-dash for auxiliary" };
+        var fss5 = new Option<bool>("-fss5", new[] { "--fss5" }) { Description = "FSS5 strategy - single-dash for primary, double-dash for auxiliary" };
+        var fss5p = new Option<bool>("-fss5+", new[] { "--fss5+" }) { Description = "FSS5+ strategy - single-dash for primary, double-dash for auxiliary" };
+        var fsaOpt = new Option<bool>("-fsa") { Description = "Enable multi-strategy FSA fusion mode (used with multiple --fss options)" };
 
         Arguments.Add(sourceArg);
         Options.Add(outputOpt);

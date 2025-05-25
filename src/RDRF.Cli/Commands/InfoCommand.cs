@@ -8,10 +8,10 @@ namespace RDRF.Cli.Commands;
 
 public class InfoCommand : Command
 {
-    public InfoCommand() : base("info", "Show backup details from index file")
+    public InfoCommand() : base("info", "Show backup metadata and settings from index file")
     {
-        var indexArg = new Argument<FileInfo>("indexFile");
-        var passwordOpt = new Option<string?>("-password") { Description = "Password (skip interactive prompt)" };
+        var indexArg = new Argument<FileInfo>("indexFile") { Description = "Path to the .indrdrf index file" };
+        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (omit for interactive prompt)" };
 
         Arguments.Add(indexArg);
         Options.Add(passwordOpt);
