@@ -39,9 +39,11 @@ public class VerifyCommand : Command
             byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
 
             RdrfIndex index;
+            byte[] aesKey;
             try
             {
-                index = RDRFEngine.DecryptIndex(encryptedIndex, password);
+                (aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
+                index = RDRFEngine.DeserializeIndex(cbor);
             }
             catch
             {
@@ -57,7 +59,6 @@ public class VerifyCommand : Command
 
             string storageDir = indexFile.DirectoryName!;
             var storage = new LocalFileAdapter(storageDir);
-            byte[] aesKey = EncryptionLayer.DeriveKey(password);
             string prefix = index.CustomName ?? index.FileFingerprint;
 
             // Read and decrypt RC file
@@ -73,7 +74,7 @@ public class VerifyCommand : Command
 
                 byte[] encrypted = storage.ReadFragment(fname);
                 bool hasHeader = FragmentFileHeader.HasHeader(encrypted);
-                int hdrOff = hasHeader ? 6 : 0;
+                int hdrOff = hasHeader ? FragmentFileHeader.GetTotalHeaderSize(encrypted) : 0;
                 byte[] decrypted = EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, hdrOff, aesKey);
 
                 if (hasHeader && decrypted.Length >= 4)

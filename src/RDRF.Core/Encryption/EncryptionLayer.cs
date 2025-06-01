@@ -8,6 +8,7 @@ public static class EncryptionLayer
     public static readonly byte[] PasswordSalt = Encoding.UTF8.GetBytes("RDRF.NET-PBKDF2-SALT-v1");
 
     private const int Pbkdf2Iterations = 600_000;
+    private const int MinNewFormatSize = Constants.SaltPrefixLength + Constants.NonceLength + 1 + Constants.TagLength;
 
     public static byte[] DeriveKey(byte[] rcCode, byte[]? salt = null)
     {
@@ -178,4 +179,62 @@ public static class EncryptionLayer
 
     public static byte[] DecryptIndex(byte[] encryptedIndex, byte[] rcCode)
         => DecryptIndexWithKey(encryptedIndex, DeriveKey(rcCode));
+
+    // ── Salt-prefixed index format (new) ──
+
+    public static byte[] EncryptIndexWithSaltPrefix(byte[] indexData, byte[] password, out byte[] salt)
+    {
+        salt = RandomNumberGenerator.GetBytes(Constants.SaltPrefixLength);
+        byte[] aesKey = DeriveKey(password, salt);
+        byte[] encrypted = EncryptIndexWithKey(indexData, aesKey);
+
+        byte[] result = new byte[Constants.SaltPrefixLength + encrypted.Length];
+        Buffer.BlockCopy(salt, 0, result, 0, Constants.SaltPrefixLength);
+        Buffer.BlockCopy(encrypted, 0, result, Constants.SaltPrefixLength, encrypted.Length);
+        return result;
+    }
+
+    public static byte[] EncryptIndexWithSaltPrefix(byte[] indexData, byte[] password)
+        => EncryptIndexWithSaltPrefix(indexData, password, out _);
+
+    public static byte[] EncryptIndexWithSaltPrefix(byte[] indexData, byte[] password, byte[]? existingSalt)
+    {
+        byte[] salt = (existingSalt != null && existingSalt.Length == Constants.SaltPrefixLength)
+            ? existingSalt
+            : RandomNumberGenerator.GetBytes(Constants.SaltPrefixLength);
+        byte[] aesKey = DeriveKey(password, salt);
+        byte[] encrypted = EncryptIndexWithKey(indexData, aesKey);
+
+        byte[] result = new byte[Constants.SaltPrefixLength + encrypted.Length];
+        Buffer.BlockCopy(salt, 0, result, 0, Constants.SaltPrefixLength);
+        Buffer.BlockCopy(encrypted, 0, result, Constants.SaltPrefixLength, encrypted.Length);
+        return result;
+    }
+
+    public static (byte[] aesKey, byte[] indexCbor) DecryptIndexWithAutoDetect(byte[] data, byte[] password)
+    {
+        if (data.Length >= MinNewFormatSize)
+        {
+            byte[] salt = new byte[Constants.SaltPrefixLength];
+            Buffer.BlockCopy(data, 0, salt, 0, Constants.SaltPrefixLength);
+
+            byte[] encrypted = new byte[data.Length - Constants.SaltPrefixLength];
+            Buffer.BlockCopy(data, Constants.SaltPrefixLength, encrypted, 0, encrypted.Length);
+
+            try
+            {
+                byte[] aesKey = DeriveKey(password, salt);
+                byte[] cbor = DecryptIndexWithKey(encrypted, aesKey);
+                return (aesKey, cbor);
+            }
+            catch (CryptographicException)
+            {
+                // Not new-format, fall through to legacy
+            }
+        }
+
+        byte[] legacyKey = DeriveKey(password);
+        byte[] legacyCbor = DecryptIndexWithKey(data, legacyKey);
+        return (legacyKey, legacyCbor);
+    }
 }

@@ -30,6 +30,7 @@ public class BackupOrchestrator : IDisposable
     private readonly FSSEngine _fss;
     private readonly FsaEngine _fsa;
     private readonly MetadataManager _metadata;
+    private readonly bool _preDerived;
 
     public BackupOrchestrator(
         byte[] key,
@@ -44,6 +45,7 @@ public class BackupOrchestrator : IDisposable
         _fss = fssEngine ?? new FSSEngine();
         _fsa = new FsaEngine();
         _metadata = MetadataManager.Default;
+        _preDerived = preDerived;
 
         if (preDerived)
         {
@@ -55,7 +57,7 @@ public class BackupOrchestrator : IDisposable
         {
             _rcCode = key ?? throw new ArgumentNullException(nameof(key));
             _salt = RandomNumberGenerator.GetBytes(32);
-            _aesKey = EncryptionLayer.DeriveKey(key);
+            _aesKey = EncryptionLayer.DeriveKey(key, _salt);
         }
     }
 
@@ -229,7 +231,7 @@ public class BackupOrchestrator : IDisposable
             if ((i & 3) == 0) cancellationToken.ThrowIfCancellationRequested();
 
             byte[] fileData = FragmentFileHeader.EncryptWithEmbeddedIndex(
-                fragments[i], serializedIndex, _aesKey);
+                fragments[i], serializedIndex, _aesKey, _preDerived ? null : _salt);
 
             string fname = Frags.FragentFilename(filePrefix, i);
             int rawLen = fragments[i].Length;
@@ -254,8 +256,17 @@ public class BackupOrchestrator : IDisposable
             ["plan"] = JsonSerializer.SerializeToElement(plan)
         };
 
-        byte[] encryptedIndex = IndexManager.EncryptIndexWithKey(standaloneIndex, _aesKey);
-        await _storage.WriteIndexAsync(filePrefix, encryptedIndex, cancellationToken).ConfigureAwait(false);
+        byte[] indexBytes = IndexManager.SerializeIndex(standaloneIndex);
+        if (!_preDerived && _salt.Length > 0)
+        {
+                byte[] salted = EncryptionLayer.EncryptIndexWithSaltPrefix(indexBytes, _rcCode, _salt);
+            await _storage.WriteIndexAsync(filePrefix, salted, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            byte[] encryptedIndex = EncryptionLayer.EncryptIndexWithKey(indexBytes, _aesKey);
+            await _storage.WriteIndexAsync(filePrefix, encryptedIndex, cancellationToken).ConfigureAwait(false);
+        }
 
         if (rcBytes.Length > 0)
         {

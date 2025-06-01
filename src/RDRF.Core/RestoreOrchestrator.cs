@@ -15,7 +15,8 @@ namespace RDRF.Core;
 public class RestoreOrchestrator : IDisposable
 {
     private readonly byte[] _rcCode;
-    private readonly byte[] _aesKey;
+    private byte[] _aesKey;
+    private readonly bool _preDerived;
     private readonly StorageAdapter _storage;
     private readonly FSSEngine _fss;
     private readonly MetadataManager _metadata;
@@ -34,6 +35,7 @@ public class RestoreOrchestrator : IDisposable
         _fss = fssEngine ?? new FSSEngine();
         _metadata = MetadataManager.Default;
         _recoveryExecutor = new RecoveryExecutor(_fss);
+        _preDerived = preDerived;
 
         if (preDerived)
         {
@@ -60,7 +62,8 @@ public class RestoreOrchestrator : IDisposable
             throw new FileNotFoundException($"Index not found for fingerprint: {fileFingerprint}");
 
         byte[] encryptedIndex = _storage.ReadIndex(fileFingerprint);
-        var index = IndexManager.DecryptIndexWithKey(encryptedIndex, _aesKey);
+        (_aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, _rcCode);
+        var index = IndexManager.DeserializeIndex(cbor);
         string prefix = filePrefix ?? fileFingerprint;
         return RestoreCore(index, prefix, outputPath, allowFssRecovery, progress);
     }
@@ -84,12 +87,27 @@ public class RestoreOrchestrator : IDisposable
         if (!FragmentFileHeader.HasHeader(fragData))
             throw new InvalidDataException("Fragment does not contain an embedded index.");
 
-        var (embeddedIndexBytes, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, _aesKey);
-        if (embeddedIndexBytes == null)
-            throw new InvalidDataException("Failed to extract embedded index from fragment");
+        if (!_preDerived && FragmentFileHeader.GetTotalHeaderSize(fragData) > FragmentFileHeader.HeaderSize)
+        {
+            var (embeddedIndexBytes, _, salt) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, _aesKey);
+            if (salt != null && salt.Length == Constants.SaltPrefixLength)
+            {
+                _aesKey = EncryptionLayer.DeriveKey(_rcCode, salt);
+                var (reDecrypted, _, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, _aesKey);
+                if (reDecrypted != null)
+                    embeddedIndexBytes = reDecrypted;
+            }
+            if (embeddedIndexBytes == null)
+                throw new InvalidDataException("Failed to extract embedded index from fragment");
+            var index = IndexManager.DeserializeIndex(embeddedIndexBytes);
+            return RestoreCore(index, filePrefix, outputPath, allowFssRecovery, progress);
+        }
 
-        var index = IndexManager.DeserializeIndex(embeddedIndexBytes);
-        return RestoreCore(index, filePrefix, outputPath, allowFssRecovery, progress);
+        var (idxBytes, _, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, _aesKey);
+        if (idxBytes == null)
+            throw new InvalidDataException("Failed to extract embedded index from fragment");
+        var idx = IndexManager.DeserializeIndex(idxBytes);
+        return RestoreCore(idx, filePrefix, outputPath, allowFssRecovery, progress);
     }
 
     // ── Async Restore ──
@@ -107,7 +125,8 @@ public class RestoreOrchestrator : IDisposable
             throw new FileNotFoundException($"Index not found: {lookupKey}");
 
         byte[] encryptedIndex = await _storage.ReadIndexAsync(lookupKey, cancellationToken).ConfigureAwait(false);
-        var index = IndexManager.DecryptIndexWithKey(encryptedIndex, _aesKey);
+        (_aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, _rcCode);
+        var index = IndexManager.DeserializeIndex(cbor);
         string prefix = filePrefix ?? fileFingerprint;
         return await RestoreCoreAsync(index, prefix, outputPath, allowFssRecovery, progress, cancellationToken).ConfigureAwait(false);
     }
@@ -130,12 +149,27 @@ public class RestoreOrchestrator : IDisposable
         if (!FragmentFileHeader.HasHeader(fragData))
             throw new InvalidDataException("Fragment does not contain an embedded index.");
 
-        var (embeddedIndexBytes, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, _aesKey);
-        if (embeddedIndexBytes == null)
-            throw new InvalidDataException("Failed to extract embedded index from fragment");
+        if (!_preDerived && FragmentFileHeader.GetTotalHeaderSize(fragData) > FragmentFileHeader.HeaderSize)
+        {
+            var (embeddedIndexBytes, _, salt) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, _aesKey);
+            if (salt != null && salt.Length == Constants.SaltPrefixLength)
+            {
+                _aesKey = EncryptionLayer.DeriveKey(_rcCode, salt);
+                var (reDecrypted, _, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, _aesKey);
+                if (reDecrypted != null)
+                    embeddedIndexBytes = reDecrypted;
+            }
+            if (embeddedIndexBytes == null)
+                throw new InvalidDataException("Failed to extract embedded index from fragment");
+            var index = IndexManager.DeserializeIndex(embeddedIndexBytes);
+            return await RestoreCoreAsync(index, filePrefix, outputPath, allowFssRecovery, progress, cancellationToken).ConfigureAwait(false);
+        }
 
-        var index = IndexManager.DeserializeIndex(embeddedIndexBytes);
-        return await RestoreCoreAsync(index, filePrefix, outputPath, allowFssRecovery, progress, cancellationToken).ConfigureAwait(false);
+        var (idxBytes, _, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, _aesKey);
+        if (idxBytes == null)
+            throw new InvalidDataException("Failed to extract embedded index from fragment");
+        var idx = IndexManager.DeserializeIndex(idxBytes);
+        return await RestoreCoreAsync(idx, filePrefix, outputPath, allowFssRecovery, progress, cancellationToken).ConfigureAwait(false);
     }
 
     // ── Restore From Index Data (pre-loaded encrypted index) ──
@@ -292,7 +326,7 @@ public class RestoreOrchestrator : IDisposable
                 byte[] encrypted = await _storage.ReadFragmentAsync(fname, ct).ConfigureAwait(false);
 
                 bool hasHeader = FragmentFileHeader.HasHeader(encrypted);
-                int hdrOff = hasHeader ? 6 : 0;
+                int hdrOff = hasHeader ? FragmentFileHeader.GetTotalHeaderSize(encrypted) : 0;
                 byte[] raw = EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, hdrOff, _aesKey);
 
                 if (hasHeader && raw.Length >= 4)
@@ -433,7 +467,7 @@ public class RestoreOrchestrator : IDisposable
                     Frags.FragentFilename(filePrefix, i), ct).ConfigureAwait(false);
 
                 bool header = FragmentFileHeader.HasHeader(encrypted);
-                int headerOffset = header ? 6 : 0;
+                int headerOffset = header ? FragmentFileHeader.GetTotalHeaderSize(encrypted) : 0;
 
                 byte[] decrypted = EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, headerOffset, _aesKey);
 

@@ -215,8 +215,8 @@ public class FssEndToEndTests
             
             // Read index and check needsCtr
             var idxEnc = storage.ReadIndex(fingerprint);
-            byte[] testKey = EncryptionLayer.DeriveKey(rcCode);
-            var idxData = IndexManager.DecryptIndexWithKey(idxEnc, testKey);
+            (byte[] testKey, byte[] idxCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(idxEnc, rcCode);
+            var idxData = IndexManager.DeserializeIndex(idxCbor);
             _output.WriteLine($"  Index: strategy{idxData.FssStrategy}, frags{idxData.FragentCount}");
             if (idxData.FssParams?.TryGetValue("plan", out var pObj) == true)
             {

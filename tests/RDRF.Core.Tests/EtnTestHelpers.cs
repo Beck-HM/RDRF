@@ -56,10 +56,9 @@ public static class EtnTestHelpers
             fingerprint = engine.BackupFile(TestFile, strategy);
         }
 
-        byte[] aesKey = EncryptionLayer.DeriveKey(rcCodeClone);
-
         byte[] encryptedIndex = storage.ReadIndex(fingerprint);
-        var index = IndexManager.DecryptIndexWithKey(encryptedIndex, aesKey);
+        (byte[] aesKey, byte[] indexCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcCodeClone);
+        var index = IndexManager.DeserializeIndex(indexCbor);
 
         // Fragment encryption uses the same AES key as the index (no separate fragment key)
         string prefix = index.CustomName ?? fingerprint;
@@ -68,7 +67,7 @@ public static class EtnTestHelpers
         {
             string fragFilename = $"{prefix}_{i}.rdrf";
             byte[] fragFileBytes = storage.ReadFragment(fragFilename);
-            var (_, fragmentData) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragFileBytes, aesKey);
+            var (_, fragmentData, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragFileBytes, aesKey);
             fragments.Add(fragmentData);
         }
 
@@ -126,8 +125,9 @@ public static class EtnTestHelpers
 
     public static byte[] CorruptRcFileOnDisk(string storageDir, string fingerprint, byte[] rcCode)
     {
-        byte[] aesKey = EncryptionLayer.DeriveKey(rcCode);
         var storage = new LocalFileAdapter(storageDir);
+        byte[] encryptedIndex = storage.ReadIndex(fingerprint);
+        (byte[] aesKey, _) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcCode);
         byte[] encryptedRc = storage.ReadRc(fingerprint);
         byte[] rcBytes = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, aesKey);
         byte[] corrupted = CorruptRcContent(rcBytes);

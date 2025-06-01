@@ -95,7 +95,7 @@ public class DecryptService : IDisposable
                 "This backup was created with an older version of RDRF " +
                 "and requires the standalone index file.");
 
-        var (embeddedIndexBytes, _) = RDRFEngine.DecryptFragment(fragData, _aesKey);
+        var (embeddedIndexBytes, _, _) = RDRFEngine.DecryptFragment(fragData, _aesKey);
         if (embeddedIndexBytes == null)
             throw new InvalidDataException("Fragment does not contain an embedded index.");
 

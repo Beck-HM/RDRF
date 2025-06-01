@@ -74,15 +74,15 @@ public class EtnIntegrationTests
             }
 
             // Read private fragment key to re>encrypt after tamper
-            byte[] aesKey = EncryptionLayer.DeriveKey(rcCodeClone);
             byte[] encryptedIndex = storage.ReadIndex(fingerprint);
-            var index = IndexManager.DecryptIndexWithKey(encryptedIndex, aesKey);
+            (byte[] aesKey, byte[] idxCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcCodeClone);
+            var index = IndexManager.DeserializeIndex(idxCbor);
             string prefix = index.CustomName ?? fingerprint;
 
             // Tamper with fragment[1] at encrypted level (decrypt  -> corrupt data  -> re>encrypt)
             string fragFile = $"{prefix}_1.rdrf";
             byte[] encryptedFrag = storage.ReadFragment(fragFile);
-            var (embeddedIndex, fragmentData) = FragmentFileHeader.DecryptWithEmbeddedIndex(encryptedFrag, aesKey);
+            var (embeddedIndex, fragmentData, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(encryptedFrag, aesKey);
 
             // Corrupt the decrypted data's midpoint
             int mid = fragmentData.Length / 2;
@@ -128,11 +128,13 @@ public class EtnIntegrationTests
             }
 
             // Decrypt and tamper index
-            byte[] aesKey = EncryptionLayer.DeriveKey(rcCode);
             byte[] encryptedIndex = storage.ReadIndex(fingerprint);
-            var index = IndexManager.DecryptIndexWithKey(encryptedIndex, aesKey);
+            byte[] idxSalt = encryptedIndex.AsSpan(0, 32).ToArray();
+            (_, byte[] idxCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcCode);
+            var index = IndexManager.DeserializeIndex(idxCbor);
             index.OriginalName = index.OriginalName + "_TAMPERED";
-            byte[] tamperedIndex = IndexManager.EncryptIndexWithKey(index, aesKey);
+            byte[] tamperedCbor = IndexManager.SerializeIndex(index);
+            byte[] tamperedIndex = EncryptionLayer.EncryptIndexWithSaltPrefix(tamperedCbor, rcCode, idxSalt);
             storage.WriteIndex(fingerprint, tamperedIndex);
 
             // Restore  - should detect index corruption via ETN
