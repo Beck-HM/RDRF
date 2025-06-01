@@ -248,8 +248,8 @@ public class RegressionTests
 
             // Read the index directly
         byte[] encryptedIndex = storage.ReadIndex(fingerprint);
-            byte[] aesKey = EncryptionLayer.DeriveKey(rcCode);
-            var index = IndexManager.DecryptIndexWithKey(encryptedIndex, aesKey);
+            (byte[] aesKey, byte[] idxCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcCode);
+            var index = IndexManager.DeserializeIndex(idxCbor);
 
             // Salt should be present and non-empty
             Assert.False(string.IsNullOrEmpty(index.Salt),
@@ -358,8 +358,8 @@ public class RegressionTests
 
             // Read index
         byte[] encryptedIndex = storage.ReadIndex(fingerprint);
-            byte[] aesKey = EncryptionLayer.DeriveKey(rcCode);
-            var index = IndexManager.DecryptIndexWithKey(encryptedIndex, aesKey);
+            (byte[] aesKey, byte[] idxCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcCode);
+            var index = IndexManager.DeserializeIndex(idxCbor);
 
             // Build decrypted fragments (all use the same AES key as the index)
             var decryptedFragments = new Dictionary<int, byte[]>();

@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using RDRF.Core.Index;
 using RDRF.Core.Storage;
 
@@ -126,7 +127,7 @@ public class RDRFEngine : IDisposable
     public static RdrfIndex DecryptIndexWithKey(byte[] encryptedIndex, byte[] aesKey)
         => IndexManager.DecryptIndexWithKey(encryptedIndex, aesKey);
 
-    public static (byte[]? embeddedIndex, byte[] fragmentData) DecryptFragment(byte[] encryptedFrag, byte[] aesKey)
+    public static (byte[]? embeddedIndex, byte[] fragmentData, byte[]? salt) DecryptFragment(byte[] encryptedFrag, byte[] aesKey)
         => FragmentFileHeader.DecryptWithEmbeddedIndex(encryptedFrag, aesKey);
 
     public static RdrfIndex DeserializeIndex(byte[] indexBytes)
@@ -136,6 +137,8 @@ public class RDRFEngine : IDisposable
 
     public void Dispose()
     {
+        if (_rcCode != null && _rcCode.Length > 0)
+            CryptographicOperations.ZeroMemory(_rcCode);
         _backup.Dispose();
         _restore.Dispose();
         GC.SuppressFinalize(this);

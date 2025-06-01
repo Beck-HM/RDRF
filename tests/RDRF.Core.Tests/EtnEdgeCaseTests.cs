@@ -40,9 +40,9 @@ public class EtnEdgeCaseTests
             Assert.False(storage.RcExists(fingerprint));
 
             // Verify restore still succeeds  - full end>to>end
-            byte[] aesKey = EncryptionLayer.DeriveKey(rcCode);
             byte[] encryptedIndex = storage.ReadIndex(fingerprint);
-            var index = IndexManager.DecryptIndexWithKey(encryptedIndex, aesKey);
+            (byte[] aesKey, byte[] idxCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcCode);
+            var index = IndexManager.DeserializeIndex(idxCbor);
 
             string prefix = index.CustomName ?? fingerprint;
             var decrypted = new List<byte[]>();
@@ -50,7 +50,7 @@ public class EtnEdgeCaseTests
             {
                 string fname = $"{prefix}_{i}.rdrf";
                 byte[] fileBytes = storage.ReadFragment(fname);
-                var (_, data) = FragmentFileHeader.DecryptWithEmbeddedIndex(fileBytes, aesKey);
+                var (_, data, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fileBytes, aesKey);
                 // Strip ETN trailer from fragment data
                 var (cleanData, _, _, _, _) = Fss6Etn.ParseTrailer(data);
                 decrypted.Add(cleanData);

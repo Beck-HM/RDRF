@@ -23,6 +23,13 @@ public static class Constants
     public const string FragentFilePattern = "{0}_{1}.rdrf";
     public const string FragentFileSuffix = ".rdrf";
 
+    // Salt Prefix for Index Files
+    public const int SaltPrefixLength = 32;
+
+    // Key Derivation Version (stored in index CBOR)
+    public const int KdfLegacy = 0; // SHA256 only
+    public const int KdfPbkdf2 = 1; // PBKDF2 + per-backup salt
+
     // Hash Algorithm
     public const string HashAlgorithm = "SHA256";
 

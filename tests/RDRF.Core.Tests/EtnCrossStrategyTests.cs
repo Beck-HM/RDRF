@@ -142,9 +142,9 @@ public class EtnCrossStrategyTests
             _output.WriteLine($"  Backup (FSS3+FSS6): {fingerprint}");
 
             // Delete a fragment to simulate loss
-            var index = IndexManager.DecryptIndexWithKey(
-                storage.ReadIndex(fingerprint),
-                EncryptionLayer.DeriveKey(rcCodeClone));
+            (_, byte[] idxCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(
+                storage.ReadIndex(fingerprint), rcCodeClone);
+            var index = IndexManager.DeserializeIndex(idxCbor);
             string prefix = index.CustomName ?? fingerprint;
             string fragToDelete = $"{prefix}_0.rdrf";
             string fragPath = Path.Combine(storageDir, fragToDelete);
