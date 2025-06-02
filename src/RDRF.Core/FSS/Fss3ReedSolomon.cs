@@ -2,22 +2,15 @@ namespace RDRF.Core.FSS;
 
 public class Fss3ReedSolomon : IFssStrategy
 {
-    private readonly ReedSolomon _rs;
-
     public string Level => Constants.FssLevel3;
-
-    public Fss3ReedSolomon()
-    {
-        _rs = new ReedSolomon(3, 1); // 3 data + 1 parity
-    }
 
     public List<byte[]> Encode(List<byte[]> fragments)
     {
         int dataShards = fragments.Count;
-        int totalShards = dataShards + 1;
+        int parityShards = 1;
+        int totalShards = dataShards + parityShards;
         int shardSize = fragments[0].Length;
 
-        // Check all fragments are same size
         foreach (var f in fragments)
             if (f.Length != shardSize)
                 throw new ArgumentException("All fragments must be the same size for FSS3.");
@@ -28,16 +21,9 @@ public class Fss3ReedSolomon : IFssStrategy
             shards[i] = new byte[shardSize];
             Buffer.BlockCopy(fragments[i], 0, shards[i], 0, shardSize);
         }
-        shards[dataShards] = new byte[shardSize];
 
-        // Compute parity using XOR (simplifind RS parity)
-        for (int i = 0; i < shardSize; i++)
-        {
-            byte parity = 0;
-            for (int j = 0; j < dataShards; j++)
-                parity ^= shards[j][i];
-            shards[dataShards][i] = parity;
-        }
+        var rs = new ReedSolomon(dataShards, parityShards);
+        rs.Encode(shards);
 
         var result = new List<byte[]>();
         for (int i = 0; i < totalShards; i++)
@@ -48,13 +34,12 @@ public class Fss3ReedSolomon : IFssStrategy
     public Dictionary<int, byte[]> Decode(
         Dictionary<int, byte[]> available,
         List<int> missingIndices,
-        int totalFragents,
+        int totalFragments,
         List<int>? originalSizes = null)
     {
-        // Build shard array
         int shardSize = available.Values.First().Length;
-        byte[][] shards = new byte[totalFragents][];
-        for (int i = 0; i < totalFragents; i++)
+        byte[][] shards = new byte[totalFragments][];
+        for (int i = 0; i < totalFragments; i++)
         {
             if (available.TryGetValue(i, out var data))
                 shards[i] = data;
@@ -62,7 +47,9 @@ public class Fss3ReedSolomon : IFssStrategy
                 shards[i] = new byte[shardSize];
         }
 
-        _rs.Decode(shards, missingIndices);
+        int dataShards = totalFragments - 1;
+        var rs = new ReedSolomon(dataShards, 1);
+        rs.Decode(shards, missingIndices);
 
         var result = new Dictionary<int, byte[]>();
         foreach (int idx in missingIndices)
@@ -83,14 +70,14 @@ public class Fss3ReedSolomon : IFssStrategy
     }
 
     public List<byte[]> Strip(
-        Dictionary<int, byte[]> encodedFragents,
-        int originalFragentCount,
+        Dictionary<int, byte[]> encodedFragments,
+        int originalFragmentCount,
         List<int>? originalSizes = null)
     {
         var result = new List<byte[]>();
-        for (int i = 0; i < originalFragentCount; i++)
+        for (int i = 0; i < originalFragmentCount; i++)
         {
-            if (encodedFragents.TryGetValue(i, out var data))
+            if (encodedFragments.TryGetValue(i, out var data))
                 result.Add(data);
         }
         return result;

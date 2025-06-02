@@ -49,12 +49,15 @@ public class ReedSolomon
     }
 
     // ── Decode with erasures ──
+    //
+    // Uses GF(256) matrix inversion on the encoding matrix sub-matrix
+    // to reconstruct missing shards.  Supports any (dataShards, parityShards)
+    // configuration as long as fewer than parityShards shards are lost.
 
     public bool Decode(byte[][] shards, List<int> erasures)
     {
         int shardSize = shards[0].Length;
         int presentCount = _totalShards - erasures.Count;
-
         if (presentCount < _dataShards) return false;
 
         var presentIndices = new List<int>();
@@ -62,38 +65,111 @@ public class ReedSolomon
             if (!erasures.Contains(i)) presentIndices.Add(i);
 
         var decodeIndices = presentIndices.Take(_dataShards).ToList();
-        var lagrangeWeights = new Dictionary<int, byte[]>();
 
+        // Build encoding sub-matrix A for the chosen present shards.
+        // A[r][c] = coefficient for data[c] in shard decodeIndices[r].
+        byte[][] A = new byte[_dataShards][];
+        for (int r = 0; r < _dataShards; r++)
+        {
+            A[r] = new byte[_dataShards];
+            int rowIdx = decodeIndices[r];
+            for (int c = 0; c < _dataShards; c++)
+            {
+                if (rowIdx < _dataShards)
+                    A[r][c] = (byte)(rowIdx == c ? 1 : 0);
+                else
+                    A[r][c] = ExpTable[(rowIdx - _dataShards + 1) * c];
+            }
+        }
+
+        // Invert A over GF(256)
+        byte[][] invA = InvertMatrix(A);
+        if (invA == null) return false;
+
+        // Recover original data: data[c] = sum(invA[c][r] * shard[decodeIndices[r]])
+        byte[][] data = new byte[_dataShards][];
+        for (int c = 0; c < _dataShards; c++)
+        {
+            data[c] = new byte[shardSize];
+            for (int byteIdx = 0; byteIdx < shardSize; byteIdx++)
+            {
+                byte val = 0;
+                for (int r = 0; r < _dataShards; r++)
+                    val ^= GfMul(invA[c][r], shards[decodeIndices[r]][byteIdx]);
+                data[c][byteIdx] = val;
+            }
+        }
+
+        // Re-encode all erasures
         foreach (int missingIdx in erasures)
         {
-            byte x = (byte)missingIdx;
-            byte[] weights = new byte[_dataShards];
-            for (int i = 0; i < _dataShards; i++)
+            if (missingIdx < _dataShards)
             {
-                byte num = 1, den = 1;
-                for (int j = 0; j < _dataShards; j++)
-                {
-                    if (i == j) continue;
-                    num = GfMul(num, GfAdd(x, (byte)decodeIndices[j]));
-                    den = GfMul(den, GfAdd((byte)decodeIndices[i], (byte)decodeIndices[j]));
-                }
-                weights[i] = GfDiv(num, den);
+                shards[missingIdx] = data[missingIdx];
             }
-            lagrangeWeights[missingIdx] = weights;
+            else
+            {
+                int p = missingIdx - _dataShards + 1;
+                for (int byteIdx = 0; byteIdx < shardSize; byteIdx++)
+                {
+                    byte val = 0;
+                    for (int k = 0; k < _dataShards; k++)
+                        val ^= GfMul(ExpTable[p * k], data[k][byteIdx]);
+                    shards[missingIdx][byteIdx] = val;
+                }
+            }
         }
 
-        for (int byteIdx = 0; byteIdx < shardSize; byteIdx++)
+        return true;
+    }
+
+    // ── GF(256) matrix inversion via Gaussian elimination ──
+
+    private static byte[][]? InvertMatrix(byte[][] matrix)
+    {
+        int n = matrix.Length;
+        byte[][] aug = new byte[n][];
+        for (int i = 0; i < n; i++)
         {
-            foreach (int missingIdx in erasures)
+            aug[i] = new byte[2 * n];
+            for (int j = 0; j < n; j++)
+                aug[i][j] = matrix[i][j];
+            aug[i][n + i] = 1;
+        }
+
+        for (int col = 0; col < n; col++)
+        {
+            int pivot = -1;
+            for (int row = col; row < n; row++)
             {
-                byte[] weights = lagrangeWeights[missingIdx];
-                byte result = 0;
-                for (int i = 0; i < _dataShards; i++)
-                    result ^= GfMul(shards[decodeIndices[i]][byteIdx], weights[i]);
-                shards[missingIdx][byteIdx] = result;
+                if (aug[row][col] != 0) { pivot = row; break; }
+            }
+            if (pivot == -1) return null;
+
+            (aug[col], aug[pivot]) = (aug[pivot], aug[col]);
+
+            byte pivotVal = aug[col][col];
+            for (int j = col; j < 2 * n; j++)
+                aug[col][j] = GfDiv(aug[col][j], pivotVal);
+
+            for (int row = 0; row < n; row++)
+            {
+                if (row == col) continue;
+                byte factor = aug[row][col];
+                if (factor == 0) continue;
+                for (int j = col; j < 2 * n; j++)
+                    aug[row][j] ^= GfMul(factor, aug[col][j]);
             }
         }
-        return true;
+
+        byte[][] result = new byte[n][];
+        for (int i = 0; i < n; i++)
+        {
+            result[i] = new byte[n];
+            for (int j = 0; j < n; j++)
+                result[i][j] = aug[i][n + j];
+        }
+        return result;
     }
 
     // ── GF(2^8) operations ──
