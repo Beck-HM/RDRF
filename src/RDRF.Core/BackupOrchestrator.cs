@@ -61,6 +61,22 @@ public class BackupOrchestrator : IDisposable
         }
     }
 
+    public BackupOrchestrator(
+        byte[] key,
+        byte[] salt,
+        StorageAdapter storage,
+        FSSEngine? fssEngine = null)
+    {
+        _rcCode = key ?? throw new ArgumentNullException(nameof(key));
+        _salt = salt ?? throw new ArgumentNullException(nameof(salt));
+        _aesKey = EncryptionLayer.DeriveKey(key, _salt);
+        _storage = storage ?? throw new ArgumentNullException(nameof(storage));
+        _fss = fssEngine ?? new FSSEngine();
+        _fsa = new FsaEngine();
+        _metadata = MetadataManager.Default;
+        _preDerived = false;
+    }
+
     public string BackupFile(
         string filePath,
         string fssStrategy = "FSS1",
@@ -223,6 +239,10 @@ public class BackupOrchestrator : IDisposable
             rcBytes = etnRcJson;
         }
 
+        // Strip BM fields from the Index before embedding in fragment headers
+        // to save ~20KB/fragment. The standalone Index file retains full BM data.
+        byte[] embeddedIndexBytes = Fss6Etn.StripEtnFieldsFromIndexJson(serializedIndex);
+
         long totalBytes = fragments.Sum(f => f.Length);
         long processedBytes = 0;
 
@@ -231,7 +251,7 @@ public class BackupOrchestrator : IDisposable
             if ((i & 3) == 0) cancellationToken.ThrowIfCancellationRequested();
 
             byte[] fileData = FragmentFileHeader.EncryptWithEmbeddedIndex(
-                fragments[i], serializedIndex, _aesKey, _preDerived ? null : _salt);
+                fragments[i], embeddedIndexBytes, _aesKey, _preDerived ? null : _salt);
 
             string fname = Frags.FragentFilename(filePrefix, i);
             int rawLen = fragments[i].Length;
