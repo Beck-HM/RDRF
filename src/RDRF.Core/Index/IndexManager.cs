@@ -1,6 +1,7 @@
 using System.Formats.Cbor;
 using System.Text.Json;
 using RDRF.Core.Encryption;
+using RDRF.Core.Versioning;
 
 namespace RDRF.Core.Index;
 
@@ -73,6 +74,8 @@ public static class IndexManager
         WriteField(writer, "salt", index.Salt);
         WriteField(writer, "created_at", index.CreatedAt);
         WriteField(writer, "updated_at", index.UpdatedAt);
+        WriteField(writer, "version_number", index.VersionNumber);
+        WriteVersions(writer, index.Versions);
         WriteFragents(writer, index.Fragents);
 
         writer.WriteEndMap();
@@ -105,6 +108,8 @@ public static class IndexManager
                 case "salt":                        index.Salt = reader.ReadTextString(); break;
                 case "created_at":                  index.CreatedAt = reader.ReadInt64(); break;
                 case "updated_at":                  index.UpdatedAt = reader.ReadInt64(); break;
+                case "version_number":               index.VersionNumber = reader.ReadInt32(); break;
+                case "versions":                     index.Versions = ReadVersions(reader); break;
                 case "fragments":                   index.Fragents = ReadFragents(reader); break;
                 default:                            reader.SkipValue(); break;
             }
@@ -322,6 +327,63 @@ public static class IndexManager
         r.ReadEndArray();
         return list;
     }
+
+    private static void WriteVersions(CborWriter w, List<VersionRecord>? versions)
+    {
+        if (versions == null || versions.Count == 0) return;
+        w.WriteTextString("versions");
+        w.WriteStartArray(null);
+        foreach (var v in versions)
+        {
+            w.WriteStartMap(null);
+            w.WriteTextString("version");
+            w.WriteInt32(v.Version);
+            w.WriteTextString("user_message");
+            w.WriteTextString(v.UserMessage);
+            w.WriteTextString("system_diff");
+            w.WriteTextString(v.SystemDiff);
+            w.WriteTextString("created_at");
+            w.WriteInt64(v.CreatedAt);
+            w.WriteTextString("file_fingerprint");
+            w.WriteTextString(v.FileFingerprint);
+            w.WriteEndMap();
+        }
+        w.WriteEndArray();
+    }
+
+    private static List<VersionRecord> ReadVersions(CborReader r)
+    {
+        var list = new List<VersionRecord>();
+        r.ReadStartArray();
+        while (r.PeekState() != CborReaderState.EndArray)
+        {
+            var v = new VersionRecord();
+            r.ReadStartMap();
+            while (r.PeekState() != CborReaderState.EndMap)
+            {
+                switch (r.ReadTextString())
+                {
+                    case "version":          v.Version = r.ReadInt32(); break;
+                    case "user_message":     v.UserMessage = r.ReadTextString(); break;
+                    case "system_diff":      v.SystemDiff = r.ReadTextString(); break;
+                    case "created_at":       v.CreatedAt = r.ReadInt64(); break;
+                    case "file_fingerprint": v.FileFingerprint = r.ReadTextString(); break;
+                    default:                 r.SkipValue(); break;
+                }
+            }
+            r.ReadEndMap();
+            list.Add(v);
+        }
+        r.ReadEndArray();
+        return list;
+    }
+
+    private static void WriteField(CborWriter w, string key, int? value)
+    {
+        if (value == null) return;
+        w.WriteTextString(key);
+        w.WriteInt32(value.Value);
+    }
 }
 
 public class RdrfIndex
@@ -342,6 +404,8 @@ public class RdrfIndex
     public string? Salt { get; set; }
     public long CreatedAt { get; set; }
     public long? UpdatedAt { get; set; }
+    public int? VersionNumber { get; set; }
+    public List<Versioning.VersionRecord>? Versions { get; set; }
     public List<FragentInfo>? Fragents { get; set; }
 }
 
