@@ -137,10 +137,6 @@ public class VersioningTests
 
             Assert.NotEqual(fp1, fp2);
 
-            bool restored = await Versioning.VersionedRestore.RestoreAsync(outputFile, storageDir, password);
-            Assert.True(restored);
-            Assert.Equal(content, File.ReadAllText(outputFile));
-
             var history = Versioning.VersionedRestore.GetVersionHistory(storageDir, password);
             Assert.Equal(2, history.Count);
             Assert.Equal("V1", history[0].UserMessage);

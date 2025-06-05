@@ -57,6 +57,16 @@ public static class VersionedBackup
 
         byte[] oldData = ReadDecryptedOriginal(storage, prevFingerprint, password);
 
+        // Preserve old version history from the previous index
+        List<VersionRecord>? oldVersions = null;
+        if (storage.IndexExists(prevFingerprint))
+        {
+            byte[] oldEncIdx = storage.ReadIndex(prevFingerprint);
+            (_, byte[] oldCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(oldEncIdx, password);
+            var oldIdx = IndexManager.DeserializeIndex(oldCbor);
+            oldVersions = oldIdx.Versions;
+        }
+
         byte[] newData = await File.ReadAllBytesAsync(filePath, ct).ConfigureAwait(false);
 
         var (humanDiff, _, _) = DiffEngine.ComputeDiff(oldData, newData);
@@ -67,7 +77,7 @@ public static class VersionedBackup
             actualFingerprint = await orchestrator.BackupFileAsync(filePath, fssStrategy, progress: progress, cancellationToken: ct).ConfigureAwait(false);
         }
 
-        AppendVersionRecord(storage, actualFingerprint, password, chainSalt, prevVersion, userMessage, humanDiff);
+        AppendVersionRecord(storage, actualFingerprint, password, chainSalt, prevVersion, userMessage, humanDiff, oldVersions);
 
         CleanupOldFragments(storage, prevFingerprint);
 
@@ -113,16 +123,17 @@ public static class VersionedBackup
 
     private static void AppendVersionRecord(
         StorageAdapter storage, string fingerprint, byte[] password, byte[] salt,
-        int previousVersion, string userMessage, string systemDiff)
+        int previousVersion, string userMessage, string systemDiff,
+        List<VersionRecord>? inheritedVersions = null)
     {
         byte[] encryptedIndex = storage.ReadIndex(fingerprint);
         (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
         var index = IndexManager.DeserializeIndex(cbor);
 
         int newVersion = previousVersion + 1;
-        var existing = index.Versions ?? new List<VersionRecord>();
+        var existing = inheritedVersions ?? index.Versions ?? new List<VersionRecord>();
 
-        if (previousVersion > 0 && existing.Count > 0)
+        if (existing.Count > 0)
         {
             existing = existing.ToList();
         }
