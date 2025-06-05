@@ -73,7 +73,7 @@ public class Fss5CrossRecovery : IFssStrategy
 
                 // Try step1 backward neighbor
                 int src1Idx = (missingIdx - step1 + totalFragents) % totalFragents;
-                if (known.ContainsKey(src1Idx))
+                if (known.ContainsKey(src1Idx) && IsValidFss5Fragment(known[src1Idx], out _))
                 {
                     recovered = ExtractStep1Data(known[src1Idx]);
                 }
@@ -82,19 +82,9 @@ public class Fss5CrossRecovery : IFssStrategy
                 if (recovered == null)
                 {
                     int src2Idx = (missingIdx - step2 + totalFragents) % totalFragents;
-                    if (known.ContainsKey(src2Idx))
+                    if (known.ContainsKey(src2Idx) && IsValidFss5Fragment(known[src2Idx], out _))
                     {
                         recovered = ExtractStep2Data(known[src2Idx]);
-                    }
-                }
-
-                // Try own data from forward neighbor
-                if (recovered == null)
-                {
-                    int fwd1Idx = (missingIdx + step1) % totalFragents;
-                    if (known.ContainsKey(fwd1Idx))
-                    {
-                        recovered = ExtractOwnData(known[fwd1Idx]);
                     }
                 }
 
@@ -102,6 +92,7 @@ public class Fss5CrossRecovery : IFssStrategy
                 {
                     result[missingIdx] = recovered;
                     known[missingIdx] = recovered;
+                    TryReconstructEncoded(missingIdx, known, step1, step2, totalFragents);
                     madeProgress = true;
                 }
             }
@@ -143,6 +134,15 @@ public class Fss5CrossRecovery : IFssStrategy
         return ExtractOwnData(encodedFragment);
     }
 
+    private static bool IsValidFss5Fragment(byte[] data, out int ownSize)
+    {
+        ownSize = 0;
+        if (data.Length < 12) return false;
+        ownSize = BitConverter.ToInt32(data, 0);
+        if (ownSize <= 0 || ownSize > 1024 * 1024) return false;
+        return data.Length == 12 + 3 * ownSize;
+    }
+
     private static byte[] ExtractOwnData(byte[] encoded)
     {
         int ownSize = BitConverter.ToInt32(encoded, 0);
@@ -169,5 +169,43 @@ public class Fss5CrossRecovery : IFssStrategy
         byte[] n2 = new byte[n2Size];
         Buffer.BlockCopy(encoded, offset + 4, n2, 0, n2Size);
         return n2;
+    }
+
+    private static void TryReconstructEncoded(
+        int recoveredIdx, Dictionary<int, byte[]> known,
+        int step1, int step2, int n)
+    {
+        TryReconstructSingle(recoveredIdx, known, step1, step2, n);
+        TryReconstructSingle((recoveredIdx - step1 + n) % n, known, step1, step2, n);
+        TryReconstructSingle((recoveredIdx - step2 + n) % n, known, step1, step2, n);
+    }
+
+    private static void TryReconstructSingle(
+        int encodedIdx, Dictionary<int, byte[]> known,
+        int step1, int step2, int n)
+    {
+        if (known.TryGetValue(encodedIdx, out var existing) && IsValidFss5Fragment(existing, out _))
+            return;
+
+        int n1Idx = (encodedIdx + step1) % n;
+        int n2Idx = (encodedIdx + step2) % n;
+
+        if (!known.ContainsKey(encodedIdx) || !known.ContainsKey(n1Idx) || !known.ContainsKey(n2Idx))
+            return;
+
+        byte[] own = known[encodedIdx];
+        byte[] n1 = known[n1Idx];
+        byte[] n2 = known[n2Idx];
+
+        byte[] combined = new byte[4 + own.Length + 4 + n1.Length + 4 + n2.Length];
+        int offset = 0;
+        Buffer.BlockCopy(BitConverter.GetBytes(own.Length), 0, combined, offset, 4); offset += 4;
+        Buffer.BlockCopy(own, 0, combined, offset, own.Length); offset += own.Length;
+        Buffer.BlockCopy(BitConverter.GetBytes(n1.Length), 0, combined, offset, 4); offset += 4;
+        Buffer.BlockCopy(n1, 0, combined, offset, n1.Length); offset += n1.Length;
+        Buffer.BlockCopy(BitConverter.GetBytes(n2.Length), 0, combined, offset, 4); offset += 4;
+        Buffer.BlockCopy(n2, 0, combined, offset, n2.Length); offset += n2.Length;
+
+        known[encodedIdx] = combined;
     }
 }
