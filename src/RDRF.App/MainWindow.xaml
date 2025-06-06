@@ -266,6 +266,11 @@
                                 Content="Decrypt"
                                 Style="{StaticResource TabButtonStyle}"
                                 Click="TabDecrypt_Click"
+                                Margin="2,0,2,0" />
+                        <Button x:Name="TabHistory"
+                                Content="History"
+                                Style="{StaticResource TabButtonStyle}"
+                                Click="TabHistory_Click"
                                 Margin="2,0,0,0" />
                     </StackPanel>
                 </Border>
@@ -1130,6 +1135,246 @@
                                     HorizontalAlignment="Stretch"
                                     IsEnabled="{Binding IsStartEnabled}"
                                     Click="StartDecrypt_Click" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- ============== HISTORY PAGE ============== -->
+                <Grid x:Name="HistoryPage"
+                      Visibility="Collapsed">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <!-- Backup File Selection -->
+                            <Border Style="{StaticResource CardStyle}"
+                                    Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="Backup File"
+                                               FontSize="15"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               Margin="0,0,0,4" />
+                                    <TextBlock Text="Select .indrdrf (index) file to view version history"
+                                               FontSize="12"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Margin="0,0,0,12" />
+
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBox x:Name="HistoryIndexPath"
+                                                  Style="{StaticResource TextBoxStyle}"
+                                                  Text="{Binding IndexPathDisplay, FallbackValue='No file selected...'}"
+                                                  IsReadOnly="True" />
+
+                                        <Button Grid.Column="1"
+                                                Content="Browse"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Margin="8,0,0,0"
+                                                Click="HistoryBrowseBackup_Click" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Incremental Content -->
+                            <Border Style="{StaticResource CardStyle}"
+                                    Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="Incremental Content (optional)"
+                                               FontSize="15"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               Margin="0,0,0,4" />
+                                    <TextBlock Text="Select a new file to append as the next version"
+                                               FontSize="12"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Margin="0,0,0,12" />
+
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBox x:Name="HistoryIncrementalPath"
+                                                  Style="{StaticResource TextBoxStyle}"
+                                                  Text="{Binding IncrementalDisplay, FallbackValue=''}"
+                                                  IsReadOnly="True" />
+
+                                        <Button Grid.Column="1"
+                                                Content="Browse"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Margin="8,0,0,0"
+                                                Click="HistoryBrowseIncremental_Click" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Decryption Key -->
+                            <Border Style="{StaticResource CardStyle}"
+                                    Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="Decryption Key"
+                                               FontSize="15"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               Margin="0,0,0,12" />
+                                    <PasswordBox x:Name="HistoryKeyBox"
+                                                  Height="36"
+                                                  Background="{StaticResource BackgroundBrush}"
+                                                  Foreground="{StaticResource TextPrimaryBrush}"
+                                                  BorderBrush="{StaticResource BorderBrush}"
+                                                  BorderThickness="1"
+                                                  Padding="10,0"
+                                                  FontSize="13"
+                                                  VerticalContentAlignment="Center"
+                                                  PasswordChar="●"
+                                                  PasswordChanged="HistoryKeyBox_PasswordChanged" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Commit Message (shown when incremental selected) -->
+                            <Border x:Name="HistoryCommitCard"
+                                    Style="{StaticResource CardStyle}"
+                                    Margin="0,0,0,16"
+                                    Visibility="{Binding ShowIncrementalSection, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="Commit Message"
+                                               FontSize="15"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               Margin="0,0,0,12" />
+                                    <TextBox x:Name="HistoryCommitBox"
+                                              Style="{StaticResource TextBoxStyle}"
+                                              Text="{Binding CommitMessage, UpdateSourceTrigger=PropertyChanged}"
+                                              Height="36"
+                                              ToolTip="Describe what changed in this version" />
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Apply Button (shown when incremental selected) -->
+                            <Button x:Name="HistoryApplyButton"
+                                    Content="Apply Incremental Backup"
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    Height="48"
+                                    FontSize="16"
+                                    HorizontalAlignment="Stretch"
+                                    Margin="0,0,0,16"
+                                    Visibility="{Binding ShowIncrementalSection, Converter={StaticResource BoolToVis}}"
+                                    Click="HistoryApply_Click" />
+
+                            <!-- Version History List -->
+                            <Border x:Name="HistoryVersionCard"
+                                    Style="{StaticResource CardStyle}"
+                                    Margin="0,0,0,16"
+                                    Visibility="{Binding ShowVersionHistory, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal"
+                                                Margin="0,0,0,12">
+                                        <TextBlock Text="Version History"
+                                                   FontSize="15"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock x:Name="HistoryCountText"
+                                                    Text="{Binding StatusText}"
+                                                    FontSize="12"
+                                                    Foreground="{StaticResource TextSecondaryBrush}"
+                                                    Margin="12,0,0,0"
+                                                    VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <!-- Version List -->
+                                    <ListView x:Name="HistoryVersionList"
+                                              ItemsSource="{Binding Versions}"
+                                              SelectedItem="{Binding SelectedItem}"
+                                              Background="Transparent"
+                                              BorderThickness="0"
+                                              Margin="0,0,0,12"
+                                              MaxHeight="200"
+                                              ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                        <ListView.ItemContainerStyle>
+                                            <Style TargetType="ListViewItem">
+                                                <Setter Property="Background" Value="Transparent" />
+                                                <Setter Property="BorderThickness" Value="0" />
+                                                <Setter Property="Padding" Value="8,6" />
+                                                <Setter Property="Cursor" Value="Hand" />
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter Property="Background" Value="{StaticResource SurfaceHighlightBrush}" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="{StaticResource SurfaceHighlightBrush}" />
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ListView.ItemContainerStyle>
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="40" />
+                                                        <ColumnDefinition Width="130" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Ellipse Width="8"
+                                                             Height="8"
+                                                             Fill="{StaticResource AccentBrush}"
+                                                             VerticalAlignment="Center"
+                                                             Margin="0,0,8,0" />
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="{Binding Version, StringFormat='v#{0}'}"
+                                                               FontSize="13"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{StaticResource AccentBrush}"
+                                                               VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding Timestamp}"
+                                                               FontSize="12"
+                                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                                               VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding Message}"
+                                                               FontSize="13"
+                                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Diff Panel (placeholder) -->
+                            <Border x:Name="HistoryDiffCard"
+                                    Style="{StaticResource CardStyle}"
+                                    Margin="0,0,0,16"
+                                    Visibility="{Binding ShowDiffPanel, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="Diff Details"
+                                               FontSize="15"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               Margin="0,0,0,12" />
+
+                                    <Border Background="{StaticResource BackgroundBrush}"
+                                            CornerRadius="6"
+                                            Padding="12"
+                                            MaxHeight="300"
+                                            ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                        <ScrollViewer>
+                                            <TextBlock Text="{Binding DiffContent}"
+                                                       FontFamily="Consolas"
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       TextWrapping="NoWrap" />
+                                        </ScrollViewer>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>

@@ -16,6 +16,7 @@ public partial class MainWindow : Window
 {
     private readonly EncryptViewModel _encryptVM = new();
     private readonly DecryptViewModel _decryptVM = new();
+    private readonly HistoryViewModel _historyVM = new();
 
     private string _configDir = string.Empty;
     private string _configPath = string.Empty;
@@ -30,6 +31,7 @@ public partial class MainWindow : Window
 
         EncryptPage.DataContext = _encryptVM;
         DecryptPage.DataContext = _decryptVM;
+        HistoryPage.DataContext = _historyVM;
 
         InitializeStrategyCards();
         _encryptVM.ConfigDir = _configDir;
@@ -48,6 +50,13 @@ public partial class MainWindow : Window
         _decryptVM.RequestShowWarning += (title, msg) =>
             Dispatcher.Invoke(() => RdrfMessageBox.Show(msg, title, RdrfMessageBox.DialogIcon.Warning));
         _decryptVM.RequestSaveConfig += () => Dispatcher.Invoke(SaveConfig);
+
+        _historyVM.RequestShowError += (title, msg) =>
+            Dispatcher.Invoke(() => RdrfMessageBox.Show(msg, title, RdrfMessageBox.DialogIcon.Error));
+        _historyVM.RequestShowSuccess += (title, _) =>
+            Dispatcher.Invoke(() => RdrfMessageBox.Show(title, "RDRF", RdrfMessageBox.DialogIcon.Success));
+        _historyVM.RequestShowWarning += (title, msg) =>
+            Dispatcher.Invoke(() => RdrfMessageBox.Show(msg, title, RdrfMessageBox.DialogIcon.Warning));
 
         FragmentSizeMB.TextChanged += (_, _) => QueuePreviewUpdate();
         _encryptVM.PropertyChanged += (_, e) =>
@@ -96,6 +105,7 @@ public partial class MainWindow : Window
     {
         _decryptVM.StopFragmentWatcher();
         _decryptVM.Dispose();
+        _historyVM.ClearPassword();
         Close();
     }
 
@@ -121,8 +131,10 @@ public partial class MainWindow : Window
     {
         TabEncrypt.Style = (Style)FindResource("TabButtonActiveStyle");
         TabDecrypt.Style = (Style)FindResource("TabButtonStyle");
+        TabHistory.Style = (Style)FindResource("TabButtonStyle");
         EncryptPage.Visibility = Visibility.Visible;
         DecryptPage.Visibility = Visibility.Collapsed;
+        HistoryPage.Visibility = Visibility.Collapsed;
         _decryptVM.StopFragmentWatcher();
     }
 
@@ -130,8 +142,22 @@ public partial class MainWindow : Window
     {
         TabDecrypt.Style = (Style)FindResource("TabButtonActiveStyle");
         TabEncrypt.Style = (Style)FindResource("TabButtonStyle");
+        TabHistory.Style = (Style)FindResource("TabButtonStyle");
         DecryptPage.Visibility = Visibility.Visible;
         EncryptPage.Visibility = Visibility.Collapsed;
+        HistoryPage.Visibility = Visibility.Collapsed;
+        _decryptVM.StopFragmentWatcher();
+    }
+
+    private void TabHistory_Click(object sender, RoutedEventArgs e)
+    {
+        TabHistory.Style = (Style)FindResource("TabButtonActiveStyle");
+        TabEncrypt.Style = (Style)FindResource("TabButtonStyle");
+        TabDecrypt.Style = (Style)FindResource("TabButtonStyle");
+        HistoryPage.Visibility = Visibility.Visible;
+        EncryptPage.Visibility = Visibility.Collapsed;
+        DecryptPage.Visibility = Visibility.Collapsed;
+        _decryptVM.StopFragmentWatcher();
     }
 
     // ── Strategy Selection ──
@@ -308,6 +334,18 @@ public partial class MainWindow : Window
         _decryptVM.OutputPath = DecryptOutputPath.Text;
         _decryptVM.StartDecryptCommand.Execute(null);
     }
+
+    // ── History Page ──
+
+    private void HistoryBrowseBackup_Click(object sender, RoutedEventArgs e) => _historyVM.BrowseBackupCommand.Execute(null);
+
+    private void HistoryBrowseIncremental_Click(object sender, RoutedEventArgs e) => _historyVM.BrowseIncrementalCommand.Execute(null);
+
+    private void HistoryKeyBox_PasswordChanged(object sender, RoutedEventArgs e)
+        => _historyVM.SetPassword(HistoryKeyBox.Password);
+
+    private void HistoryApply_Click(object sender, RoutedEventArgs e)
+        => _historyVM.ApplyIncrementalCommand.Execute(null);
 
     // ── Config ──
 
