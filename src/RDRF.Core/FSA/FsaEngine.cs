@@ -158,7 +158,7 @@ public class FsaEngine
             { Constants.FssLevel2R, 0.57 },
             { Constants.FssLevel3, 0.86 },
             { Constants.FssLevel5, 2.00 },
-            { Constants.FssLevel5P, 29.0 },
+            { Constants.FssLevel5P, 40.0 },
             { Constants.FssLevel6, 0.00008 },
         };
         var familiesSeen = new HashSet<string>();

@@ -41,7 +41,7 @@ public class ReedSolomon
             {
                 byte val = 0;
                 for (int k = 0; k < _dataShards; k++)
-                    val ^= GfMul(ExpTable[(i - _dataShards + 1) * k], shards[k][j]);
+                    val ^= GfMul(ExpTable[((i - _dataShards + 1) * k) % 255], shards[k][j]);
                 shards[i][j] = val;
             }
         }
@@ -78,7 +78,7 @@ public class ReedSolomon
                 if (rowIdx < _dataShards)
                     A[r][c] = (byte)(rowIdx == c ? 1 : 0);
                 else
-                    A[r][c] = ExpTable[(rowIdx - _dataShards + 1) * c];
+                    A[r][c] = ExpTable[((rowIdx - _dataShards + 1) * c) % 255];
             }
         }
 
@@ -114,7 +114,7 @@ public class ReedSolomon
                 {
                     byte val = 0;
                     for (int k = 0; k < _dataShards; k++)
-                        val ^= GfMul(ExpTable[p * k], data[k][byteIdx]);
+                        val ^= GfMul(ExpTable[(p * k) % 255], data[k][byteIdx]);
                     shards[missingIdx][byteIdx] = val;
                 }
             }

@@ -229,7 +229,7 @@ public class RestoreOrchestrator : IDisposable
         bool hasFss6 = index.Fss6FragentBlockMaps != null || index.Fss6RcBlockMap != null;
 
         // Try streaming restore when all fragments are on disk (no recovery needed)
-        if (await TryStreamingRestoreCoreAsync(index, filePrefix, outputPath, hasFss6,
+        if (await TryStreamingRestoreCoreAsync(index, filePrefix, outputPath,
                 progress, ct).ConfigureAwait(false))
         {
             Debug.WriteLine("  Restore complete!");
@@ -241,13 +241,20 @@ public class RestoreOrchestrator : IDisposable
         var decryptedFragments = await DownloadAndDecryptFragmentsAsync(
             filePrefix, fragmentCount, fileFingerprint, progress, ct).ConfigureAwait(false);
 
-        // ETN cross-validation + strip
+        // ETN cross-validation (only if BM data available in the Index)
+        // Must run BEFORE stripping trailers, as cross-validation needs them
         var etnActual = false;
         if (hasFss6)
         {
             ct.ThrowIfCancellationRequested();
-            etnActual = await RunEtnCrossValidateAndStrip(index, decryptedFragments, fileFingerprint, ct).ConfigureAwait(false);
+            etnActual = await RunEtnCrossValidateAsync(index, decryptedFragments,
+                fileFingerprint, ct).ConfigureAwait(false);
         }
+
+        // Always strip ETN trailers (safe on non-ETN data)
+        var etn = (Fss6Etn)_fss.GetStrategy(Constants.FssLevel6);
+        foreach (int idx in decryptedFragments.Keys.ToList())
+            decryptedFragments[idx] = etn.Strip(decryptedFragments[idx]);
 
         // Recovery
         if (allowFssRecovery)
@@ -362,9 +369,9 @@ public class RestoreOrchestrator : IDisposable
         return decryptedFragments;
     }
 
-    // ── ETN Cross-Validate + Strip ──
+    // ── ETN Cross-Validate ──
 
-    private async Task<bool> RunEtnCrossValidateAndStrip(
+    private async Task<bool> RunEtnCrossValidateAsync(
         RdrfIndex index, Dictionary<int, byte[]> decryptedFragments,
         string fileFingerprint, CancellationToken ct)
     {
@@ -402,10 +409,6 @@ public class RestoreOrchestrator : IDisposable
             Debug.WriteLine($"RC file read/validation failed: {ex.Message}");
         }
 
-        var etn = (Fss6Etn)_fss.GetStrategy(Constants.FssLevel6);
-        foreach (int idx in decryptedFragments.Keys.ToList())
-            decryptedFragments[idx] = etn.Strip(decryptedFragments[idx]);
-
         return validationActual;
     }
 
@@ -441,7 +444,6 @@ public class RestoreOrchestrator : IDisposable
 
     private async Task<bool> TryStreamingRestoreCoreAsync(
         RdrfIndex index, string filePrefix, string outputPath,
-        bool hasFss6,
         IProgress<RdrfProgressReport>? progress, CancellationToken ct)
     {
         int fragmentCount = index.FragentCount;
@@ -452,7 +454,7 @@ public class RestoreOrchestrator : IDisposable
                 return false;
 
         var strategy = _fss.GetStrategy(index.FssStrategy);
-        var etn = hasFss6 ? (Fss6Etn)_fss.GetStrategy(Constants.FssLevel6) : null;
+        var etn = (Fss6Etn)_fss.GetStrategy(Constants.FssLevel6);
 
         try
         {

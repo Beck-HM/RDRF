@@ -28,7 +28,7 @@ public class FragmentStatusInfo
 public class DecryptService : IDisposable
 {
     private readonly byte[] _rcCode;
-    private readonly byte[] _aesKey;
+    private byte[] _aesKey;
     private string? _storagePath;
     private byte[]? _encryptedIndex;
     private bool _disposed;
@@ -42,12 +42,7 @@ public class DecryptService : IDisposable
     {
         if (password == null || password.Length == 0)
             throw new ArgumentException("Password is required", nameof(password));
-        _rcCode = Rfc2898DeriveBytes.Pbkdf2(
-            password,
-            EncryptionLayer.PasswordSalt,
-            600_000,
-            HashAlgorithmName.SHA256,
-            32);
+        _rcCode = (byte[])password.Clone();
         _aesKey = EncryptionLayer.DeriveKey(_rcCode);
     }
 
@@ -59,7 +54,8 @@ public class DecryptService : IDisposable
         IsFragmentMode = false;
         _encryptedIndex = File.ReadAllBytes(indexPath);
 
-        var index = RDRFEngine.DecryptIndexWithKey(_encryptedIndex, _aesKey);
+        (_aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(_encryptedIndex, _rcCode);
+        var index = IndexManager.DeserializeIndex(cbor);
         LoadResult = ToResult(index);
         return LoadResult;
     }
@@ -95,13 +91,30 @@ public class DecryptService : IDisposable
                 "This backup was created with an older version of RDRF " +
                 "and requires the standalone index file.");
 
-        var (embeddedIndexBytes, _, _) = RDRFEngine.DecryptFragment(fragData, _aesKey);
-        if (embeddedIndexBytes == null)
-            throw new InvalidDataException("Fragment does not contain an embedded index.");
-
-        var index = RDRFEngine.DeserializeIndex(embeddedIndexBytes);
-        LoadResult = ToResult(index);
-        return LoadResult;
+        // Try v2 header with embedded salt first, fall back to SHA256
+        byte[] fragAesKey = _aesKey;
+        byte[]? fragSalt = null;
+        try
+        {
+            var firstTry = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, fragAesKey);
+            fragSalt = firstTry.salt;
+            if (fragSalt != null && fragSalt.Length > 0)
+            {
+                fragAesKey = EncryptionLayer.DeriveKey(_rcCode, fragSalt);
+                var secondTry = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, fragAesKey);
+                _aesKey = fragAesKey;
+                var index = IndexManager.DeserializeIndex(secondTry.embeddedIndex!);
+                LoadResult = ToResult(index);
+                return LoadResult;
+            }
+            var index2 = IndexManager.DeserializeIndex(firstTry.embeddedIndex!);
+            LoadResult = ToResult(index2);
+            return LoadResult;
+        }
+        catch (CryptographicException)
+        {
+            throw new CryptographicException("Decryption failed. Check your key or the backup may be corrupted.");
+        }
     }
 
     public List<FragmentStatusInfo> ScanFragments()

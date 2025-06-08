@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using RDRF.Core.Index;
 
 namespace RDRF.Core.FSS;
@@ -139,6 +140,8 @@ public class Fss1Neighbor : IFssStrategy
         if (originalSizes != null && index < originalSizes.Count && originalSizes[index] > 0)
         {
             int size = originalSizes[index];
+            if (size > encodedFragment.Length)
+                throw new InvalidOperationException($"FSS1.StripSingle[{index}]: originalSize={size} > fragLen={encodedFragment.Length}");
             byte[] stripped = new byte[size];
             Buffer.BlockCopy(encodedFragment, 0, stripped, 0, size);
             return stripped;
