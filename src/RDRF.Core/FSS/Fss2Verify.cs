@@ -29,7 +29,30 @@ public class Fss2Verify : IFssStrategy
         int totalFragents,
         List<int>? originalSizes = null)
     {
-        return _fss1.Decode(available, missingIndices, totalFragents, originalSizes);
+        // Strip FSS2 SHA256 hash from available fragments before FSS1 decode
+        var fss1Available = new Dictionary<int, byte[]>();
+        foreach (var kvp in available)
+        {
+            if (kvp.Value.Length < 32) continue;
+            byte[] stripped = new byte[kvp.Value.Length - 32];
+            Buffer.BlockCopy(kvp.Value, 0, stripped, 0, stripped.Length);
+            fss1Available[kvp.Key] = stripped;
+        }
+
+        var recovered = _fss1.Decode(fss1Available, missingIndices, totalFragents, originalSizes);
+
+        // Re-append FSS2 SHA256 hash to recovered fragments
+        var result = new Dictionary<int, byte[]>();
+        foreach (var kvp in recovered)
+        {
+            byte[] hash = System.Security.Cryptography.SHA256.HashData(kvp.Value);
+            byte[] fss2Frag = new byte[kvp.Value.Length + hash.Length];
+            Buffer.BlockCopy(kvp.Value, 0, fss2Frag, 0, kvp.Value.Length);
+            Buffer.BlockCopy(hash, 0, fss2Frag, kvp.Value.Length, hash.Length);
+            result[kvp.Key] = fss2Frag;
+        }
+
+        return result;
     }
 
     public List<byte[]> Strip(
