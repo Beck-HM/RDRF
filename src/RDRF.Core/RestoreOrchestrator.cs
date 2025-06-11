@@ -181,7 +181,8 @@ public class RestoreOrchestrator : IDisposable
         bool allowFssRecovery = true,
         IProgress<RdrfProgressReport>? progress = null)
     {
-        var index = IndexManager.DecryptIndexWithKey(encryptedIndex, _aesKey);
+        (_aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, _rcCode);
+        var index = IndexManager.DeserializeIndex(cbor);
         return RestoreCore(index, filePrefix, outputPath, allowFssRecovery, progress);
     }
 
