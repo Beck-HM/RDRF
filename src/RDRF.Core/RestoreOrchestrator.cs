@@ -39,12 +39,12 @@ public class RestoreOrchestrator : IDisposable
 
         if (preDerived)
         {
-            _rcCode = recoveryCode ?? [];
-            _aesKey = key ?? throw new ArgumentNullException(nameof(key));
+            _rcCode = recoveryCode?.Clone() as byte[] ?? [];
+            _aesKey = key?.Clone() as byte[] ?? throw new ArgumentNullException(nameof(key));
         }
         else
         {
-            _rcCode = key ?? throw new ArgumentNullException(nameof(key));
+            _rcCode = key?.Clone() as byte[] ?? throw new ArgumentNullException(nameof(key));
             _aesKey = EncryptionLayer.DeriveKey(key);
         }
     }

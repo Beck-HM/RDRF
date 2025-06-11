@@ -49,13 +49,13 @@ public class BackupOrchestrator : IDisposable
 
         if (preDerived)
         {
-            _rcCode = recoveryCode ?? [];
+            _rcCode = recoveryCode?.Clone() as byte[] ?? [];
             _salt = _rcCode.Length > 0 ? RandomNumberGenerator.GetBytes(32) : [];
-            _aesKey = key ?? throw new ArgumentNullException(nameof(key));
+            _aesKey = key?.Clone() as byte[] ?? throw new ArgumentNullException(nameof(key));
         }
         else
         {
-            _rcCode = key ?? throw new ArgumentNullException(nameof(key));
+            _rcCode = key?.Clone() as byte[] ?? throw new ArgumentNullException(nameof(key));
             _salt = RandomNumberGenerator.GetBytes(32);
             _aesKey = EncryptionLayer.DeriveKey(key, _salt);
         }
@@ -67,7 +67,7 @@ public class BackupOrchestrator : IDisposable
         StorageAdapter storage,
         FSSEngine? fssEngine = null)
     {
-        _rcCode = key ?? throw new ArgumentNullException(nameof(key));
+        _rcCode = key?.Clone() as byte[] ?? throw new ArgumentNullException(nameof(key));
         _salt = salt ?? throw new ArgumentNullException(nameof(salt));
         _aesKey = EncryptionLayer.DeriveKey(key, _salt);
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));

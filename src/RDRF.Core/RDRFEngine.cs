@@ -15,20 +15,20 @@ public class RDRFEngine : IDisposable
     {
         if (key == null || key.Length == 0)
             throw new ArgumentException("Key cannot be null or empty", nameof(key));
-        _rcCode = key;
+        _rcCode = (byte[])key.Clone();
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
-        _backup = new BackupOrchestrator(key, storage, fssEngine);
-        _restore = new RestoreOrchestrator(key, storage, fssEngine);
+        _backup = new BackupOrchestrator((byte[])key.Clone(), storage, fssEngine);
+        _restore = new RestoreOrchestrator((byte[])key.Clone(), storage, fssEngine);
     }
 
     public RDRFEngine(byte[] key, StorageAdapter storage, bool preDerived, byte[]? recoveryCode, FSS.FSSEngine? fssEngine = null)
     {
         if ((key == null || key.Length == 0) && (recoveryCode == null || recoveryCode.Length == 0))
             throw new ArgumentException("Key cannot be null or empty", nameof(key));
-        _rcCode = recoveryCode ?? key ?? throw new ArgumentNullException(nameof(key));
+        _rcCode = (recoveryCode ?? key)?.Clone() as byte[] ?? throw new ArgumentNullException(nameof(key));
         _storage = storage;
-        _backup = new BackupOrchestrator(key, storage, fssEngine, preDerived, recoveryCode);
-        _restore = new RestoreOrchestrator(key, storage, fssEngine, preDerived, recoveryCode);
+        _backup = new BackupOrchestrator(key?.Clone() as byte[] ?? key, storage, fssEngine, preDerived, recoveryCode?.Clone() as byte[]);
+        _restore = new RestoreOrchestrator(key?.Clone() as byte[] ?? key, storage, fssEngine, preDerived, recoveryCode?.Clone() as byte[]);
     }
 
     // ── Backup ──
