@@ -173,7 +173,7 @@ public class BackupOrchestrator : IDisposable
 
         Debug.WriteLine($"  Step 1: Split into {originalFragentCount} fragments");
 
-        var plan = _fsa.Compute(fssStrategy, auxiliaryStrategies ?? new List<string>());
+        var plan = _fsa.Compute(fssStrategy, auxiliaryStrategies);
         var fragments = new List<byte[]>(originalFragments);
 
         foreach (var step in plan.EncodeSteps)

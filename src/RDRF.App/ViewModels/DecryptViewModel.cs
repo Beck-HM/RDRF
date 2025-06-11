@@ -43,7 +43,7 @@ public class DecryptViewModel : ViewModelBase, IDisposable
     private string _speedText = "Speed: 0 MB/s";
     private string _etaText = "ETA: --:--";
 
-    public event Action<string, string>? RequestShowError;
+    public event Action<string, string, string?>? RequestShowError;
     public event Action<string, string?>? RequestShowSuccess;
     public event Action<string, string?>? RequestShowWarning;
     public event Action? RequestSaveConfig;
@@ -425,14 +425,14 @@ public class DecryptViewModel : ViewModelBase, IDisposable
     {
         if (string.IsNullOrEmpty(_decryptIndexPath) || _decryptService == null || _pendingPassword == null || _pendingPassword.Length == 0)
         {
-            RequestShowError?.Invoke("Validation", "Please select and load a backup file.");
+            RequestShowError?.Invoke("Validation", "Please select and load a backup file.", null);
             return;
         }
 
         if (_decryptService.LoadResult == null)
         {
             RequestShowError?.Invoke("Validation",
-                "Backup not loaded. Please reselect the file and enter the key.");
+                "Backup not loaded. Please reselect the file and enter the key.", null);
             return;
         }
 
@@ -476,7 +476,7 @@ public class DecryptViewModel : ViewModelBase, IDisposable
             {
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    RequestShowError?.Invoke("Decryption failed", ex.Message);
+                    RequestShowError?.Invoke("Decryption failed", ex.Message, ex.ToString());
                 });
             }
             finally

@@ -33,7 +33,7 @@ public class EncryptViewModel : ViewModelBase
 
     private string _configDir = "";
 
-    public event Action<string, string>? RequestShowError;
+    public event Action<string, string, string?>? RequestShowError;
     public event Action<string, string?>? RequestShowSuccess;
     public event Action? RequestSaveConfig;
 
@@ -216,7 +216,7 @@ public class EncryptViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            RequestShowError?.Invoke("Failed to process dropped files", ex.Message);
+            RequestShowError?.Invoke("Failed to process dropped files", ex.Message, ex.ToString());
         }
     }
 
@@ -288,19 +288,19 @@ public class EncryptViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(EncryptFilePath))
         {
-            RequestShowError?.Invoke("Validation", "Please select a file to encrypt.");
+            RequestShowError?.Invoke("Validation", "Please select a file to encrypt.", null);
             return;
         }
 
         if (_pendingPassword == null || _pendingPassword.Length == 0)
         {
-            RequestShowError?.Invoke("Validation", "Please enter an encryption key.");
+            RequestShowError?.Invoke("Validation", "Please enter an encryption key.", null);
             return;
         }
 
         if (FragmentSizeMB < 1)
         {
-            RequestShowError?.Invoke("Validation", "Please enter a valid fragment size (minimum 1 MB).");
+            RequestShowError?.Invoke("Validation", "Please enter a valid fragment size (minimum 1 MB).", null);
             return;
         }
 
@@ -313,7 +313,7 @@ public class EncryptViewModel : ViewModelBase
                 if (!char.IsLetterOrDigit(c) && c != '_' && c != '-')
                 {
                     RequestShowError?.Invoke("Validation",
-                        "Custom name can only contain letters, numbers, underscores and hyphens.");
+                        "Custom name can only contain letters, numbers, underscores and hyphens.", null);
                     return;
                 }
             }
@@ -374,7 +374,7 @@ public class EncryptViewModel : ViewModelBase
             {
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
-                    RequestShowError?.Invoke("Encryption failed", ex.Message);
+                    RequestShowError?.Invoke("Encryption failed", ex.Message, ex.ToString());
                 });
             }
             finally
@@ -444,3 +444,4 @@ public class EncryptViewModel : ViewModelBase
         }
     }
 }
+
