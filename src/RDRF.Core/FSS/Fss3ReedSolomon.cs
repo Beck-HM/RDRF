@@ -9,17 +9,13 @@ public class Fss3ReedSolomon : IFssStrategy
         int dataShards = fragments.Count;
         int parityShards = 1;
         int totalShards = dataShards + parityShards;
-        int shardSize = fragments[0].Length;
-
-        foreach (var f in fragments)
-            if (f.Length != shardSize)
-                throw new ArgumentException("All fragments must be the same size for FSS3.");
+        int maxSize = fragments.Max(f => f.Length);
 
         byte[][] shards = new byte[totalShards][];
         for (int i = 0; i < dataShards; i++)
         {
-            shards[i] = new byte[shardSize];
-            Buffer.BlockCopy(fragments[i], 0, shards[i], 0, shardSize);
+            shards[i] = new byte[maxSize];
+            Buffer.BlockCopy(fragments[i], 0, shards[i], 0, fragments[i].Length);
         }
 
         var rs = new ReedSolomon(dataShards, parityShards);
@@ -78,11 +74,20 @@ public class Fss3ReedSolomon : IFssStrategy
         for (int i = 0; i < originalFragmentCount; i++)
         {
             if (encodedFragments.TryGetValue(i, out var data))
-                result.Add(data);
+                result.Add(StripSingle(data, i, originalSizes));
         }
         return result;
     }
 
     public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)
-        => encodedFragment;
+    {
+        if (originalSizes != null && index < originalSizes.Count && originalSizes[index] > 0
+            && originalSizes[index] < encodedFragment.Length)
+        {
+            byte[] trimmed = new byte[originalSizes[index]];
+            Buffer.BlockCopy(encodedFragment, 0, trimmed, 0, trimmed.Length);
+            return trimmed;
+        }
+        return encodedFragment;
+    }
 }
