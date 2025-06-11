@@ -12,12 +12,7 @@ public class EncryptService : IDisposable
 
     public EncryptService(byte[] password)
     {
-        _rcCode = Rfc2898DeriveBytes.Pbkdf2(
-            password,
-            EncryptionLayer.PasswordSalt,
-            600_000,
-            HashAlgorithmName.SHA256,
-            32);
+        _rcCode = (byte[])password.Clone();
     }
 
     public string BackupFile(
