@@ -29,23 +29,28 @@ public class FsaEngine
     public FsaPlan Compute(string primary, List<string>? auxiliary = null)
     {
         var plan = new FsaPlan();
-        auxiliary ??= new List<string>();
 
         var allStrategies = new List<string> { primary };
-        allStrategies.AddRange(auxiliary);
-        if (!allStrategies.Contains(Constants.FssLevel6))
-            allStrategies.Add(Constants.FssLevel6);
+        if (auxiliary != null)
+        {
+            allStrategies.AddRange(auxiliary);
+            if (!allStrategies.Contains(Constants.FssLevel6))
+                allStrategies.Add(Constants.FssLevel6);
+        }
 
         string primaryFamily = FamilyMap.GetValueOrDefault(primary, FamilyEtn);
 
-        foreach (string s in auxiliary)
+        if (auxiliary != null)
         {
-            string? sFamily = FamilyMap.GetValueOrDefault(s);
-            if (sFamily != null && sFamily != primaryFamily && s != Constants.FssLevel6)
+            foreach (string s in auxiliary)
             {
-                throw new ArgumentException(
-                    $"Cross-family fusion only supports FSS6 as auxiliary. " +
-                    $"'{s}' ({sFamily}) cannot combine with '{primary}' ({primaryFamily}).");
+                string? sFamily = FamilyMap.GetValueOrDefault(s);
+                if (sFamily != null && sFamily != primaryFamily && s != Constants.FssLevel6)
+                {
+                    throw new ArgumentException(
+                        $"Cross-family fusion only supports FSS6 as auxiliary. " +
+                        $"'{s}' ({sFamily}) cannot combine with '{primary}' ({primaryFamily}).");
+                }
             }
         }
 

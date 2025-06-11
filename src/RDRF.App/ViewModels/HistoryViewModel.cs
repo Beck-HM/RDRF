@@ -38,7 +38,7 @@ public class HistoryViewModel : ViewModelBase
     private string _diffContent = "";
     private VersionHistoryItem? _selectedItem;
 
-    public event Action<string, string>? RequestShowError;
+    public event Action<string, string, string?>? RequestShowError;
     public event Action<string, string?>? RequestShowSuccess;
     public event Action<string, string?>? RequestShowWarning;
 
@@ -228,7 +228,7 @@ public class HistoryViewModel : ViewModelBase
                 {
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        RequestShowError?.Invoke("Incremental backup failed", ex.Message);
+                        RequestShowError?.Invoke("Incremental backup failed", ex.Message, ex.ToString());
                     });
                 }
                 finally
@@ -239,7 +239,7 @@ public class HistoryViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            RequestShowError?.Invoke("Error", ex.Message);
+            RequestShowError?.Invoke("Error", ex.Message, ex.ToString());
             IsLoading = false;
         }
     }

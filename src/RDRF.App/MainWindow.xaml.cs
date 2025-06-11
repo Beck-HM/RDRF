@@ -37,22 +37,22 @@ public partial class MainWindow : Window
         _encryptVM.ConfigDir = _configDir;
         LoadConfig();
 
-        _encryptVM.RequestShowError += (title, msg) =>
-            Dispatcher.Invoke(() => RdrfMessageBox.Show(msg, title, RdrfMessageBox.DialogIcon.Error));
+        _encryptVM.RequestShowError += (title, msg, info) =>
+            Dispatcher.Invoke(() => RdrfMessageBox.Show(msg, title, RdrfMessageBox.DialogIcon.Error, info));
         _encryptVM.RequestShowSuccess += (title, fingerprint) =>
             Dispatcher.Invoke(() => RdrfMessageBox.Show(title, "RDRF", RdrfMessageBox.DialogIcon.Success, fingerprint));
         _encryptVM.RequestSaveConfig += () => Dispatcher.Invoke(SaveConfig);
 
-        _decryptVM.RequestShowError += (title, msg) =>
-            Dispatcher.Invoke(() => RdrfMessageBox.Show(msg, title, RdrfMessageBox.DialogIcon.Error));
+        _decryptVM.RequestShowError += (title, msg, info) =>
+            Dispatcher.Invoke(() => RdrfMessageBox.Show(msg, title, RdrfMessageBox.DialogIcon.Error, info));
         _decryptVM.RequestShowSuccess += (title, _) =>
             Dispatcher.Invoke(() => RdrfMessageBox.Show(title, "RDRF", RdrfMessageBox.DialogIcon.Success));
         _decryptVM.RequestShowWarning += (title, msg) =>
             Dispatcher.Invoke(() => RdrfMessageBox.Show(msg, title, RdrfMessageBox.DialogIcon.Warning));
         _decryptVM.RequestSaveConfig += () => Dispatcher.Invoke(SaveConfig);
 
-        _historyVM.RequestShowError += (title, msg) =>
-            Dispatcher.Invoke(() => RdrfMessageBox.Show(msg, title, RdrfMessageBox.DialogIcon.Error));
+        _historyVM.RequestShowError += (title, msg, info) =>
+            Dispatcher.Invoke(() => RdrfMessageBox.Show(msg, title, RdrfMessageBox.DialogIcon.Error, info));
         _historyVM.RequestShowSuccess += (title, _) =>
             Dispatcher.Invoke(() => RdrfMessageBox.Show(title, "RDRF", RdrfMessageBox.DialogIcon.Success));
         _historyVM.RequestShowWarning += (title, msg) =>
