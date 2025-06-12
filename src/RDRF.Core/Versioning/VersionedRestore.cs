@@ -6,47 +6,36 @@ namespace RDRF.Core.Versioning;
 
 public static class VersionedRestore
 {
-    public static Task<bool> RestoreAsync(
+    public static bool Restore(
         string outputPath,
-        string storageDir,
+        string indexFilePath,
         byte[] password,
         bool allowFssRecovery = true,
-        IProgress<RdrfProgressReport>? progress = null,
-        CancellationToken ct = default)
+        IProgress<RdrfProgressReport>? progress = null)
     {
-        string rollDir = Path.Combine(storageDir, ".rdr_version");
-        if (!VersionChain.Exists(rollDir))
-            throw new InvalidOperationException($"No version chain found at: {storageDir}");
-
-        var chain = VersionChain.Load(rollDir);
-        string fingerprint = chain.ReadHeadFingerprint();
-        if (string.IsNullOrEmpty(fingerprint))
-            throw new InvalidOperationException("Version chain has no fingerprint recorded.");
-
+        string storageDir = Path.GetDirectoryName(indexFilePath) ?? ".";
         var storage = new LocalFileAdapter(storageDir);
+        string fingerprint = Path.GetFileNameWithoutExtension(indexFilePath);
+
         using var restore = new RestoreOrchestrator(password, storage);
-        bool result = restore.RestoreFile(fingerprint, outputPath, allowFssRecovery, progress: progress);
-        return Task.FromResult(result);
+        return restore.RestoreFile(fingerprint, outputPath, allowFssRecovery, progress: progress);
     }
 
-    public static List<VersionRecord> GetVersionHistory(string storageDir, byte[] password)
+    public static List<VersionRecord> GetVersionHistory(string indexFilePath, byte[] password)
     {
-        string rollDir = Path.Combine(storageDir, ".rdr_version");
-        if (!VersionChain.Exists(rollDir))
+        if (!File.Exists(indexFilePath))
             return new List<VersionRecord>();
 
-        var chain = VersionChain.Load(rollDir);
-        string fingerprint = chain.ReadHeadFingerprint();
-        if (string.IsNullOrEmpty(fingerprint))
+        byte[] encryptedIndex = File.ReadAllBytes(indexFilePath);
+        try
+        {
+            (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
+            var index = IndexManager.DeserializeIndex(cbor);
+            return index.Versions ?? new List<VersionRecord>();
+        }
+        catch
+        {
             return new List<VersionRecord>();
-
-        var storage = new LocalFileAdapter(storageDir);
-        if (!storage.IndexExists(fingerprint))
-            return new List<VersionRecord>();
-
-        byte[] encryptedIndex = storage.ReadIndex(fingerprint);
-        (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
-        var index = IndexManager.DeserializeIndex(cbor);
-        return index.Versions ?? new List<VersionRecord>();
+        }
     }
 }

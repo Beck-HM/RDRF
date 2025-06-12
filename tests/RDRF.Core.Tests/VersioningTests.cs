@@ -6,50 +6,6 @@ namespace RDRF.Core.Tests;
 public class VersioningTests
 {
     [Fact]
-    public void VersionChain_InitAndLoad_ShouldPersistConfig()
-    {
-        string dir = Path.Combine(Path.GetTempPath(), $"rdr_vc_{Guid.NewGuid():N}");
-        try
-        {
-            var chain = Versioning.VersionChain.Init(dir);
-            Assert.Equal(32, chain.Config.Salt.Length);
-            Assert.Equal(600_000, chain.Config.KdfIterations);
-            Assert.True(Versioning.VersionChain.Exists(dir));
-
-            var loaded = Versioning.VersionChain.Load(dir);
-            Assert.Equal(chain.Config.Salt, loaded.Config.Salt);
-            Assert.Equal(chain.Config.KdfIterations, loaded.Config.KdfIterations);
-        }
-        finally
-        {
-            try { Directory.Delete(dir, true); } catch { }
-        }
-    }
-
-    [Fact]
-    public void VersionChain_WriteHead_ShouldTrackVersion()
-    {
-        string dir = Path.Combine(Path.GetTempPath(), $"rdr_vc_{Guid.NewGuid():N}");
-        try
-        {
-            var chain = Versioning.VersionChain.Init(dir);
-            Assert.Equal(0, chain.ReadHeadVersion());
-
-            chain.WriteHead(1, "abc123");
-            Assert.Equal(1, chain.ReadHeadVersion());
-            Assert.Equal("abc123", chain.ReadHeadFingerprint());
-
-            chain.WriteHead(2, "def456");
-            Assert.Equal(2, chain.ReadHeadVersion());
-            Assert.Equal("def456", chain.ReadHeadFingerprint());
-        }
-        finally
-        {
-            try { Directory.Delete(dir, true); } catch { }
-        }
-    }
-
-    [Fact]
     public async Task SaltBasedOrchestrator_ProducesReadableIndex()
     {
         string storageDir = Path.Combine(Path.GetTempPath(), $"rdr_sb_{Guid.NewGuid():N}");
@@ -78,7 +34,7 @@ public class VersioningTests
     }
 
     [Fact]
-    public async Task VersionedBackup_Fresh_ShouldCreateChainAndRestore()
+    public async Task VersionedBackup_Fresh_ShouldCreateVersionRecord()
     {
         string storageDir = Path.Combine(Path.GetTempPath(), $"rdr_vf_{Guid.NewGuid():N}");
         string outputFile = Path.Combine(Path.GetTempPath(), $"rdr_vf_out_{Guid.NewGuid():N}.txt");
@@ -93,17 +49,13 @@ public class VersioningTests
             string fp = await Versioning.VersionedBackup.BackupAsync(
                 testFile, storageDir, password, "Initial", "FSS1");
 
-            Assert.NotNull(fp);
-            Assert.True(Directory.Exists(Path.Combine(storageDir, ".rdr_version")));
+            string indexFile = Path.Combine(storageDir, fp + ".indrdrf");
+            Assert.True(File.Exists(indexFile));
 
-            var chain = Versioning.VersionChain.Load(Path.Combine(storageDir, ".rdr_version"));
-            Assert.Equal(1, chain.ReadHeadVersion());
-            string headFp = chain.ReadHeadFingerprint();
-            Assert.Equal(fp, headFp);
-
-        var history = Versioning.VersionedRestore.GetVersionHistory(storageDir, password);
+            var history = Versioning.VersionedRestore.GetVersionHistory(indexFile, password);
             Assert.Single(history);
             Assert.Equal("Initial", history[0].UserMessage);
+            Assert.Equal(1, history[0].Version);
         }
         finally
         {
@@ -137,13 +89,21 @@ public class VersioningTests
 
             Assert.NotEqual(fp1, fp2);
 
-            var history = Versioning.VersionedRestore.GetVersionHistory(storageDir, password);
+            // V1's files should have been cleaned up
+            string v1Index = Path.Combine(storageDir, fp1 + ".indrdrf");
+            Assert.False(File.Exists(v1Index), "V1 index should be cleaned up");
+
+            // V2's index is the only one
+            string v2Index = Path.Combine(storageDir, fp2 + ".indrdrf");
+            Assert.True(File.Exists(v2Index));
+
+            var history = Versioning.VersionedRestore.GetVersionHistory(v2Index, password);
             Assert.Equal(2, history.Count);
             Assert.Equal("V1", history[0].UserMessage);
             Assert.Equal("V2: changes", history[1].UserMessage);
             Assert.True(history[1].SystemDiff.Length > 0);
 
-            bool restored = await Versioning.VersionedRestore.RestoreAsync(outputFile, storageDir, password);
+            bool restored = Versioning.VersionedRestore.Restore(outputFile, v2Index, password);
             Assert.True(restored);
             Assert.Equal(v2, File.ReadAllText(outputFile));
         }

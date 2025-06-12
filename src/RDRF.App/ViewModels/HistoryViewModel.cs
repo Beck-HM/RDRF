@@ -256,7 +256,7 @@ public class HistoryViewModel : ViewModelBase
             ShowDiffPanel = false;
             DiffContent = "";
 
-            var records = VersionedRestore.GetVersionHistory(_storagePath, _password);
+            var records = VersionedRestore.GetVersionHistory(_backupFilePath!, _password);
             if (records.Count == 0)
             {
                 StatusText = "No version history found for this backup.";
