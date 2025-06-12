@@ -16,72 +16,79 @@ public static class VersionedBackup
         IProgress<RdrfProgressReport>? progress = null,
         CancellationToken ct = default)
     {
-        string rollDir = Path.Combine(storageDir, ".rdr_version");
+        var storage = new LocalFileAdapter(storageDir);
+        string? existingFingerprint = FindExistingIndex(storage);
 
-        if (!VersionChain.Exists(rollDir))
-            return await FreshBackupAsync(filePath, storageDir, rollDir, password, userMessage, fssStrategy, progress, ct).ConfigureAwait(false);
+        if (existingFingerprint == null)
+            return await FreshBackupAsync(filePath, storage, password, userMessage, fssStrategy, progress, ct).ConfigureAwait(false);
 
-        return await IncrementalBackupAsync(filePath, storageDir, rollDir, password, userMessage, fssStrategy, progress, ct).ConfigureAwait(false);
+        return await IncrementalBackupAsync(filePath, storage, existingFingerprint, password, userMessage, fssStrategy, progress, ct).ConfigureAwait(false);
+    }
+
+    private static string? FindExistingIndex(StorageAdapter storage)
+    {
+        if (storage is LocalFileAdapter local)
+        {
+            string dir = local.GetBasePath();
+            if (!Directory.Exists(dir)) return null;
+            foreach (string f in Directory.GetFiles(dir, "*" + Constants.IndexFileSuffix))
+            {
+                string name = Path.GetFileName(f);
+                return name[..^Constants.IndexFileSuffix.Length];
+            }
+        }
+        return null;
     }
 
     private static async Task<string> FreshBackupAsync(
-        string filePath, string storageDir, string rollDir,
+        string filePath, StorageAdapter storage,
         byte[] password, string userMessage, string fssStrategy,
         IProgress<RdrfProgressReport>? progress, CancellationToken ct)
     {
-        var chain = VersionChain.Init(rollDir);
-        byte[] chainSalt = (byte[])chain.Config.Salt.Clone();
-        var storage = new LocalFileAdapter(storageDir);
+        byte[] salt = RandomNumberGenerator.GetBytes(Constants.SaltPrefixLength);
+        using var orchestrator = new BackupOrchestrator((byte[])password.Clone(), (byte[])salt.Clone(), storage);
+        string fingerprint = await orchestrator.BackupFileAsync(filePath, fssStrategy, progress: progress, cancellationToken: ct).ConfigureAwait(false);
 
-        string fingerprint;
-        using (var orchestrator = new BackupOrchestrator((byte[])password.Clone(), (byte[])chainSalt.Clone(), storage))
-        {
-            fingerprint = await orchestrator.BackupFileAsync(filePath, fssStrategy, progress: progress, cancellationToken: ct).ConfigureAwait(false);
-        }
-
-        AppendVersionRecord(storage, fingerprint, password, chainSalt, 0, userMessage, string.Empty);
-        chain.WriteHead(1, fingerprint);
+        AppendVersionRecord(storage, fingerprint, password, salt, 0, userMessage, string.Empty);
         return fingerprint;
     }
 
     private static async Task<string> IncrementalBackupAsync(
-        string filePath, string storageDir, string rollDir,
+        string filePath, StorageAdapter storage, string prevFingerprint,
         byte[] password, string userMessage, string fssStrategy,
         IProgress<RdrfProgressReport>? progress, CancellationToken ct)
     {
-        var chain = VersionChain.Load(rollDir);
-        byte[] chainSalt = (byte[])chain.Config.Salt.Clone();
-        int prevVersion = chain.ReadHeadVersion();
-        string prevFingerprint = chain.ReadHeadFingerprint();
-        var storage = new LocalFileAdapter(storageDir);
+        byte[]? prevIndexBytes = null;
+        try { prevIndexBytes = storage.ReadIndex(prevFingerprint); }
+        catch { throw new InvalidOperationException($"Previous index not found: {prevFingerprint}"); }
+
+        int prevVersion = 0;
+        List<VersionRecord>? oldVersions = null;
+        try
+        {
+            (_, byte[] prevCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(prevIndexBytes, password);
+            var prevIdx = IndexManager.DeserializeIndex(prevCbor);
+            prevVersion = prevIdx.VersionNumber ?? 0;
+            oldVersions = prevIdx.Versions;
+        }
+        catch { throw new CryptographicException("Failed to decrypt previous index. Wrong password or corrupted backup."); }
+
+        byte[] salt = new byte[Constants.SaltPrefixLength];
+        Buffer.BlockCopy(prevIndexBytes, 0, salt, 0, Constants.SaltPrefixLength);
 
         byte[] oldData = ReadDecryptedOriginal(storage, prevFingerprint, password);
-
-        // Preserve old version history from the previous index
-        List<VersionRecord>? oldVersions = null;
-        if (storage.IndexExists(prevFingerprint))
-        {
-            byte[] oldEncIdx = storage.ReadIndex(prevFingerprint);
-            (_, byte[] oldCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(oldEncIdx, password);
-            var oldIdx = IndexManager.DeserializeIndex(oldCbor);
-            oldVersions = oldIdx.Versions;
-        }
-
         byte[] newData = await File.ReadAllBytesAsync(filePath, ct).ConfigureAwait(false);
-
         var (humanDiff, _, _) = DiffEngine.ComputeDiff(oldData, newData);
 
         string actualFingerprint;
-        using (var orchestrator = new BackupOrchestrator((byte[])password.Clone(), (byte[])chainSalt.Clone(), storage))
+        using (var orchestrator = new BackupOrchestrator((byte[])password.Clone(), (byte[])salt.Clone(), storage))
         {
             actualFingerprint = await orchestrator.BackupFileAsync(filePath, fssStrategy, progress: progress, cancellationToken: ct).ConfigureAwait(false);
         }
 
-        AppendVersionRecord(storage, actualFingerprint, password, chainSalt, prevVersion, userMessage, humanDiff, oldVersions);
+        AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage, humanDiff, oldVersions);
 
         CleanupOldFragments(storage, prevFingerprint);
-
-        chain.WriteHead(prevVersion + 1, actualFingerprint);
         return actualFingerprint;
     }
 
@@ -109,15 +116,12 @@ public static class VersionedBackup
             rawFragments.Add(raw);
         }
 
-        // FSS strip
-        var fssStrategy = index.FssStrategy;
         var fssEngine = new FSS.FSSEngine();
         var decoded = new Dictionary<int, byte[]>();
         for (int i = 0; i < index.OriginalFragentCount && i < rawFragments.Count; i++)
             decoded[i] = rawFragments[i];
 
-        var stripped = fssEngine.Strip(decoded, fssStrategy, index.OriginalFragentCount, index.OriginalFragentSizes);
-
+        var stripped = fssEngine.Strip(decoded, index.FssStrategy, index.OriginalFragentCount, index.OriginalFragentSizes);
         return FragmentEngine.Frags.MergeFragents(stripped);
     }
 
@@ -131,12 +135,10 @@ public static class VersionedBackup
         var index = IndexManager.DeserializeIndex(cbor);
 
         int newVersion = previousVersion + 1;
-        var existing = inheritedVersions ?? index.Versions ?? new List<VersionRecord>();
+        var existing = inheritedVersions ?? new List<VersionRecord>();
 
         if (existing.Count > 0)
-        {
             existing = existing.ToList();
-        }
 
         existing.Add(new VersionRecord
         {
@@ -167,13 +169,5 @@ public static class VersionedBackup
             }
         }
         catch { }
-    }
-
-    private static async Task<string> ComputeSha256Async(string filePath, CancellationToken ct)
-    {
-        using var sha = SHA256.Create();
-        await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.SequentialScan);
-        byte[] hash = await sha.ComputeHashAsync(stream, ct).ConfigureAwait(false);
-        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }
