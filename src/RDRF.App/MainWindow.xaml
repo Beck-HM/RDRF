@@ -1363,9 +1363,9 @@
                                     <Border Background="{StaticResource BackgroundBrush}"
                                             CornerRadius="6"
                                             Padding="12"
-                                            MaxHeight="300"
-                                            ScrollViewer.VerticalScrollBarVisibility="Auto">
-                                        <ScrollViewer>
+                                            MaxHeight="500">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Auto">
                                             <TextBlock Text="{Binding DiffContent}"
                                                        FontFamily="Consolas"
                                                        FontSize="12"
