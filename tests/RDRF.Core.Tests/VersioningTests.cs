@@ -124,22 +124,22 @@ public class VersioningTests
         byte[] oldBytes = System.Text.Encoding.UTF8.GetBytes(oldText);
         byte[] newBytes = System.Text.Encoding.UTF8.GetBytes(newText);
 
-        var (diff, added, removed) = Versioning.DiffEngine.ComputeDiff(oldBytes, newBytes);
+        var result = Versioning.DiffEngine.ComputeDiff(oldBytes, newBytes);
 
-        Assert.True(diff.Length > 0, "Diff should not be empty");
-        Assert.True(added > 0, $"Added bytes should be > 0, got: {added}");
-        Assert.True(diff.Contains("line2_modified"), $"Diff should mention changed line, got: {diff}");
-        Assert.True(diff.Contains("line4"), $"Diff should mention new line, got: {diff}");
+        Assert.True(result.HumanDiff.Length > 0, "Diff should not be empty");
+        Assert.True(result.AddedBytes > 0, $"Added bytes should be > 0, got: {result.AddedBytes}");
+        Assert.True(result.HumanDiff.Contains("line2_modified"), $"Diff should mention changed line, got: {result.HumanDiff}");
+        Assert.True(result.HumanDiff.Contains("line4"), $"Diff should mention new line, got: {result.HumanDiff}");
     }
 
     [Fact]
     public void DiffEngine_IdenticalContent_ShouldBeMinimal()
     {
         byte[] data = System.Text.Encoding.UTF8.GetBytes("same content");
-        var (diff, added, removed) = Versioning.DiffEngine.ComputeDiff(data, data);
+        var result = Versioning.DiffEngine.ComputeDiff(data, data);
 
-        Assert.Equal(0, added);
-        Assert.Equal(0, removed);
+        Assert.Equal(0, result.AddedBytes);
+        Assert.Equal(0, result.RemovedBytes);
     }
 
     [Fact]
@@ -148,12 +148,12 @@ public class VersioningTests
         byte[] oldBytes = new byte[] { 0x00, 0x01, 0x02, 0x03 };
         byte[] newBytes = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04 };
 
-        var (diff, added, removed) = Versioning.DiffEngine.ComputeDiff(oldBytes, newBytes);
+        var result = Versioning.DiffEngine.ComputeDiff(oldBytes, newBytes);
 
-        Assert.True(diff.Contains("binary"), "Should mark as binary");
-        Assert.True(diff.Contains("Old size"), "Should mention old size");
-        Assert.True(diff.Contains("New size"), "Should mention new size");
-        Assert.Equal(1, added);
-        Assert.Equal(0, removed);
+        Assert.True(result.HumanDiff.Contains("binary"), "Should mark as binary");
+        Assert.True(result.HumanDiff.Contains("Old size"), "Should mention old size");
+        Assert.True(result.HumanDiff.Contains("New size"), "Should mention new size");
+        Assert.Equal(1, result.AddedBytes);
+        Assert.Equal(0, result.RemovedBytes);
     }
 }
