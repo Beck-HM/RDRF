@@ -4,8 +4,7 @@ namespace RDRF.Core.Versioning;
 
 public static class DiffEngine
 {
-    public static (string HumanDiff, long AddedBytes, long RemovedBytes)
-        ComputeDiff(byte[] oldData, byte[] newData)
+    public static DiffResult ComputeDiff(byte[] oldData, byte[] newData, string? label = null)
     {
         long addedBytes = Math.Max(0, newData.LongLength - oldData.LongLength);
         long removedBytes = Math.Max(0, oldData.LongLength - newData.LongLength);
@@ -14,17 +13,122 @@ public static class DiffEngine
         bool newIsText = IsLikelyText(newData);
 
         if (oldIsText && newIsText)
-            return (ComputeTextDiff(oldData, newData), addedBytes, removedBytes);
+            return ComputeTextDiff(oldData, newData, label);
 
+        return ComputeBinaryDiff(oldData, newData, label, addedBytes, removedBytes);
+    }
+
+    private static DiffResult ComputeBinaryDiff(byte[] oldData, byte[] newData, string? label,
+        long addedBytes, long removedBytes)
+    {
         var sb = new StringBuilder();
-        sb.AppendLine($"--- (binary)");
-        sb.AppendLine($"+++ (binary)");
-        sb.AppendLine($"@@ size change @@");
+        sb.AppendLine($"--- a/{label ?? "file"} (binary)");
+        sb.AppendLine($"+++ b/{label ?? "file"} (binary)");
         if (oldData.LongLength == newData.LongLength)
-            sb.AppendLine($" File size unchanged: {oldData.Length} bytes");
+            sb.AppendLine($"File size unchanged: {oldData.Length} bytes");
         else
-            sb.AppendLine($" Old size: {oldData.Length} bytes → New size: {newData.Length} bytes");
-        return (sb.ToString(), addedBytes, removedBytes);
+            sb.AppendLine($"Old size: {oldData.Length} bytes → New size: {newData.Length} bytes");
+
+        return new DiffResult
+        {
+            Label = label,
+            IsBinary = true,
+            AddedBytes = addedBytes,
+            RemovedBytes = removedBytes,
+            HumanDiff = sb.ToString(),
+            Lines = new List<DiffLine>
+            {
+                new DiffLine { Type = DiffLineType.Header, Text = $"(binary) {label ?? "file"}: {oldData.Length} → {newData.Length} bytes" }
+            }
+        };
+    }
+
+    private static DiffResult ComputeTextDiff(byte[] oldData, byte[] newData, string? label)
+    {
+        var oldLines = SplitLines(oldData);
+        var newLines = SplitLines(newData);
+        var edits = ComputeLineEdits(oldLines, newLines);
+
+        int addedLines = edits.Count(e => e.Kind == EditKind.Insert);
+        int removedLines = edits.Count(e => e.Kind == EditKind.Delete);
+        int changedLines = Math.Max(addedLines, removedLines);
+        long addedBytes = Math.Max(0, newData.LongLength - oldData.LongLength);
+        long removedBytes = Math.Max(0, oldData.LongLength - newData.LongLength);
+
+        var lines = new List<DiffLine>();
+        var sb = new StringBuilder();
+        sb.AppendLine($"--- a/{label ?? "file"}");
+        sb.AppendLine($"+++ b/{label ?? "file"}");
+
+        var batches = new List<List<EditOp>>();
+        List<EditOp>? current = null;
+
+        foreach (var edit in edits)
+        {
+            if (edit.Kind == EditKind.Keep)
+            {
+                if (current == null || current.Last().Kind != EditKind.Keep)
+                {
+                    current = new List<EditOp>();
+                    batches.Add(current);
+                }
+                current.Add(edit);
+            }
+            else
+            {
+                if (current == null || current.Last().Kind == EditKind.Keep)
+                {
+                    current = new List<EditOp>();
+                    batches.Add(current);
+                }
+                current.Add(edit);
+            }
+        }
+
+        foreach (var batch in batches)
+        {
+            if (batch.All(e => e.Kind == EditKind.Keep) && batch.Count <= 2)
+                continue;
+
+            int delCount = batch.Count(e => e.Kind == EditKind.Delete);
+            int insCount = batch.Count(e => e.Kind == EditKind.Insert);
+            int keepCount = batch.Count(e => e.Kind == EditKind.Keep);
+
+            lines.Add(new DiffLine { Type = DiffLineType.Header, Text = $"@@ -{delCount + keepCount} +{insCount + keepCount} @@" });
+            sb.AppendLine($"@@ -{delCount + keepCount} +{insCount + keepCount} @@");
+
+            foreach (var edit in batch)
+            {
+                switch (edit.Kind)
+                {
+                    case EditKind.Keep:
+                        lines.Add(new DiffLine { Type = DiffLineType.Context, Text = edit.OldLine });
+                        sb.AppendLine($" {edit.OldLine}");
+                        break;
+                    case EditKind.Delete:
+                        lines.Add(new DiffLine { Type = DiffLineType.Deletion, Text = edit.OldLine });
+                        sb.AppendLine($"-{edit.OldLine}");
+                        break;
+                    case EditKind.Insert:
+                        lines.Add(new DiffLine { Type = DiffLineType.Addition, Text = edit.NewLine });
+                        sb.AppendLine($"+{edit.NewLine}");
+                        break;
+                }
+            }
+        }
+
+        return new DiffResult
+        {
+            Label = label,
+            IsBinary = false,
+            AddedBytes = addedBytes,
+            RemovedBytes = removedBytes,
+            AddedLines = addedLines,
+            RemovedLines = removedLines,
+            ChangedLines = changedLines,
+            Lines = lines,
+            HumanDiff = sb.ToString()
+        };
     }
 
     private static bool IsLikelyText(byte[] data)
@@ -40,14 +144,6 @@ public static class DiffEngine
                 nonText++;
         }
         return nonText <= sample / 10;
-    }
-
-    private static string ComputeTextDiff(byte[] oldData, byte[] newData)
-    {
-        var oldLines = SplitLines(oldData);
-        var newLines = SplitLines(newData);
-        var edits = ComputeLineEdits(oldLines, newLines);
-        return FormatUnifiedDiff(oldLines, newLines, edits);
     }
 
     private static List<string> SplitLines(byte[] data)
@@ -70,13 +166,11 @@ public static class DiffEngine
 
     private static List<EditOp> ComputeLineEdits(List<string> oldLines, List<string> newLines)
     {
-        // Find common prefix
         int prefixLen = 0;
         while (prefixLen < oldLines.Count && prefixLen < newLines.Count
                && oldLines[prefixLen] == newLines[prefixLen])
             prefixLen++;
 
-        // Find common suffix (after removing prefix)
         int suffixLen = 0;
         while (suffixLen < oldLines.Count - prefixLen && suffixLen < newLines.Count - prefixLen
                && oldLines[oldLines.Count - 1 - suffixLen] == newLines[newLines.Count - 1 - suffixLen])
@@ -85,7 +179,6 @@ public static class DiffEngine
         var edits = new List<EditOp>();
         int pos = 0;
 
-        // Equal prefix context (show up to 3 lines)
         int ctxStart = Math.Max(0, prefixLen - 3);
         for (int i = ctxStart; i < prefixLen; i++)
         {
@@ -93,13 +186,11 @@ public static class DiffEngine
             pos++;
         }
 
-        // Changed middle section
         int oldMid = prefixLen;
         int newMid = prefixLen;
         int oldMidEnd = oldLines.Count - suffixLen;
         int newMidEnd = newLines.Count - suffixLen;
 
-        // Hash new lines for matching
         var newLineMap = new Dictionary<string, List<int>>();
         for (int i = newMid; i < newMidEnd; i++)
         {
@@ -145,7 +236,6 @@ public static class DiffEngine
             {
                 result.Add((EditKind.Keep, oi, matched));
                 oi++;
-                // Ensure ni catches up if needed
                 while (ni < matched && !usedNew.Contains(ni))
                 {
                     result.Add((EditKind.Insert, -1, ni));
@@ -176,7 +266,6 @@ public static class DiffEngine
             }
         }
 
-        // Equal suffix context
         int suffixCtxEnd = Math.Min(oldLines.Count, oldLines.Count - suffixLen + 3);
         for (int i = oldLines.Count - suffixLen; i < suffixCtxEnd && i < oldLines.Count; i++)
         {
@@ -185,62 +274,6 @@ public static class DiffEngine
         }
 
         return edits;
-    }
-
-    private static string FormatUnifiedDiff(List<string> oldLines, List<string> newLines, List<EditOp> edits)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("--- a/backup");
-        sb.AppendLine("+++ b/backup");
-
-        var batches = new List<List<EditOp>>();
-        List<EditOp>? current = null;
-
-        foreach (var edit in edits)
-        {
-            if (edit.Kind == EditKind.Keep)
-            {
-                // Start a new batch for context keeps
-                if (current == null || current.Last().Kind != EditKind.Keep)
-                {
-                    current = new List<EditOp>();
-                    batches.Add(current);
-                }
-                current.Add(edit);
-            }
-            else
-            {
-                if (current == null || current.Last().Kind == EditKind.Keep)
-                {
-                    current = new List<EditOp>();
-                    batches.Add(current);
-                }
-                current.Add(edit);
-            }
-        }
-
-        foreach (var batch in batches)
-        {
-            if (batch.All(e => e.Kind == EditKind.Keep) && batch.Count <= 2)
-                continue;
-
-            int delCount = batch.Count(e => e.Kind == EditKind.Delete);
-            int insCount = batch.Count(e => e.Kind == EditKind.Insert);
-            int keepCount = batch.Count(e => e.Kind == EditKind.Keep);
-
-            sb.AppendLine($"@@ -{delCount + keepCount} +{insCount + keepCount} @@");
-            foreach (var edit in batch)
-            {
-                switch (edit.Kind)
-                {
-                    case EditKind.Keep: sb.AppendLine($" {edit.OldLine}"); break;
-                    case EditKind.Delete: sb.AppendLine($"-{edit.OldLine}"); break;
-                    case EditKind.Insert: sb.AppendLine($"+{edit.NewLine}"); break;
-                }
-            }
-        }
-
-        return sb.ToString();
     }
 
     private enum EditKind { Keep, Delete, Insert }

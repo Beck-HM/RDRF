@@ -78,7 +78,7 @@ public static class VersionedBackup
 
         byte[] oldData = ReadDecryptedOriginal(storage, prevFingerprint, password);
         byte[] newData = await File.ReadAllBytesAsync(filePath, ct).ConfigureAwait(false);
-        var (humanDiff, _, _) = DiffEngine.ComputeDiff(oldData, newData);
+        var diffResult = DiffEngine.ComputeDiff(oldData, newData);
 
         string actualFingerprint;
         using (var orchestrator = new BackupOrchestrator((byte[])password.Clone(), (byte[])salt.Clone(), storage))
@@ -86,7 +86,7 @@ public static class VersionedBackup
             actualFingerprint = await orchestrator.BackupFileAsync(filePath, fssStrategy, progress: progress, cancellationToken: ct).ConfigureAwait(false);
         }
 
-        AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage, humanDiff, oldVersions);
+        AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage, diffResult.HumanDiff, oldVersions);
 
         CleanupOldFragments(storage, prevFingerprint);
         return actualFingerprint;
