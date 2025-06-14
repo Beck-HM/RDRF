@@ -307,18 +307,17 @@ public class HistoryViewModel : ViewModelBase
         var lines = new List<DiffLineItem>();
         foreach (string rawLine in diff.Split('\n'))
         {
-            if (rawLine.StartsWith("--- ") || rawLine.StartsWith("+++ "))
+            if (rawLine.StartsWith("--- ") || rawLine.StartsWith("+++ ") || rawLine.StartsWith("@@"))
                 continue;
 
-            if (rawLine.StartsWith("@@"))
-            {
-                lines.Add(new DiffLineItem(DiffLineType.Header, rawLine));
-            }
-            else if (rawLine.StartsWith('-') && !rawLine.StartsWith("---"))
+            if (string.IsNullOrEmpty(rawLine))
+                continue;
+
+            if (rawLine.StartsWith('-'))
             {
                 lines.Add(new DiffLineItem(DiffLineType.Deletion, rawLine[1..]));
             }
-            else if (rawLine.StartsWith('+') && !rawLine.StartsWith("+++"))
+            else if (rawLine.StartsWith('+'))
             {
                 lines.Add(new DiffLineItem(DiffLineType.Addition, rawLine[1..]));
             }

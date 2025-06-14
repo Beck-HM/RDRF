@@ -1375,7 +1375,8 @@
                                                                    Foreground="{Binding Foreground}"
                                                                    Background="{Binding Background}"
                                                                    FontFamily="Consolas"
-                                                                   FontSize="12"
+                                                                   FontSize="{Binding FontSize}"
+                                                                   FontWeight="{Binding FontWeight}"
                                                                    Padding="12,1"
                                                                    TextWrapping="NoWrap" />
                                                     </DataTemplate>
