@@ -1362,15 +1362,25 @@
 
                                     <Border Background="{StaticResource BackgroundBrush}"
                                             CornerRadius="6"
-                                            Padding="12"
+                                            Padding="0"
                                             MaxHeight="500">
                                         <ScrollViewer VerticalScrollBarVisibility="Auto"
                                                       HorizontalScrollBarVisibility="Auto">
-                                            <TextBlock Text="{Binding DiffContent}"
-                                                       FontFamily="Consolas"
-                                                       FontSize="12"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                                       TextWrapping="NoWrap" />
+                                            <ItemsControl ItemsSource="{Binding DiffLines}"
+                                                          Background="Transparent"
+                                                          BorderThickness="0">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Text}"
+                                                                   Foreground="{Binding Foreground}"
+                                                                   Background="{Binding Background}"
+                                                                   FontFamily="Consolas"
+                                                                   FontSize="12"
+                                                                   Padding="12,1"
+                                                                   TextWrapping="NoWrap" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
                                         </ScrollViewer>
                                     </Border>
                                 </StackPanel>
