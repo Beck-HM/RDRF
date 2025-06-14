@@ -107,6 +107,7 @@ public class HistoryViewModel : ViewModelBase
     }
 
     public ObservableCollection<VersionHistoryItem> Versions { get; } = new();
+    public ObservableCollection<DiffLineItem> DiffLines { get; } = new();
 
     public System.Windows.Input.ICommand BrowseBackupCommand { get; }
     public System.Windows.Input.ICommand BrowseIncrementalCommand { get; }
@@ -286,15 +287,46 @@ public class HistoryViewModel : ViewModelBase
 
     private void OnSelectedVersionChanged()
     {
+        DiffLines.Clear();
         if (_selectedItem != null && !string.IsNullOrEmpty(_selectedItem.Diff))
         {
             DiffContent = _selectedItem.Diff;
             ShowDiffPanel = true;
+            foreach (var line in ParseDiff(_selectedItem.Diff))
+                DiffLines.Add(line);
         }
         else
         {
             DiffContent = "";
             ShowDiffPanel = false;
         }
+    }
+
+    private static List<DiffLineItem> ParseDiff(string diff)
+    {
+        var lines = new List<DiffLineItem>();
+        foreach (string rawLine in diff.Split('\n'))
+        {
+            if (rawLine.StartsWith("--- ") || rawLine.StartsWith("+++ "))
+                continue;
+
+            if (rawLine.StartsWith("@@"))
+            {
+                lines.Add(new DiffLineItem(DiffLineType.Header, rawLine));
+            }
+            else if (rawLine.StartsWith('-') && !rawLine.StartsWith("---"))
+            {
+                lines.Add(new DiffLineItem(DiffLineType.Deletion, rawLine[1..]));
+            }
+            else if (rawLine.StartsWith('+') && !rawLine.StartsWith("+++"))
+            {
+                lines.Add(new DiffLineItem(DiffLineType.Addition, rawLine[1..]));
+            }
+            else if (rawLine.StartsWith(' '))
+            {
+                lines.Add(new DiffLineItem(DiffLineType.Context, rawLine[1..]));
+            }
+        }
+        return lines;
     }
 }
