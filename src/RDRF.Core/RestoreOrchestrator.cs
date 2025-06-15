@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using RDRF.Core.Encryption;
+using RDRF.Core.ETN;
 using RDRF.Core.FragmentEngine;
 using RDRF.Core.FSS;
 using RDRF.Core.FSA;
@@ -400,6 +401,10 @@ public class RestoreOrchestrator : IDisposable
                         Debug.WriteLine($"    - RC file corrupted ({cvResult.RcCorruptedBlocks.Count} blocks)");
                     if (cvResult.CorruptedFragments.Count > 0)
                         Debug.WriteLine($"    - Corrupted fragments: {string.Join(", ", cvResult.CorruptedFragments)}");
+
+                    // FSS6.1: try LT repair when fragment corruption detected
+                    if (cvResult.CorruptedFragments.Count > 0 && cvResult.CorruptedFragmentBlocks != null)
+                        TryFss61BlockRepair(rcBytes, decryptedFragments, cvResult);
                 }
                 else
                     Debug.WriteLine($"  ETN cross-validation passed");
@@ -411,6 +416,95 @@ public class RestoreOrchestrator : IDisposable
         }
 
         return validationActual;
+    }
+
+    private void TryFss61BlockRepair(byte[] rcBytes,
+        Dictionary<int, byte[]> decryptedFragments, FSS.CrossValidationResult cvResult)
+    {
+        try
+        {
+            var rcFile = RcFile.FromCbor(rcBytes);
+            if (rcFile.RepairData == null || !rcFile.RepairSeed.HasValue) return;
+
+            int bs = rcFile.RepairBlockSize ?? EtnBlockMap.GetBlockSize(1024 * 1024, "FSS6.1");
+            var sorted = decryptedFragments.OrderBy(k => k.Key).ToList();
+
+            // Build all blocks array from decrypted fragments (with trailers still attached)
+            int totalBlocks = 0;
+            foreach (var kvp in sorted)
+                totalBlocks += (kvp.Value.Length + bs - 1) / bs;
+
+            var allBlocks = new byte[totalBlocks][];
+            var isBad = new bool[totalBlocks];
+            int globalIdx = 0;
+
+            for (int fi = 0; fi < sorted.Count; fi++)
+            {
+                byte[] frag = sorted[fi].Value;
+                int cvIdx = cvResult.CorruptedFragments.IndexOf(fi);
+                List<int>? badBlocks = cvIdx >= 0 && cvResult.CorruptedFragmentBlocks != null
+                    && cvIdx < cvResult.CorruptedFragmentBlocks.Count
+                    ? cvResult.CorruptedFragmentBlocks[cvIdx]
+                    : null;
+
+                for (int off = 0; off < frag.Length; off += bs)
+                {
+                    int len = Math.Min(bs, frag.Length - off);
+                    allBlocks[globalIdx] = new byte[bs];
+                    Buffer.BlockCopy(frag, off, allBlocks[globalIdx], 0, len);
+                    if (badBlocks != null && badBlocks.Contains(globalIdx))
+                        isBad[globalIdx] = true;
+                    globalIdx++;
+                }
+            }
+
+            int badCount = isBad.Count(b => b);
+            if (badCount == 0) return;
+
+            bool recovered = FSS.LtCode.Decode(allBlocks, isBad,
+                rcFile.RepairCount.Value, rcFile.RepairSeed.Value,
+                rcFile.RepairData, totalBlocks, bs);
+
+            if (!recovered)
+            {
+                Debug.WriteLine($"  LT repair failed: could only partially recover blocks");
+                return;
+            }
+
+            Debug.WriteLine($"  LT repair succeeded: recovered {badCount} corrupted blocks");
+
+            // Splice recovered blocks back into fragments
+            globalIdx = 0;
+            for (int fi = 0; fi < sorted.Count; fi++)
+            {
+                byte[] frag = sorted[fi].Value;
+                int fragBlockCount = (frag.Length + bs - 1) / bs;
+                List<int>? badBlocks = null;
+                int cvIdx = cvResult.CorruptedFragments.IndexOf(fi);
+                if (cvIdx >= 0 && cvResult.CorruptedFragmentBlocks != null && cvIdx < cvResult.CorruptedFragmentBlocks.Count)
+                    badBlocks = cvResult.CorruptedFragmentBlocks[cvIdx];
+
+                if (badBlocks == null)
+                {
+                    globalIdx += (frag.Length + bs - 1) / bs;
+                    continue;
+                }
+
+                for (int off = 0; off < frag.Length; off += bs)
+                {
+                    if (badBlocks.Contains(globalIdx))
+                    {
+                        int len = Math.Min(bs, frag.Length - off);
+                        Buffer.BlockCopy(allBlocks[globalIdx], 0, frag, off, len);
+                    }
+                    globalIdx++;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"  LT repair failed: {ex.Message}");
+        }
     }
 
     // ── Strip FSS Encoding ──

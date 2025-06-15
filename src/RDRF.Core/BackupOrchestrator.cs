@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using RDRF.Core.Encryption;
+using RDRF.Core.ETN;
 using RDRF.Core.FragmentEngine;
 using RDRF.Core.FSS;
 using RDRF.Core.FSA;
@@ -229,7 +230,9 @@ public class BackupOrchestrator : IDisposable
         byte[] serializedIndex = IndexManager.SerializeIndex(embeddedIndex);
         byte[] rcBytes = [];
 
-        bool hasFss6 = plan.ActiveStrategies.Contains(Constants.FssLevel6);
+        bool hasFss6 = plan.ActiveStrategies.Contains(Constants.FssLevel6)
+                     || plan.ActiveStrategies.Contains(Constants.FssLevel61);
+        bool hasFss61 = plan.ActiveStrategies.Contains(Constants.FssLevel61);
         if (hasFss6)
         {
             var (etnFragments, etnIndexJson, etnRcJson) = Fss6Etn.InjectCrossValidation(
@@ -237,6 +240,52 @@ public class BackupOrchestrator : IDisposable
             fragments = etnFragments;
             serializedIndex = etnIndexJson;
             rcBytes = etnRcJson;
+        }
+
+        // FSS6.1: generate LT repair symbols from fragments and embed in RC file
+        if (hasFss61 && rcBytes.Length > 0)
+        {
+            try
+            {
+                var rcFile = RcFile.FromCbor(rcBytes);
+                int blockCount = 0;
+                foreach (var fm in rcFile.FragentBlockMaps)
+                    blockCount += fm.Count;
+
+                if (blockCount > 0)
+                {
+                    int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
+                    int repairCount = Math.Max(1, blockCount / 20); // 5% repair symbols
+                    var allBlocks = new List<byte[]>();
+                    foreach (var frag in fragments)
+                    {
+                        byte[] stripped = Fss6Etn.StripEtnFieldsFromIndexJson(frag);
+
+                        for (int off = 0; off < stripped.Length; off += bs)
+                        {
+                            int len = Math.Min(bs, stripped.Length - off);
+                            byte[] block = new byte[bs];
+                            Buffer.BlockCopy(stripped, off, block, 0, len);
+                            allBlocks.Add(block);
+                        }
+                    }
+
+                    if (allBlocks.Count >= blockCount)
+                    {
+                        var (symbols, seed) = LtCode.Encode(allBlocks.ToArray(), repairCount, bs);
+                        var repairData = new byte[symbols.Count * bs];
+                        for (int i = 0; i < symbols.Count; i++)
+                            Buffer.BlockCopy(symbols[i], 0, repairData, i * bs, bs);
+
+                        rcFile.RepairSeed = seed;
+                        rcFile.RepairCount = symbols.Count;
+                        rcFile.RepairBlockSize = bs;
+                        rcFile.RepairData = repairData;
+                        rcBytes = rcFile.ToCborBytes();
+                    }
+                }
+            }
+            catch { /* LT generation failed silently — proceed without repair data */ }
         }
 
         // Strip BM fields from the Index before embedding in fragment headers

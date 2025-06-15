@@ -98,7 +98,7 @@ public class NextCommand : Command
             {
                 newFp = await VersionedBackup.BackupAsync(
                     source.FullName, storagePath, password, msg,
-                    oldIndex.FssStrategy, progress);
+                    oldIndex.FssStrategy, progress: progress);
             });
 
             // Show result

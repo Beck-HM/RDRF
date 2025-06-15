@@ -46,11 +46,12 @@ public static class Constants
     public const string FssLevel5 = "FSS5";
     public const string FssLevel5P = "FSS5+";
     public const string FssLevel6 = "FSS6";
+    public const string FssLevel61 = "FSS6.1";
 
     public static readonly HashSet<string> FssLevels = new()
     {
         FssLevel1, FssLevel2, FssLevel2R, FssLevel3,
-        FssLevel5, FssLevel5P, FssLevel6
+        FssLevel5, FssLevel5P, FssLevel6, FssLevel61
     };
 
     // FSS Storage Overhead

@@ -220,6 +220,8 @@ public class HistoryViewModel : ViewModelBase
                     Application.Current.Dispatcher.Invoke(() =>
                     {
                         _fingerprint = fp;
+                        _backupFilePath = Path.Combine(_storagePath!, fp + ".indrdrf");
+                        IndexPathDisplay = Path.GetFileName(_backupFilePath);
                         StatusText = "Incremental backup applied successfully.";
                         LoadHistory();
                         RequestShowSuccess?.Invoke("Incremental backup completed.", null);
@@ -307,19 +309,28 @@ public class HistoryViewModel : ViewModelBase
         var lines = new List<DiffLineItem>();
         foreach (string rawLine in diff.Split('\n'))
         {
-            if (rawLine.StartsWith("--- ") || rawLine.StartsWith("+++ ") || rawLine.StartsWith("@@"))
+            if (rawLine.StartsWith("--- ") || rawLine.StartsWith("+++ "))
                 continue;
 
             if (string.IsNullOrEmpty(rawLine))
                 continue;
 
-            if (rawLine.StartsWith('-'))
+            if (rawLine.StartsWith("@@"))
             {
-                lines.Add(new DiffLineItem(DiffLineType.Deletion, rawLine[1..]));
+                int start = rawLine.IndexOf("@@ ", StringComparison.Ordinal) + 3;
+                int end = rawLine.LastIndexOf(" @@", StringComparison.Ordinal);
+                string content = start > 2 && end > start
+                    ? rawLine[start..end]
+                    : rawLine.Trim('@', ' ');
+                lines.Add(new DiffLineItem(DiffLineType.Header, content));
+            }
+            else if (rawLine.StartsWith('-'))
+            {
+                lines.Add(new DiffLineItem(DiffLineType.Deletion, rawLine));
             }
             else if (rawLine.StartsWith('+'))
             {
-                lines.Add(new DiffLineItem(DiffLineType.Addition, rawLine[1..]));
+                lines.Add(new DiffLineItem(DiffLineType.Addition, rawLine));
             }
             else if (rawLine.StartsWith(' '))
             {

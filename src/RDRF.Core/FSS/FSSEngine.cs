@@ -13,6 +13,7 @@ public class FSSEngine
         RegisterStrategy(Constants.FssLevel5, new Fss5CrossRecovery());
         RegisterStrategy(Constants.FssLevel5P, new Fss5PSend());
         RegisterStrategy(Constants.FssLevel6, new Fss6Etn());
+        RegisterStrategy(Constants.FssLevel61, new Fss61Etn());
     }
 
     public void RegisterStrategy(string level, IFssStrategy strategy)

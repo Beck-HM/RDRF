@@ -1,4 +1,6 @@
 using RDRF.Core;
+using RDRF.Core.Encryption;
+using RDRF.Core.Index;
 using RDRF.Core.Storage;
 using RDRF.Cli.Services;
 using System.CommandLine;
@@ -48,7 +50,8 @@ public class RestoreCommand : Command
             var storage = new LocalFileAdapter(storageDir);
             using var engine = new RDRFEngine(password, storage);
 
-            var index = RDRFEngine.DecryptIndex(encryptedIndex, password);
+            (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
+            var index = IndexManager.DeserializeIndex(cbor);
             string prefix = index.CustomName ?? index.FileFingerprint;
 
             bool success = false;
