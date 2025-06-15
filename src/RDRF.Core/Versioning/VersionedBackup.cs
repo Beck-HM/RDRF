@@ -13,6 +13,9 @@ public static class VersionedBackup
         byte[] password,
         string userMessage,
         string fssStrategy = "FSS3",
+        int fragmentSize = 0,
+        string? customName = null,
+        List<string>? auxiliaryStrategies = null,
         IProgress<RdrfProgressReport>? progress = null,
         CancellationToken ct = default)
     {
@@ -20,9 +23,9 @@ public static class VersionedBackup
         string? existingFingerprint = FindExistingIndex(storage);
 
         if (existingFingerprint == null)
-            return await FreshBackupAsync(filePath, storage, password, userMessage, fssStrategy, progress, ct).ConfigureAwait(false);
+            return await FreshBackupAsync(filePath, storage, password, userMessage, fssStrategy, progress, ct, fragmentSize, customName, auxiliaryStrategies).ConfigureAwait(false);
 
-        return await IncrementalBackupAsync(filePath, storage, existingFingerprint, password, userMessage, fssStrategy, progress, ct).ConfigureAwait(false);
+        return await IncrementalBackupAsync(filePath, storage, existingFingerprint, password, userMessage, fssStrategy, progress, ct, fragmentSize, customName, auxiliaryStrategies).ConfigureAwait(false);
     }
 
     private static string? FindExistingIndex(StorageAdapter storage)
@@ -43,11 +46,15 @@ public static class VersionedBackup
     private static async Task<string> FreshBackupAsync(
         string filePath, StorageAdapter storage,
         byte[] password, string userMessage, string fssStrategy,
-        IProgress<RdrfProgressReport>? progress, CancellationToken ct)
+        IProgress<RdrfProgressReport>? progress, CancellationToken ct,
+        int fragmentSize = 0, string? customName = null,
+        List<string>? auxiliaryStrategies = null)
     {
         byte[] salt = RandomNumberGenerator.GetBytes(Constants.SaltPrefixLength);
         using var orchestrator = new BackupOrchestrator((byte[])password.Clone(), (byte[])salt.Clone(), storage);
-        string fingerprint = await orchestrator.BackupFileAsync(filePath, fssStrategy, progress: progress, cancellationToken: ct).ConfigureAwait(false);
+        string fingerprint = await orchestrator.BackupFileAsync(filePath, fssStrategy,
+            fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliaryStrategies,
+            progress: progress, cancellationToken: ct).ConfigureAwait(false);
 
         AppendVersionRecord(storage, fingerprint, password, salt, 0, userMessage, string.Empty);
         return fingerprint;
@@ -56,7 +63,9 @@ public static class VersionedBackup
     private static async Task<string> IncrementalBackupAsync(
         string filePath, StorageAdapter storage, string prevFingerprint,
         byte[] password, string userMessage, string fssStrategy,
-        IProgress<RdrfProgressReport>? progress, CancellationToken ct)
+        IProgress<RdrfProgressReport>? progress, CancellationToken ct,
+        int fragmentSize = 0, string? customName = null,
+        List<string>? auxiliaryStrategies = null)
     {
         byte[]? prevIndexBytes = null;
         try { prevIndexBytes = storage.ReadIndex(prevFingerprint); }
@@ -83,7 +92,9 @@ public static class VersionedBackup
         string actualFingerprint;
         using (var orchestrator = new BackupOrchestrator((byte[])password.Clone(), (byte[])salt.Clone(), storage))
         {
-            actualFingerprint = await orchestrator.BackupFileAsync(filePath, fssStrategy, progress: progress, cancellationToken: ct).ConfigureAwait(false);
+            actualFingerprint = await orchestrator.BackupFileAsync(filePath, fssStrategy,
+                fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliaryStrategies,
+                progress: progress, cancellationToken: ct).ConfigureAwait(false);
         }
 
         AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage, diffResult.HumanDiff, oldVersions);

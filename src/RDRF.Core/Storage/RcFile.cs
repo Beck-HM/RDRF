@@ -10,6 +10,12 @@ public class RcFile
     public List<List<string>> FragentBlockMaps { get; set; } = new();
     public long CreatedAt { get; set; }
 
+    // FSS6.1 repair data (null for non-FSS6.1 backups)
+    public int? RepairSeed { get; set; }
+    public int? RepairCount { get; set; }
+    public int? RepairBlockSize { get; set; }
+    public byte[]? RepairData { get; set; }
+
     public byte[] ToCborBytes()
     {
         var writer = new CborWriter();
@@ -20,6 +26,11 @@ public class RcFile
         writer.WriteTextString("index_block_map"); WriteStringList(writer, IndexBlockMap);
         writer.WriteTextString("fragment_block_maps"); WriteNestedStringList(writer, FragentBlockMaps);
         writer.WriteTextString("created_at"); writer.WriteInt64(CreatedAt);
+
+        if (RepairSeed.HasValue) { writer.WriteTextString("repair_seed"); writer.WriteInt32(RepairSeed.Value); }
+        if (RepairCount.HasValue) { writer.WriteTextString("repair_count"); writer.WriteInt32(RepairCount.Value); }
+        if (RepairBlockSize.HasValue) { writer.WriteTextString("repair_block_size"); writer.WriteInt32(RepairBlockSize.Value); }
+        if (RepairData != null) { writer.WriteTextString("repair_data"); writer.WriteByteString(RepairData); }
 
         writer.WriteEndMap();
         return writer.Encode();
@@ -35,12 +46,16 @@ public class RcFile
         {
             switch (reader.ReadTextString())
             {
-                case "version":           rc.Version = reader.ReadInt32(); break;
-                case "file_fingerprint":  rc.FileFingerprint = reader.ReadTextString(); break;
-                case "index_block_map":   rc.IndexBlockMap = ReadStringList(reader); break;
-                case "fragment_block_maps": rc.FragentBlockMaps = ReadNestedStringList(reader); break;
-                case "created_at":        rc.CreatedAt = reader.ReadInt64(); break;
-                default:                  reader.SkipValue(); break;
+                case "version":              rc.Version = reader.ReadInt32(); break;
+                case "file_fingerprint":     rc.FileFingerprint = reader.ReadTextString(); break;
+                case "index_block_map":      rc.IndexBlockMap = ReadStringList(reader); break;
+                case "fragment_block_maps":  rc.FragentBlockMaps = ReadNestedStringList(reader); break;
+                case "created_at":           rc.CreatedAt = reader.ReadInt64(); break;
+                case "repair_seed":          rc.RepairSeed = reader.ReadInt32(); break;
+                case "repair_count":         rc.RepairCount = reader.ReadInt32(); break;
+                case "repair_block_size":    rc.RepairBlockSize = reader.ReadInt32(); break;
+                case "repair_data":          rc.RepairData = reader.ReadByteString(); break;
+                default:                     reader.SkipValue(); break;
             }
         }
         reader.ReadEndMap();

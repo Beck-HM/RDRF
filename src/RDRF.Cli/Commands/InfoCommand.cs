@@ -1,4 +1,5 @@
 using RDRF.Core;
+using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Cli.Services;
 using System.CommandLine;
@@ -38,7 +39,8 @@ public class InfoCommand : Command
             RdrfIndex index;
             try
             {
-                index = RDRFEngine.DecryptIndex(encryptedIndex, password);
+                (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
+                index = IndexManager.DeserializeIndex(cbor);
             }
             catch
             {

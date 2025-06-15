@@ -17,6 +17,7 @@ public class FsaEngine
         { Constants.FssLevel5, FamilyRs },
         { Constants.FssLevel5P, FamilyRs },
         { Constants.FssLevel6, FamilyEtn },
+        { Constants.FssLevel61, FamilyEtn },
     };
 
     private static readonly Dictionary<string, List<string>> FamilyRank = new()

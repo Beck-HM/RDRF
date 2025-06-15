@@ -1371,14 +1371,18 @@
                                                           BorderThickness="0">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
-                                                        <TextBlock Text="{Binding Text}"
-                                                                   Foreground="{Binding Foreground}"
-                                                                   Background="{Binding Background}"
-                                                                   FontFamily="Consolas"
-                                                                   FontSize="{Binding FontSize}"
-                                                                   FontWeight="{Binding FontWeight}"
-                                                                   Padding="12,1"
-                                                                   TextWrapping="NoWrap" />
+                                                        <Border BorderBrush="#2A2A3C"
+                                                                BorderThickness="0,0,0,1"
+                                                                Padding="0">
+                                                            <TextBlock Text="{Binding Text}"
+                                                                       Foreground="{Binding Foreground}"
+                                                                       Background="{Binding Background}"
+                                                                       FontFamily="Consolas"
+                                                                       FontSize="{Binding FontSize}"
+                                                                       FontWeight="{Binding FontWeight}"
+                                                                       Padding="12,3"
+                                                                       TextWrapping="NoWrap" />
+                                                        </Border>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>

@@ -1,5 +1,6 @@
 using RDRF.Core;
 using RDRF.Core.Storage;
+using RDRF.Core.Versioning;
 using RDRF.Cli.Services;
 using Spectre.Console;
 using System.CommandLine;
@@ -16,6 +17,7 @@ public class BackupCommand : Command
         var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (omit for interactive prompt)" };
         var sizeOpt = new Option<int?>("-size") { Description = "Fragment size in MB (default: 1)" };
         var nameOpt = new Option<string?>("-name") { Description = "Custom name for the backup (optional)" };
+        var nextOpt = new Option<bool>("-next", "--next") { Description = "Enable versioning (creates v1, supports 'rdrf next' for increments)" };
         var fss1 = new Option<bool>("-fss1", new[] { "--fss1" }) { Description = "FSS1 strategy - single-dash for primary, double-dash for auxiliary" };
         var fss2 = new Option<bool>("-fss2", new[] { "--fss2" }) { Description = "FSS2 strategy - single-dash for primary, double-dash for auxiliary" };
         var fss2r = new Option<bool>("-fss2r", new[] { "--fss2r" }) { Description = "FSS2R strategy - single-dash for primary, double-dash for auxiliary" };
@@ -29,6 +31,7 @@ public class BackupCommand : Command
         Options.Add(passwordOpt);
         Options.Add(sizeOpt);
         Options.Add(nameOpt);
+        Add(nextOpt);
         Add(fss1); Add(fss2); Add(fss2r);
         Add(fss3); Add(fss5); Add(fss5p);
         Add(fsaOpt);
@@ -40,6 +43,7 @@ public class BackupCommand : Command
             var pwd = parseResult.GetValue(passwordOpt);
             var sizeMb = parseResult.GetValue(sizeOpt);
             var customName = parseResult.GetValue(nameOpt);
+            bool enableNext = parseResult.GetValue(nextOpt);
             bool fsaMode = parseResult.GetValue(fsaOpt);
 
             var flags = new[]
@@ -85,10 +89,29 @@ public class BackupCommand : Command
             }
 
             string storagePath = outputDir?.FullName ?? Path.Combine(AppContext.BaseDirectory, "backup");
-            var storage = new LocalFileAdapter(storagePath);
-
             int fragmentSize = sizeMb.HasValue ? sizeMb.Value * 1024 * 1024 : 0;
 
+            if (enableNext)
+            {
+                if (source is not FileInfo)
+                {
+                    Console.Error.WriteLine("Error: -next is only supported for single-file backups");
+                    return 1;
+                }
+
+                var nf = (FileInfo)source;
+                string fp = "";
+                await ProgressReporter.Run($"Backing up {nf.Name}", async prog =>
+                {
+                    fp = await VersionedBackup.BackupAsync(nf.FullName, storagePath, password,
+                        "Initial backup", strategy, fragmentSize, customName, auxiliary, prog);
+                });
+                Console.WriteLine($"Fingerprint: {fp}");
+                Console.WriteLine($"Strategy: {strategy} (versioned)");
+                return 0;
+            }
+
+            var storage = new LocalFileAdapter(storagePath);
             using var engine = new RDRFEngine(password, storage);
             int count = 0;
             string? firstFp = null;
