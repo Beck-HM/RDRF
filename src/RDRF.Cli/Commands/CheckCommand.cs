@@ -43,7 +43,6 @@ public class CheckCommand : Command
 
             while (true)
             {
-                Console.Clear();
                 AnsiConsole.Write(new Rule("[bold yellow]RDRF Version History[/]") { Style = Style.Parse("dim") });
                 Console.WriteLine();
 
@@ -64,7 +63,7 @@ public class CheckCommand : Command
                 Console.WriteLine();
 
                 int? choice = AnsiConsole.Prompt(
-                    new TextPrompt<int>("Enter version number to view diff [grey](0 to exit)[/]:")
+                    new TextPrompt<int>("Enter version [grey](1-[/]" + records.Max(r => r.Version) + "[grey], 0 to exit)[/]:")
                         .PromptStyle("cyan")
                         .ValidationErrorMessage("Invalid version number")
                         .Validate(input => input >= 0 && input <= records.Max(r => r.Version)
@@ -80,7 +79,6 @@ public class CheckCommand : Command
                 }
                 else
                 {
-                    Console.Clear();
                     AnsiConsole.Write(new Rule($"[bold]v{selected.Version}: {selected.UserMessage}[/]") { Style = Style.Parse("dim") });
                     Console.WriteLine();
 
