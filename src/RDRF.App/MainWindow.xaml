@@ -537,24 +537,22 @@
                                             </StackPanel>
                                         </Border>
 
-                                        <!-- FSS-6+ -->
-                                        <Border x:Name="StrategyFSS6P"
+                                        <!-- FSS-6.1 -->
+                                        <Border x:Name="StrategyFSS61"
                                                 Style="{StaticResource StrategyCardStyle}"
                                                 Margin="8,8,0,0"
-                                                IsEnabled="False"
-                                                Opacity="0.3"
-                                                MouseLeftButtonDown="StrategyFSS6P_Click">
+                                                MouseLeftButtonDown="StrategyFSS61_Click">
                                             <StackPanel>
-                                                <TextBlock Text="FSS-6+"
+                                                <TextBlock Text="FSS-6.1"
                                                            FontSize="11"
                                                            FontWeight="Bold"
                                                            Foreground="{StaticResource TextSecondaryBrush}"
                                                            Margin="0,0,0,4" />
-                                                <TextBlock Text="ETN + ECCR"
+                                                <TextBlock Text="ETN + LT Repair"
                                                            FontSize="13"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            Margin="0,0,0,2" />
-                                                <TextBlock Text="~35% overhead"
+                                                <TextBlock Text="~5% overhead"
                                                            FontSize="11"
                                                            Foreground="{StaticResource TextSecondaryBrush}" />
                                             </StackPanel>

@@ -64,5 +64,6 @@ public static class Constants
         { FssLevel5, 2.00 },
         { FssLevel5P, 40.0 },
         { FssLevel6, 0.00008 },
+        { FssLevel61, 0.05 },
     };
 }

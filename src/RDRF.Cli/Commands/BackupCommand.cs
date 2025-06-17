@@ -24,6 +24,7 @@ public class BackupCommand : Command
         var fss3 = new Option<bool>("-fss3", new[] { "--fss3" }) { Description = "FSS3 strategy - single-dash for primary, double-dash for auxiliary" };
         var fss5 = new Option<bool>("-fss5", new[] { "--fss5" }) { Description = "FSS5 strategy - single-dash for primary, double-dash for auxiliary" };
         var fss5p = new Option<bool>("-fss5+", new[] { "--fss5+" }) { Description = "FSS5+ strategy - single-dash for primary, double-dash for auxiliary" };
+        var fss61 = new Option<bool>("-fss6.1", new[] { "--fss6.1" }) { Description = "FSS6.1 strategy - ETN + LT fountain code repair" };
         var fsaOpt = new Option<bool>("-fsa") { Description = "Enable multi-strategy FSA fusion mode (used with multiple --fss options)" };
 
         Arguments.Add(sourceArg);
@@ -31,9 +32,8 @@ public class BackupCommand : Command
         Options.Add(passwordOpt);
         Options.Add(sizeOpt);
         Options.Add(nameOpt);
-        Add(nextOpt);
         Add(fss1); Add(fss2); Add(fss2r);
-        Add(fss3); Add(fss5); Add(fss5p);
+        Add(fss3); Add(fss5); Add(fss5p); Add(fss61);
         Add(fsaOpt);
 
         SetAction(async (ParseResult parseResult) =>
@@ -54,6 +54,7 @@ public class BackupCommand : Command
                 (parseResult.GetValue(fss3), Constants.FssLevel3),
                 (parseResult.GetValue(fss5), Constants.FssLevel5),
                 (parseResult.GetValue(fss5p), Constants.FssLevel5P),
+                (parseResult.GetValue(fss61), Constants.FssLevel61),
             };
             var selected = flags.Where(x => x.Item1).Select(x => x.Item2).ToList();
 
