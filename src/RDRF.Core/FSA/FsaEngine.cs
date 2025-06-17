@@ -24,7 +24,7 @@ public class FsaEngine
     {
         { FamilyNeighbor, new List<string> { Constants.FssLevel1, Constants.FssLevel2, Constants.FssLevel2R } },
         { FamilyRs, new List<string> { Constants.FssLevel3, Constants.FssLevel5, Constants.FssLevel5P } },
-        { FamilyEtn, new List<string> { Constants.FssLevel6 } },
+        { FamilyEtn, new List<string> { Constants.FssLevel6, Constants.FssLevel61 } },
     };
 
     public FsaPlan Compute(string primary, List<string>? auxiliary = null)
@@ -82,7 +82,7 @@ public class FsaEngine
         {
             if (s == effective) continue;
             string fam = FamilyMap.GetValueOrDefault(s, FamilyEtn);
-            if (s == Constants.FssLevel6)
+            if (s == Constants.FssLevel6 || s == Constants.FssLevel61)
             {
                 encodeSteps.Add(new FsaStep { Step = "etn_inject", Strategy = Constants.FssLevel6, Family = FamilyEtn });
             }
@@ -94,7 +94,7 @@ public class FsaEngine
         plan.EncodeSteps = encodeSteps;
 
         var restore = new List<FsaStep>();
-        bool hasFss6 = deduped.Contains(Constants.FssLevel6);
+        bool hasFss6 = deduped.Contains(Constants.FssLevel6) || deduped.Contains(Constants.FssLevel61);
         if (hasFss6 && effective != Constants.FssLevel6)
         {
             restore.Add(new FsaStep { Step = "etn_strip", Strategy = Constants.FssLevel6, Family = FamilyEtn });

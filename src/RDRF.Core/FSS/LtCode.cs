@@ -14,7 +14,21 @@ public static class LtCode
         int blockCount = allBlocks.Length;
 
         var result = new List<byte[]>(symbolCount);
-        for (int si = 0; si < symbolCount; si++)
+
+        // Phase 1: guarantee at least one deg-1 symbol per block
+        int guaranteed = Math.Min(symbolCount / 2, blockCount);
+        var covered = new bool[blockCount];
+        for (int bi = 0; bi < guaranteed; bi++)
+        {
+            byte[] data = new byte[blockSize];
+            Buffer.BlockCopy(allBlocks[bi % blockCount], 0, data, 0, blockSize);
+            result.Add(data);
+            covered[bi % blockCount] = true;
+        }
+
+        // Phase 2: repair symbols for remaining (if any)
+        int remaining = symbolCount - result.Count;
+        for (int si = 0; si < remaining; si++)
         {
             int deg = SelectDegree(ref prng);
             if (deg > blockCount) deg = blockCount;
@@ -32,6 +46,18 @@ public static class LtCode
             result.Add(data);
         }
 
+        // If we still have uncovered blocks, add deg-1 for each
+        for (int bi = 0; bi < blockCount && result.Count < symbolCount; bi++)
+        {
+            if (!covered[bi])
+            {
+                byte[] data = new byte[blockSize];
+                Buffer.BlockCopy(allBlocks[bi], 0, data, 0, blockSize);
+                result.Add(data);
+                covered[bi] = true;
+            }
+        }
+
         return (result, seed);
     }
 
@@ -42,6 +68,7 @@ public static class LtCode
     {
         ulong prng = (ulong)seed;
 
+        int guaranteed = Math.Min(symbolCount / 2, blockCount);
         var symbolDeg = new int[symbolCount];
         var symbolIdx = new int[symbolCount][];
         var symbolData = new byte[symbolCount][];
@@ -49,15 +76,24 @@ public static class LtCode
         int dataOff = 0;
         for (int si = 0; si < symbolCount; si++)
         {
-            int deg = SelectDegree(ref prng);
-            if (deg > blockCount) deg = blockCount;
-            symbolDeg[si] = deg;
-
+            int deg;
             var indices = new HashSet<int>();
-            while (indices.Count < deg)
-                indices.Add(NextPseudo(ref prng) % blockCount);
-            symbolIdx[si] = indices.ToArray();
 
+            if (si < guaranteed)
+            {
+                deg = 1;
+                indices.Add(si % blockCount);
+            }
+            else
+            {
+                deg = SelectDegree(ref prng);
+                if (deg > blockCount) deg = blockCount;
+                while (indices.Count < deg)
+                    indices.Add(NextPseudo(ref prng) % blockCount);
+            }
+
+            symbolDeg[si] = deg;
+            symbolIdx[si] = indices.ToArray();
             symbolData[si] = new byte[blockSize];
             Buffer.BlockCopy(allSymbolData, dataOff, symbolData[si], 0, blockSize);
             dataOff += blockSize;
