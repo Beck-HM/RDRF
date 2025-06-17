@@ -87,7 +87,7 @@ public partial class MainWindow : Window
         _strategyBorders["FSS5"] = StrategyFSS5;
         _strategyBorders["FSS5P"] = StrategyFSS5P;
         _strategyBorders["FSS6"] = StrategyFSS6;
-        _strategyBorders["FSS6P"] = StrategyFSS6P;
+        _strategyBorders["FSS6.1"] = StrategyFSS61;
     }
 
     // ── Window Controls ──
@@ -208,7 +208,7 @@ public partial class MainWindow : Window
         _encryptVM.SelectedStrategy = strategy;
         foreach (var kvp in _strategyBorders)
         {
-            if (kvp.Key == "FSS6P") continue;
+            if (kvp.Key == "FSS6.1") continue;
             bool isSelected = kvp.Key == strategy;
             kvp.Value.Style = (Style)FindResource(isSelected ? "StrategyCardActiveStyle" : "StrategyCardStyle");
             var sp = (StackPanel)kvp.Value.Child;
@@ -223,7 +223,7 @@ public partial class MainWindow : Window
     {
         foreach (var kvp in _strategyBorders)
         {
-            if (kvp.Key == "FSS6P") continue;
+            if (kvp.Key == "FSS6.1") continue;
 
             bool isFss6 = kvp.Key == "FSS6";
             bool isPrimary = kvp.Key == primary;
@@ -254,7 +254,7 @@ public partial class MainWindow : Window
     private void StrategyFSS5_Click(object sender, MouseButtonEventArgs e) => SelectStrategy("FSS5");
     private void StrategyFSS5P_Click(object sender, MouseButtonEventArgs e) => SelectStrategy("FSS5P");
     private void StrategyFSS6_Click(object sender, MouseButtonEventArgs e) => SelectStrategy("FSS6");
-    private void StrategyFSS6P_Click(object sender, MouseButtonEventArgs e) { /* permanently disabled */ }
+    private void StrategyFSS61_Click(object sender, MouseButtonEventArgs e) => SelectStrategy("FSS6.1");
 
     // ── Encrypt Page (thin coordination) ──
 
