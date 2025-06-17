@@ -259,13 +259,13 @@ public class BackupOrchestrator : IDisposable
                     var allBlocks = new List<byte[]>();
                     foreach (var frag in fragments)
                     {
-                        byte[] stripped = Fss6Etn.StripEtnFieldsFromIndexJson(frag);
+                        var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
 
-                        for (int off = 0; off < stripped.Length; off += bs)
+                        for (int off = 0; off < rawData.Length; off += bs)
                         {
-                            int len = Math.Min(bs, stripped.Length - off);
+                            int len = Math.Min(bs, rawData.Length - off);
                             byte[] block = new byte[bs];
-                            Buffer.BlockCopy(stripped, off, block, 0, len);
+                            Buffer.BlockCopy(rawData, off, block, 0, len);
                             allBlocks.Add(block);
                         }
                     }

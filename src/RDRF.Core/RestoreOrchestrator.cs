@@ -429,10 +429,14 @@ public class RestoreOrchestrator : IDisposable
             int bs = rcFile.RepairBlockSize ?? EtnBlockMap.GetBlockSize(1024 * 1024, "FSS6.1");
             var sorted = decryptedFragments.OrderBy(k => k.Key).ToList();
 
-            // Build all blocks array from decrypted fragments (with trailers still attached)
             int totalBlocks = 0;
+            var rawLengths = new List<int>();
             foreach (var kvp in sorted)
-                totalBlocks += (kvp.Value.Length + bs - 1) / bs;
+            {
+                int rawLen = EtnTrailer.Parse(kvp.Value).data.Length;
+                rawLengths.Add(rawLen);
+                totalBlocks += (rawLen + bs - 1) / bs;
+            }
 
             var allBlocks = new byte[totalBlocks][];
             var isBad = new bool[totalBlocks];
@@ -441,17 +445,15 @@ public class RestoreOrchestrator : IDisposable
             for (int fi = 0; fi < sorted.Count; fi++)
             {
                 byte[] frag = sorted[fi].Value;
-                int cvIdx = cvResult.CorruptedFragments.IndexOf(fi);
-                List<int>? badBlocks = cvIdx >= 0 && cvResult.CorruptedFragmentBlocks != null
-                    && cvIdx < cvResult.CorruptedFragmentBlocks.Count
-                    ? cvResult.CorruptedFragmentBlocks[cvIdx]
-                    : null;
+                var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
 
-                for (int off = 0; off < frag.Length; off += bs)
+                cvResult.CorruptedFragmentBlocks.TryGetValue(fi, out var badBlocks);
+
+                for (int off = 0; off < rawData.Length; off += bs)
                 {
-                    int len = Math.Min(bs, frag.Length - off);
+                    int len = Math.Min(bs, rawData.Length - off);
                     allBlocks[globalIdx] = new byte[bs];
-                    Buffer.BlockCopy(frag, off, allBlocks[globalIdx], 0, len);
+                    Buffer.BlockCopy(rawData, off, allBlocks[globalIdx], 0, len);
                     if (badBlocks != null && badBlocks.Contains(globalIdx))
                         isBad[globalIdx] = true;
                     globalIdx++;
@@ -478,23 +480,20 @@ public class RestoreOrchestrator : IDisposable
             for (int fi = 0; fi < sorted.Count; fi++)
             {
                 byte[] frag = sorted[fi].Value;
-                int fragBlockCount = (frag.Length + bs - 1) / bs;
-                List<int>? badBlocks = null;
-                int cvIdx = cvResult.CorruptedFragments.IndexOf(fi);
-                if (cvIdx >= 0 && cvResult.CorruptedFragmentBlocks != null && cvIdx < cvResult.CorruptedFragmentBlocks.Count)
-                    badBlocks = cvResult.CorruptedFragmentBlocks[cvIdx];
+                int rawLen = rawLengths[fi];
+                cvResult.CorruptedFragmentBlocks.TryGetValue(fi, out var badBlocks);
 
                 if (badBlocks == null)
                 {
-                    globalIdx += (frag.Length + bs - 1) / bs;
+                    globalIdx += (rawLen + bs - 1) / bs;
                     continue;
                 }
 
-                for (int off = 0; off < frag.Length; off += bs)
+                for (int off = 0; off < rawLen; off += bs)
                 {
                     if (badBlocks.Contains(globalIdx))
                     {
-                        int len = Math.Min(bs, frag.Length - off);
+                        int len = Math.Min(bs, rawLen - off);
                         Buffer.BlockCopy(allBlocks[globalIdx], 0, frag, off, len);
                     }
                     globalIdx++;
