@@ -50,23 +50,49 @@ public class RestoreCommand : Command
             var storage = new LocalFileAdapter(storageDir);
             using var engine = new RDRFEngine(password, storage);
 
-            (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
-            var index = IndexManager.DeserializeIndex(cbor);
-            string prefix = index.CustomName ?? index.FileFingerprint;
-
-            bool success = false;
-            await ProgressReporter.Run($"Restoring {index.OriginalName}", async progress =>
+            try
             {
-                success = await engine.RestoreFileAsync(index.FileFingerprint, output.FullName, filePrefix: prefix, progress: progress);
-            });
+                (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
+                var index = IndexManager.DeserializeIndex(cbor);
+                string prefix = index.CustomName ?? index.FileFingerprint;
 
-            if (success)
-            {
-                Console.WriteLine($"Restored to: {output.FullName}");
-                return 0;
+                bool success = false;
+                try
+                {
+                    await ProgressReporter.Run($"Restoring {index.OriginalName}", async progress =>
+                    {
+                        success = await engine.RestoreFileAsync(index.FileFingerprint, output.FullName, filePrefix: prefix, progress: progress);
+                    });
+                }
+                catch (System.Security.Cryptography.AuthenticationTagMismatchException)
+                {
+                    Console.Error.WriteLine("Error: wrong password or corrupt index file");
+                    return 1;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Error: {ex.Message}");
+                    return 1;
+                }
+
+                if (success)
+                {
+                    Console.WriteLine($"Restored to: {output.FullName}");
+                    return 0;
+                }
+                Console.Error.WriteLine("Error: restore failed (data may be corrupted)");
+                return 1;
             }
-            Console.Error.WriteLine("Error: restore failed");
-            return 1;
+            catch (System.Security.Cryptography.AuthenticationTagMismatchException)
+            {
+                Console.Error.WriteLine("Error: wrong password or corrupt index file");
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error: {ex.Message}");
+                return 1;
+            }
         });
     }
 }
