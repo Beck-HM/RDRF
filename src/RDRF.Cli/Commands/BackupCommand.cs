@@ -34,7 +34,7 @@ public class BackupCommand : Command
         Options.Add(nameOpt);
         Add(fss1); Add(fss2); Add(fss2r);
         Add(fss3); Add(fss5); Add(fss5p); Add(fss61);
-        Add(fsaOpt);
+        Add(fsaOpt); Add(nextOpt);
 
         SetAction(async (ParseResult parseResult) =>
         {

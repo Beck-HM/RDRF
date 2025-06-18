@@ -20,7 +20,7 @@ long fileSize = new FileInfo(testFile).Length;
 byte[] originalHash = SHA256.HashData(File.ReadAllBytes(testFile));
 int fragSize = 256 * 1024;
 
-string[] strategies = ["FSS1", "FSS2", "FSS2R", "FSS3", "FSS5", "FSS5+", "FSS6"];
+string[] strategies = ["FSS1", "FSS2", "FSS2R", "FSS3", "FSS5", "FSS5+", "FSS6", "FSS6.1"];
 string testsDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "tests", "tests"));
 string resultDir = Path.Combine(testsDir, $"FssRecovery_{Guid.NewGuid():N}");
 Directory.CreateDirectory(resultDir);
@@ -96,7 +96,7 @@ foreach (string strategy in strategies)
 
     // ── Incremental loss ──
     var incResults = new List<(double lossPct, int trial, bool ok)>();
-    int[] lossPcts = strategy is "FSS3" or "FSS6"
+    int[] lossPcts = strategy is "FSS3" or "FSS6" or "FSS6.1"
         ? [5, 10, 15, 20, 30]
         : [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90];
 
@@ -267,6 +267,35 @@ foreach (string strategy in strategies)
         customResults.Add(("keep_one", (double)sDel / totalFrags * 100, sR && sSha));
     }
 
+    // FSS6.1: block corruption test (ETN detects, LT repairs)
+    if (strategy == "FSS6.1")
+    {
+        var bcDir = Path.Combine(testRoot, "custom_block_corrupt");
+        Directory.CreateDirectory(bcDir);
+        WriteTrialDir(bcDir, null);
+
+        var (embeddedIdx, fragData, bcSalt) = RDRFEngine.DecryptFragment(
+            allFragBytes[0], aesKey);
+        if (embeddedIdx != null)
+        {
+            int corruptOff = Math.Min(4096, Math.Max(1, fragData.Length - 256));
+            RandomNumberGenerator.Fill(fragData.AsSpan(corruptOff, 128));
+
+            byte[] reEnc = FragmentFileHeader.EncryptWithEmbeddedIndex(
+                fragData, embeddedIdx, aesKey, bcSalt);
+            File.WriteAllBytes(Path.Combine(bcDir, $"{prefix}_0.rdrf"), reEnc);
+
+            var bcTs = new LocalFileAdapter(bcDir);
+            sw.Restart();
+            bool bcR;
+            using (var r = new RestoreOrchestrator(rcClone(), bcTs))
+                bcR = r.RestoreFileAsync(fingerprint, Path.Combine(bcDir, "restored.bin")).GetAwaiter().GetResult();
+            bool bcSha = bcR && VerifySha(Path.Combine(bcDir, "restored.bin"), originalHash);
+            csv.Add($"\"{strategy}\",custom_block_corrupt,0,0,{totalFrags},0,{bcR},{bcSha},{sw.Elapsed.TotalMilliseconds:F0},\"block_corrupted_repaired\"");
+            customResults.Add(("block_corrupt", 0, bcR && bcSha));
+        }
+    }
+
     // ── Targeted tests ──
     var targetResults = new List<(string testName, double lossPct, bool ok)>();
 
@@ -373,8 +402,8 @@ foreach (string strategy in strategies)
         targetResults.Add(("step_pattern_kill", lp3, ro));
     }
 
-    // FSS6: delete 1 fragment (should fail)
-    if (strategy == "FSS6")
+    // FSS6/6.1: delete 1 fragment (should fail)
+    if (strategy is "FSS6" or "FSS6.1")
     {
         var tDir = Path.Combine(testRoot, "target_one_lost");
         Directory.CreateDirectory(tDir);
@@ -409,7 +438,7 @@ foreach (string strategy in strategies)
         "FSS3" => 100.0 / totalFrags,
         "FSS5" => 66.0,
         "FSS5+" => 95.0,
-        "FSS6" => 0.0,
+        "FSS6" or "FSS6.1" => 0.0,
         _ => 0
     };
 
@@ -460,6 +489,7 @@ foreach (var row in summaryRows)
         "FSS5" => "3-way cross",
         "FSS5+" => "RS seed (1 recovers all)",
         "FSS6" => "validation only",
+        "FSS6.1" => "ETN + LT repair",
         _ => ""
     };
 

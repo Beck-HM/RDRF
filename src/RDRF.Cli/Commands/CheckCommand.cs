@@ -41,27 +41,31 @@ public class CheckCommand : Command
                 return 1;
             }
 
+            bool interactive = !Console.IsInputRedirected;
+
+            AnsiConsole.Write(new Rule("[bold yellow]RDRF Version History[/]") { Style = Style.Parse("dim") });
+            Console.WriteLine();
+
+            var table = new Table();
+            table.Border(TableBorder.Rounded);
+            table.AddColumn(new TableColumn("#").RightAligned());
+            table.AddColumn("Date");
+            table.AddColumn("Message");
+            table.AddColumn("Changes");
+
+            foreach (var r in records)
+            {
+                string date = DateTimeOffset.FromUnixTimeSeconds(r.CreatedAt).LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+                string changes = string.IsNullOrEmpty(r.SystemDiff) ? "(initial)" : $"+/- lines";
+                table.AddRow($"v{r.Version}", date, r.UserMessage, changes);
+            }
+            AnsiConsole.Write(table);
+            Console.WriteLine();
+
+            if (!interactive) return 0;
+
             while (true)
             {
-                AnsiConsole.Write(new Rule("[bold yellow]RDRF Version History[/]") { Style = Style.Parse("dim") });
-                Console.WriteLine();
-
-                var table = new Table();
-                table.Border(TableBorder.Rounded);
-                table.AddColumn(new TableColumn("#").RightAligned());
-                table.AddColumn("Date");
-                table.AddColumn("Message");
-                table.AddColumn("Changes");
-
-                foreach (var r in records)
-                {
-                    string date = DateTimeOffset.FromUnixTimeSeconds(r.CreatedAt).LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-                    string changes = string.IsNullOrEmpty(r.SystemDiff) ? "(initial)" : $"+/- lines";
-                    table.AddRow($"v{r.Version}", date, r.UserMessage, changes);
-                }
-                AnsiConsole.Write(table);
-                Console.WriteLine();
-
                 int? choice = AnsiConsole.Prompt(
                     new TextPrompt<int>("Enter version [grey](1-[/]" + records.Max(r => r.Version) + "[grey], 0 to exit)[/]:")
                         .PromptStyle("cyan")
