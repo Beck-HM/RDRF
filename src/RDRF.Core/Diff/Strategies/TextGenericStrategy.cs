@@ -6,8 +6,35 @@ public class TextGenericStrategy : IDiffStrategy
 {
     public string Name => "text_generic";
 
+    private static readonly HashSet<string> _textExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Code
+        ".cs", ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".cpp", ".h", ".hpp",
+        ".c", ".rs", ".go", ".rb", ".php", ".swift", ".kt", ".scala", ".dart",
+        ".lua", ".r", ".m", ".mm", ".pl", ".pm", ".sh", ".bash", ".zsh", ".ps1",
+        ".fs", ".fsx", ".clj", ".groovy", ".sql", ".rkt", ".sml",
+        // Web
+        ".html", ".htm", ".css", ".scss", ".less", ".vue", ".svelte",
+        // Config / data
+        ".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf",
+        ".gitignore", ".dockerignore", ".editorconfig", ".env",
+        // Doc
+        ".md", ".markdown", ".txt", ".rst", ".tex", ".bib",
+        // Data
+        ".csv", ".tsv", ".log",
+        // Build
+        ".cmake", ".makefile", ".gradle", ".sln", ".csproj", ".fsproj",
+    };
+
     public double MatchScore(string? fileName, ReadOnlySpan<byte> sample)
     {
+        if (!string.IsNullOrEmpty(fileName))
+        {
+            string ext = Path.GetExtension(fileName);
+            if (!string.IsNullOrEmpty(ext) && _textExtensions.Contains(ext))
+                return 1.0;
+        }
+
         if (sample.Length == 0) return 0.9;
 
         bool hasNull = false;
