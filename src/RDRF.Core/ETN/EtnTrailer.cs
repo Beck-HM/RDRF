@@ -23,7 +23,7 @@ public static class EtnTrailer
         if (fragmentData.Length < 12)
             return (fragmentData, Array.Empty<byte>(), 0, Array.Empty<byte>(), 0, Array.Empty<byte>(), 0);
         int trailerSize = BitConverter.ToInt32(fragmentData, fragmentData.Length - 4);
-        if (trailerSize <= 0 || trailerSize > fragmentData.Length)
+        if (trailerSize <= 0 || trailerSize > fragmentData.Length || trailerSize < 4)
             return (fragmentData, Array.Empty<byte>(), 0, Array.Empty<byte>(), 0, Array.Empty<byte>(), 0);
         int trailerStart = fragmentData.Length - trailerSize;
         if (trailerStart < 0)

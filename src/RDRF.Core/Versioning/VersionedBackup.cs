@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using RDRF.Core.Diff;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Core.Storage;
@@ -87,7 +88,7 @@ public static class VersionedBackup
 
         byte[] oldData = ReadDecryptedOriginal(storage, prevFingerprint, password);
         byte[] newData = await File.ReadAllBytesAsync(filePath, ct).ConfigureAwait(false);
-        var diffResult = DiffEngine.ComputeDiff(oldData, newData);
+        var diffResult = new DiffEngine().ComputeDiff(oldData, newData);
 
         string actualFingerprint;
         using (var orchestrator = new BackupOrchestrator((byte[])password.Clone(), (byte[])salt.Clone(), storage))

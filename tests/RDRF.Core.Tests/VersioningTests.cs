@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using RDRF.Core.Diff;
 using Xunit;
 
 namespace RDRF.Core.Tests;
@@ -124,7 +125,7 @@ public class VersioningTests
         byte[] oldBytes = System.Text.Encoding.UTF8.GetBytes(oldText);
         byte[] newBytes = System.Text.Encoding.UTF8.GetBytes(newText);
 
-        var result = Versioning.DiffEngine.ComputeDiff(oldBytes, newBytes);
+        var result = new DiffEngine().ComputeDiff(oldBytes, newBytes);
 
         Assert.True(result.HumanDiff.Length > 0, "Diff should not be empty");
         Assert.True(result.AddedBytes > 0, $"Added bytes should be > 0, got: {result.AddedBytes}");
@@ -136,7 +137,7 @@ public class VersioningTests
     public void DiffEngine_IdenticalContent_ShouldBeMinimal()
     {
         byte[] data = System.Text.Encoding.UTF8.GetBytes("same content");
-        var result = Versioning.DiffEngine.ComputeDiff(data, data);
+        var result = new DiffEngine().ComputeDiff(data, data);
 
         Assert.Equal(0, result.AddedBytes);
         Assert.Equal(0, result.RemovedBytes);
@@ -148,7 +149,7 @@ public class VersioningTests
         byte[] oldBytes = new byte[] { 0x00, 0x01, 0x02, 0x03 };
         byte[] newBytes = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04 };
 
-        var result = Versioning.DiffEngine.ComputeDiff(oldBytes, newBytes);
+        var result = new DiffEngine().ComputeDiff(oldBytes, newBytes);
 
         Assert.True(result.HumanDiff.Contains("binary"), "Should mark as binary");
         Assert.True(result.HumanDiff.Contains("Old size"), "Should mention old size");

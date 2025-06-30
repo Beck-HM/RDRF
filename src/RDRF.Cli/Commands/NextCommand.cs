@@ -1,4 +1,5 @@
 using RDRF.Core;
+using RDRF.Core.Diff;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Core.Storage;
@@ -85,7 +86,7 @@ public class NextCommand : Command
             // Show diff summary
             var oldBytes = ReadDecryptedOriginal(storage, oldIndex, aesKey);
             var newBytes = await File.ReadAllBytesAsync(source.FullName);
-            var diffResult = DiffEngine.ComputeDiff(oldBytes, newBytes, oldIndex.OriginalName);
+            var diffResult = new RDRF.Core.Diff.DiffEngine().ComputeDiff(oldBytes, newBytes, oldIndex.OriginalName);
 
             if (diffResult.IsBinary)
                 AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} → {newBytes.Length} bytes");
