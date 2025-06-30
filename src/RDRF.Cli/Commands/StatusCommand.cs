@@ -14,7 +14,7 @@ public class StatusCommand : Command
     public StatusCommand() : base("status", "Show per-fragment status and integrity for a backup")
     {
         var indexArg = new Argument<FileInfo>("indexFile") { Description = "Path to the .indrdrf index file" };
-        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (omit for interactive prompt)" };
+        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (INSECURE: visible in process list; omit for secure prompt)" };
 
         Arguments.Add(indexArg);
         Options.Add(passwordOpt);

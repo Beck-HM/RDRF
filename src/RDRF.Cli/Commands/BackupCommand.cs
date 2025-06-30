@@ -4,6 +4,7 @@ using RDRF.Core.Versioning;
 using RDRF.Cli.Services;
 using Spectre.Console;
 using System.CommandLine;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace RDRF.Cli.Commands;
@@ -14,7 +15,7 @@ public class BackupCommand : Command
     {
         var sourceArg = new Argument<FileSystemInfo>("source") { Description = "File or directory path to backup" };
         var outputOpt = new Option<DirectoryInfo?>("-o") { Description = "Storage directory (default: ./backup/ when omitted)" };
-        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (omit for interactive prompt)" };
+        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (INSECURE: visible in process list; omit for secure prompt)" };
         var sizeOpt = new Option<int?>("-size") { Description = "Fragment size in MB (default: 1)" };
         var nameOpt = new Option<string?>("-name") { Description = "Custom name for the backup (optional)" };
         var nextOpt = new Option<bool>("-next", "--next") { Description = "Enable versioning (creates v1, supports 'rdrf next' for increments)" };
@@ -109,53 +110,58 @@ public class BackupCommand : Command
                 });
                 Console.WriteLine($"Fingerprint: {fp}");
                 Console.WriteLine($"Strategy: {strategy} (versioned)");
+                CryptographicOperations.ZeroMemory(password);
                 return 0;
             }
 
             var storage = new LocalFileAdapter(storagePath);
-            using var engine = new RDRFEngine(password, storage);
-            int count = 0;
-            string? firstFp = null;
-
-            if (source is FileInfo file)
+            using (var engine = new RDRFEngine(password, storage))
             {
-                await ProgressReporter.Run($"Backing up {file.Name}", async progress =>
+                int count = 0;
+                string? firstFp = null;
+
+                if (source is FileInfo file)
                 {
-                    firstFp = await engine.BackupFileAsync(file.FullName, strategy,
-                        fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliary, progress: progress);
-                });
-                count = 1;
-            }
-            else if (source is DirectoryInfo dir)
-            {
-                var files = dir.EnumerateFiles("*", SearchOption.AllDirectories).ToList();
-                await AnsiConsole.Progress()
-                    .Columns(new ProgressColumn[]
+                    await ProgressReporter.Run($"Backing up {file.Name}", async progress =>
                     {
-                        new TaskDescriptionColumn(),
-                        new ProgressBarColumn(),
-                        new PercentageColumn(),
-                        new ElapsedTimeColumn(),
-                    })
-                    .StartAsync(async ctx =>
-                    {
-                        var task = ctx.AddTask($"Backing up {files.Count} files");
-                        task.MaxValue = files.Count;
-                        foreach (var f in files)
-                        {
-                            var fp = await engine.BackupFileAsync(f.FullName, strategy,
-                                fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliary);
-                            firstFp ??= fp;
-                            count++;
-                            task.Value = count;
-                            task.Description = $"{f.Name} ({count}/{files.Count})";
-                        }
+                        firstFp = await engine.BackupFileAsync(file.FullName, strategy,
+                            fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliary, progress: progress);
                     });
+                    count = 1;
+                }
+                else if (source is DirectoryInfo dir)
+                {
+                    var files = dir.EnumerateFiles("*", SearchOption.AllDirectories).ToList();
+                    await AnsiConsole.Progress()
+                        .Columns(new ProgressColumn[]
+                        {
+                            new TaskDescriptionColumn(),
+                            new ProgressBarColumn(),
+                            new PercentageColumn(),
+                            new ElapsedTimeColumn(),
+                        })
+                        .StartAsync(async ctx =>
+                        {
+                            var task = ctx.AddTask($"Backing up {files.Count} files");
+                            task.MaxValue = files.Count;
+                            foreach (var f in files)
+                            {
+                                var fp = await engine.BackupFileAsync(f.FullName, strategy,
+                                    fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliary);
+                                firstFp ??= fp;
+                                count++;
+                                task.Value = count;
+                                task.Description = $"{f.Name} ({count}/{files.Count})";
+                            }
+                        });
+                }
+
+                Console.WriteLine($"Fingerprint: {firstFp}");
+                Console.WriteLine($"Strategy: {strategy}");
+                if (count > 1) Console.WriteLine($"Backed up {count} files");
             }
 
-            Console.WriteLine($"Fingerprint: {firstFp}");
-            Console.WriteLine($"Strategy: {strategy}");
-            if (count > 1) Console.WriteLine($"Backed up {count} files");
+            CryptographicOperations.ZeroMemory(password);
             return 0;
         });
     }

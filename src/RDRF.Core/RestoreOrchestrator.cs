@@ -308,6 +308,12 @@ public class RestoreOrchestrator : IDisposable
     }
 
     // ── Download and Decrypt Fragments ──
+    //
+    // This is the fallback path (path B) used when fragments are missing or
+    // corrupted. All fragments are loaded into memory simultaneously to allow
+    // FSS recovery and ETN cross-validation. For the common case where all
+    // fragments are intact, TryStreamingRestoreCoreAsync (path A) handles the
+    // restore with O(1) memory by streaming fragments one at a time.
 
     private Dictionary<int, byte[]> DownloadAndDecryptFragments(
         string filePrefix, int fragmentCount, string fileFingerprint,
