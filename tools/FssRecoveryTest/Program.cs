@@ -120,6 +120,108 @@ foreach (string strategy in strategies)
             File.WriteAllBytes(Path.Combine(dir, "rdrf_metadata.json"), File.ReadAllBytes(metaP));
     }
 
+    if (strategy == "FSS6.1")
+    {
+        // ── Block corruption incremental (FSS6.1 only) ──
+        // ── Block corruption incremental (FSS6.1 only) ──
+        const int blockSize = 256;
+        var decodedFrags = new (byte[] fragData, byte[] embeddedIdx, byte[]? salt)[totalFrags];
+        var cleanFrags = new byte[totalFrags][];
+        for (int i = 0; i < totalFrags; i++)
+        {
+            var (ei, fd, s) = RDRFEngine.DecryptFragment(allFragBytes[i], aesKey);
+            decodedFrags[i] = (fd ?? Array.Empty<byte>(), ei ?? Array.Empty<byte>(), s);
+            cleanFrags[i] = (byte[])decodedFrags[i].fragData.Clone();
+        }
+
+        int totalBlocks = decodedFrags.Sum(f => (f.fragData.Length + blockSize - 1) / blockSize);
+
+        var blockOffsets = new int[totalFrags + 1];
+        int cum = 0;
+        for (int i = 0; i < totalFrags; i++)
+        {
+            blockOffsets[i] = cum;
+            cum += decodedFrags[i].fragData.Length > 0
+                ? (decodedFrags[i].fragData.Length + blockSize - 1) / blockSize
+                : 0;
+        }
+        blockOffsets[totalFrags] = cum;
+
+        foreach (int lossPct in lossPcts)
+        {
+            int blocksToCorrupt = Math.Max(1, Math.Min(
+                (int)Math.Ceiling(totalBlocks * lossPct / 100.0), totalBlocks - 1));
+
+            for (int trial = 0; trial < 3; trial++)
+            {
+                var td = Path.Combine(testRoot, $"inc_{lossPct}_{trial}");
+                Directory.CreateDirectory(td);
+                File.WriteAllBytes(Path.Combine(td, $"{prefix}.indrdrf"), idxBytes);
+                string rcSrcP = Path.Combine(testRoot, $"{prefix}.rdrc");
+                if (File.Exists(rcSrcP))
+                    File.WriteAllBytes(Path.Combine(td, $"{prefix}.rdrc"), File.ReadAllBytes(rcSrcP));
+
+                // Restore clean data for this trial
+                for (int i = 0; i < totalFrags; i++)
+                    Buffer.BlockCopy(cleanFrags[i], 0, decodedFrags[i].fragData, 0, cleanFrags[i].Length);
+
+                var rand = new Random(42 + trial * 100 + lossPct);
+                var corrupted = new HashSet<int>();
+                while (corrupted.Count < blocksToCorrupt)
+                    corrupted.Add(rand.Next(totalBlocks));
+
+                var needsReEnc = new bool[totalFrags];
+                foreach (int bi in corrupted)
+                {
+                    int fi = 0;
+                    while (bi >= blockOffsets[fi + 1]) fi++;
+                    int localBlock = bi - blockOffsets[fi];
+                    int start = localBlock * blockSize;
+                    int end = Math.Min(start + blockSize, decodedFrags[fi].fragData.Length);
+                    if (start >= end) continue;
+                    int pos = start + rand.Next(end - start);
+                    decodedFrags[fi].fragData[pos] ^= (byte)rand.Next(1, 256);
+                    needsReEnc[fi] = true;
+                }
+
+                for (int i = 0; i < totalFrags; i++)
+                {
+                    if (needsReEnc[i])
+                    {
+                        byte[] reEnc = FragmentFileHeader.EncryptWithEmbeddedIndex(
+                            decodedFrags[i].fragData, decodedFrags[i].embeddedIdx,
+                            aesKey, decodedFrags[i].salt);
+                        File.WriteAllBytes(Path.Combine(td, $"{prefix}_{i}.rdrf"), reEnc);
+                    }
+                    else
+                    {
+                        File.WriteAllBytes(Path.Combine(td, $"{prefix}_{i}.rdrf"), allFragBytes[i]);
+                    }
+                }
+
+                var ts = new LocalFileAdapter(td);
+                string outPath = Path.Combine(td, "restored.bin");
+                sw.Restart();
+                bool r = false;
+                try
+                {
+                    using (var ro = new RestoreOrchestrator(rcClone(), ts))
+                        r = ro.RestoreFileAsync(fingerprint, outPath).GetAwaiter().GetResult();
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"  BlockCorrupt trial {lossPct}/{trial}: {ex.GetType().Name}: {ex.Message}");
+                }
+                double t = sw.Elapsed.TotalMilliseconds;
+                bool sha = r && File.Exists(outPath) && VerifySha(outPath, originalHash);
+                double actualPct = (double)blocksToCorrupt / totalBlocks * 100;
+                csv.Add($"\"{strategy}\",incremental,{actualPct:F1},{trial},{totalFrags},{blocksToCorrupt},{r},{sha},{t:F0},\"block_corrupt\"");
+                incResults.Add((actualPct, trial, r && sha));
+            }
+        }
+    }
+    else
+    {
         foreach (int lossPct in lossPcts)
         {
             int fragsToDelete = (int)Math.Ceiling(totalFrags * lossPct / 100.0);
@@ -155,12 +257,6 @@ foreach (string strategy in strategies)
             var trialStorage = new LocalFileAdapter(trialDir);
             string trialOut = Path.Combine(trialDir, "restored.bin");
 
-            if (lossPct == lossPcts[0] && trial == 0)
-            {
-                Console.WriteLine($"  Trial0 test: storage base={trialStorage.GetBasePath()}");
-                Console.WriteLine($"  Trial0 test: index exists={trialStorage.IndexExists(fingerprint)}");
-            }
-
             sw.Restart();
             bool recovered;
             using (var r = new RestoreOrchestrator(rcClone(), trialStorage))
@@ -175,6 +271,7 @@ foreach (string strategy in strategies)
             csv.Add($"\"{strategy}\",incremental,{actualPct:F1},{trial},{totalFrags},{fragsToDelete},{recovered},{shaOk},{t:F0},\"\"");
             incResults.Add((actualPct, trial, recovered && shaOk));
         }
+    }
     }
 
     // ── Greedy test (流程一): from i=0..N-1, delete each, recover, keep if ok, skip if fail ──

@@ -1,49 +1,31 @@
 using System.Text;
 
-namespace RDRF.Core.Versioning;
+namespace RDRF.Core.Diff.Strategies;
 
-public static class DiffEngine
+public class TextGenericStrategy : IDiffStrategy
 {
-    public static DiffResult ComputeDiff(byte[] oldData, byte[] newData, string? label = null)
+    public string Name => "text_generic";
+
+    public double MatchScore(string? fileName, ReadOnlySpan<byte> sample)
     {
-        long addedBytes = Math.Max(0, newData.LongLength - oldData.LongLength);
-        long removedBytes = Math.Max(0, oldData.LongLength - newData.LongLength);
+        if (sample.Length == 0) return 0.9;
 
-        bool oldIsText = IsLikelyText(oldData);
-        bool newIsText = IsLikelyText(newData);
-
-        if (oldIsText && newIsText)
-            return ComputeTextDiff(oldData, newData, label);
-
-        return ComputeBinaryDiff(oldData, newData, label, addedBytes, removedBytes);
-    }
-
-    private static DiffResult ComputeBinaryDiff(byte[] oldData, byte[] newData, string? label,
-        long addedBytes, long removedBytes)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine($"--- a/{label ?? "file"} (binary)");
-        sb.AppendLine($"+++ b/{label ?? "file"} (binary)");
-        if (oldData.LongLength == newData.LongLength)
-            sb.AppendLine($"File size unchanged: {oldData.Length} bytes");
-        else
-            sb.AppendLine($"Old size: {oldData.Length} bytes → New size: {newData.Length} bytes");
-
-        return new DiffResult
+        bool hasNull = false;
+        int nonText = 0;
+        int len = Math.Min(sample.Length, 1024);
+        for (int i = 0; i < len; i++)
         {
-            Label = label,
-            IsBinary = true,
-            AddedBytes = addedBytes,
-            RemovedBytes = removedBytes,
-            HumanDiff = sb.ToString(),
-            Lines = new List<DiffLine>
-            {
-                new DiffLine { Type = DiffLineType.Header, Text = $"(binary) {label ?? "file"}: {oldData.Length} → {newData.Length} bytes" }
-            }
-        };
+            byte b = sample[i];
+            if (b == 0) hasNull = true;
+            else if (b < 0x09 || (b > 0x0D && b < 0x20))
+                nonText++;
+        }
+
+        if (hasNull) return 0;
+        return nonText <= len / 10 ? 0.9 : 0;
     }
 
-    private static DiffResult ComputeTextDiff(byte[] oldData, byte[] newData, string? label)
+    public DiffResult ComputeDiff(byte[] oldData, byte[] newData, string? label)
     {
         var oldLines = SplitLines(oldData);
         var newLines = SplitLines(newData);
@@ -127,23 +109,13 @@ public static class DiffEngine
             RemovedLines = removedLines,
             ChangedLines = changedLines,
             Lines = lines,
-            HumanDiff = sb.ToString()
+            HumanDiff = sb.ToString(),
+            DetectedFileType = "text",
+            OriginalSize = oldData.LongLength,
+            ChangeRatio = oldData.Length > 0
+                ? (double)(Math.Abs(newData.Length - oldData.Length)) / oldData.Length
+                : 0,
         };
-    }
-
-    private static bool IsLikelyText(byte[] data)
-    {
-        if (data.Length == 0) return true;
-        int nonText = 0;
-        int sample = Math.Min(data.Length, 1024);
-        for (int i = 0; i < sample; i++)
-        {
-            byte b = data[i];
-            if (b == 0) return false;
-            if (b < 0x09 || (b > 0x0D && b < 0x20))
-                nonText++;
-        }
-        return nonText <= sample / 10;
     }
 
     private static List<string> SplitLines(byte[] data)

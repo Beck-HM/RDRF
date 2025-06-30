@@ -1,4 +1,4 @@
-namespace RDRF.Core.Versioning;
+namespace RDRF.Core.Diff;
 
 public enum DiffLineType
 {
@@ -25,4 +25,9 @@ public class DiffResult
     public int ChangedLines { get; set; }
     public List<DiffLine> Lines { get; set; } = new();
     public string HumanDiff { get; set; } = "";
+    public string? DetectedFileType { get; set; }
+    public long OriginalSize { get; set; }
+    public string? OriginalHash { get; set; }
+    public double ChangeRatio { get; set; }
+    public Dictionary<string, object>? Metadata { get; set; }
 }
