@@ -18,7 +18,7 @@ public class NextCommand : Command
         var sourceArg = new Argument<FileInfo>("source") { Description = "New or modified file path" };
         var messageOpt = new Option<string>("-m") { Description = "Commit message describing the change" };
         var storageOpt = new Option<DirectoryInfo?>("-storage") { Description = "Storage directory (default: ./backup/)" };
-        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (omit for interactive prompt)" };
+        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (INSECURE: visible in process list; omit for secure prompt)" };
 
         Arguments.Add(sourceArg);
         Options.Add(messageOpt);
@@ -89,7 +89,7 @@ public class NextCommand : Command
             var diffResult = new RDRF.Core.Diff.DiffEngine().ComputeDiff(oldBytes, newBytes, oldIndex.OriginalName);
 
             if (diffResult.IsBinary)
-                AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} â†’ {newBytes.Length} bytes");
+                AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} â†?{newBytes.Length} bytes");
             else
                 AnsiConsole.MarkupLine($"[yellow]Changes:[/] +{diffResult.AddedLines} -{diffResult.RemovedLines} lines (+{diffResult.AddedBytes} bytes)");
 

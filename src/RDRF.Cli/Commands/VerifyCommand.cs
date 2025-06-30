@@ -14,7 +14,7 @@ public class VerifyCommand : Command
     public VerifyCommand() : base("verify", "Run ETN cross-validation on FSS6 backup via index file")
     {
         var indexArg = new Argument<FileInfo>("indexFile") { Description = "Path to the .indrdrf index file" };
-        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (omit for interactive prompt)" };
+        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (INSECURE: visible in process list; omit for secure prompt)" };
 
         Arguments.Add(indexArg);
         Options.Add(passwordOpt);
@@ -53,7 +53,7 @@ public class VerifyCommand : Command
 
             if (index.Fss6FragentBlockMaps == null && index.Fss6RcBlockMap == null)
             {
-                Console.Error.WriteLine("Error: backup does not contain FSS6/ETN data â€” verification requires FSS6");
+                Console.Error.WriteLine("Error: backup does not contain FSS6/ETN data â€?verification requires FSS6");
                 return 1;
             }
 

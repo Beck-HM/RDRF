@@ -12,7 +12,7 @@ public class InfoCommand : Command
     public InfoCommand() : base("info", "Show backup metadata and settings from index file")
     {
         var indexArg = new Argument<FileInfo>("indexFile") { Description = "Path to the .indrdrf index file" };
-        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (omit for interactive prompt)" };
+        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (INSECURE: visible in process list; omit for secure prompt)" };
 
         Arguments.Add(indexArg);
         Options.Add(passwordOpt);

@@ -285,7 +285,7 @@ public class BackupOrchestrator : IDisposable
                     }
                 }
             }
-            catch { /* LT generation failed silently — proceed without repair data */ }
+            catch (Exception ex) { Debug.WriteLine($"FSS6.1 LT generation failed: {ex.Message}"); }
         }
 
         // Strip BM fields from the Index before embedding in fragment headers
