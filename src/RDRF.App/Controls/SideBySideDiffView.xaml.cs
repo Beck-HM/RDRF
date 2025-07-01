@@ -43,10 +43,10 @@ public partial class SideBySideDiffView : UserControl
 
         foreach (string rawLine in diff.Split('\n'))
         {
-            if (rawLine.StartsWith("--- ") || rawLine.StartsWith("+++ "))
+            if (string.IsNullOrEmpty(rawLine))
                 continue;
 
-            if (string.IsNullOrEmpty(rawLine))
+            if (rawLine.StartsWith("--- ") || rawLine.StartsWith("+++ "))
                 continue;
 
             if (rawLine.StartsWith("@@"))
@@ -67,27 +67,27 @@ public partial class SideBySideDiffView : UserControl
                     if (newNum > 0) newNum--;
                 }
 
-                result.Add(new SideBySideDiffLine(RDRF.Core.Diff.DiffLineType.Header,
+                result.Add(new SideBySideDiffLine(DiffLineType.Header,
                     rawLine, rawLine, oldNum, newNum));
             }
             else if (rawLine.StartsWith('-'))
             {
                 oldNum++;
-                result.Add(new SideBySideDiffLine(RDRF.Core.Diff.DiffLineType.Deletion,
-                    rawLine[1..], "", oldNum, 0));
+                result.Add(new SideBySideDiffLine(DiffLineType.Deletion,
+                    rawLine, "", oldNum, 0));
             }
             else if (rawLine.StartsWith('+'))
             {
                 newNum++;
-                result.Add(new SideBySideDiffLine(RDRF.Core.Diff.DiffLineType.Addition,
-                    "", rawLine[1..], 0, newNum));
+                result.Add(new SideBySideDiffLine(DiffLineType.Addition,
+                    "", rawLine, 0, newNum));
             }
             else if (rawLine.StartsWith(' '))
             {
                 oldNum++;
                 newNum++;
-                result.Add(new SideBySideDiffLine(RDRF.Core.Diff.DiffLineType.Context,
-                    rawLine[1..], rawLine[1..], oldNum, newNum));
+                result.Add(new SideBySideDiffLine(DiffLineType.Context,
+                    rawLine, rawLine, oldNum, newNum));
             }
         }
 
