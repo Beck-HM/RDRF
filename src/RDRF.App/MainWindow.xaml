@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:RDRF.App"
+        xmlns:controls="clr-namespace:RDRF.App.Controls"
         mc:Ignorable="d"
         Title="RDRF"
         Height="760"
@@ -1346,7 +1347,7 @@
                                 </StackPanel>
                             </Border>
 
-                            <!-- Diff Panel (placeholder) -->
+                            <!-- Diff Panel (side-by-side) -->
                             <Border x:Name="HistoryDiffCard"
                                     Style="{StaticResource CardStyle}"
                                     Margin="0,0,0,16"
@@ -1362,29 +1363,8 @@
                                             CornerRadius="6"
                                             Padding="0"
                                             MaxHeight="500">
-                                        <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                                      HorizontalScrollBarVisibility="Auto">
-                                            <ItemsControl ItemsSource="{Binding DiffLines}"
-                                                          Background="Transparent"
-                                                          BorderThickness="0">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Border BorderBrush="#2A2A3C"
-                                                                BorderThickness="0,0,0,1"
-                                                                Padding="0">
-                                                            <TextBlock Text="{Binding Text}"
-                                                                       Foreground="{Binding Foreground}"
-                                                                       Background="{Binding Background}"
-                                                                       FontFamily="Consolas"
-                                                                       FontSize="{Binding FontSize}"
-                                                                       FontWeight="{Binding FontWeight}"
-                                                                       Padding="12,3"
-                                                                       TextWrapping="NoWrap" />
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </ScrollViewer>
+                                        <controls:SideBySideDiffView
+                                            ItemsSource="{Binding SideBySideLines}" />
                                     </Border>
                                 </StackPanel>
                             </Border>

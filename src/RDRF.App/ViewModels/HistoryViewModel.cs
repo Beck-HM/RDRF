@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Windows;
+using RDRF.App.Controls;
 using RDRF.Core;
 using RDRF.Core.Versioning;
 using RDRF.Core.Encryption;
@@ -107,7 +108,7 @@ public class HistoryViewModel : ViewModelBase
     }
 
     public ObservableCollection<VersionHistoryItem> Versions { get; } = new();
-    public ObservableCollection<DiffLineItem> DiffLines { get; } = new();
+    public ObservableCollection<SideBySideDiffLine> SideBySideLines { get; } = new();
 
     public System.Windows.Input.ICommand BrowseBackupCommand { get; }
     public System.Windows.Input.ICommand BrowseIncrementalCommand { get; }
@@ -289,54 +290,17 @@ public class HistoryViewModel : ViewModelBase
 
     private void OnSelectedVersionChanged()
     {
-        DiffLines.Clear();
+        SideBySideLines.Clear();
         if (_selectedItem != null && !string.IsNullOrEmpty(_selectedItem.Diff))
         {
-            DiffContent = _selectedItem.Diff;
+            SideBySideLines.Clear();
             ShowDiffPanel = true;
-            foreach (var line in ParseDiff(_selectedItem.Diff))
-                DiffLines.Add(line);
+            foreach (var line in Controls.SideBySideDiffView.ParseSideBySide(_selectedItem.Diff))
+                SideBySideLines.Add(line);
         }
         else
         {
-            DiffContent = "";
             ShowDiffPanel = false;
         }
-    }
-
-    private static List<DiffLineItem> ParseDiff(string diff)
-    {
-        var lines = new List<DiffLineItem>();
-        foreach (string rawLine in diff.Split('\n'))
-        {
-            if (rawLine.StartsWith("--- ") || rawLine.StartsWith("+++ "))
-                continue;
-
-            if (string.IsNullOrEmpty(rawLine))
-                continue;
-
-            if (rawLine.StartsWith("@@"))
-            {
-                int start = rawLine.IndexOf("@@ ", StringComparison.Ordinal) + 3;
-                int end = rawLine.LastIndexOf(" @@", StringComparison.Ordinal);
-                string content = start > 2 && end > start
-                    ? rawLine[start..end]
-                    : rawLine.Trim('@', ' ');
-                lines.Add(new DiffLineItem(DiffLineType.Header, content));
-            }
-            else if (rawLine.StartsWith('-'))
-            {
-                lines.Add(new DiffLineItem(DiffLineType.Deletion, rawLine));
-            }
-            else if (rawLine.StartsWith('+'))
-            {
-                lines.Add(new DiffLineItem(DiffLineType.Addition, rawLine));
-            }
-            else if (rawLine.StartsWith(' '))
-            {
-                lines.Add(new DiffLineItem(DiffLineType.Context, rawLine[1..]));
-            }
-        }
-        return lines;
     }
 }
