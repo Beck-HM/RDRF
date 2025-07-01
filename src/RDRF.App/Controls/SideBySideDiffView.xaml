@@ -13,28 +13,34 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!-- Header row -->
-        <Border Grid.Row="0" Grid.Column="0" BorderBrush="#2A2A3C" BorderThickness="0,0,1,1"
-                Background="#1A1A2E" Padding="4,3 6,3">
-            <TextBlock Text="#" Foreground="#888" FontSize="11"
+        <!-- Headers -->
+        <Border Grid.Row="0" Grid.Column="0" BorderBrush="#2A2A3C" BorderThickness="0,0,0,1"
+                Background="#1A1A2E" Padding="4,3" MinWidth="36">
+            <TextBlock Text="Old" Foreground="#888" FontSize="11"
                        FontFamily="Consolas" HorizontalAlignment="Right" />
         </Border>
         <Border Grid.Row="0" Grid.Column="1" BorderBrush="#2A2A3C" BorderThickness="0,0,1,1"
                 Background="#1A1A2E" Padding="8,3">
-            <TextBlock Text="Old" Foreground="#AAA" FontSize="11"
+            <TextBlock Text="Old Content" Foreground="#888" FontSize="11"
                        FontFamily="Consolas" />
         </Border>
         <Border Grid.Row="0" Grid.Column="2" BorderBrush="#2A2A3C" BorderThickness="0,0,0,1"
+                Background="#1A1A2E" Padding="4,3" MinWidth="36">
+            <TextBlock Text="New" Foreground="#888" FontSize="11"
+                       FontFamily="Consolas" HorizontalAlignment="Right" />
+        </Border>
+        <Border Grid.Row="0" Grid.Column="3" BorderBrush="#2A2A3C" BorderThickness="0,0,0,1"
                 Background="#1A1A2E" Padding="8,3">
-            <TextBlock Text="New" Foreground="#AAA" FontSize="11"
+            <TextBlock Text="New Content" Foreground="#888" FontSize="11"
                        FontFamily="Consolas" />
         </Border>
 
         <!-- Body -->
-        <ScrollViewer x:Name="BodyScroll" Grid.Row="1" Grid.ColumnSpan="3"
+        <ScrollViewer x:Name="BodyScroll" Grid.Row="1" Grid.ColumnSpan="4"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Auto"
                       ScrollChanged="OnScrollChanged">
@@ -47,36 +53,49 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
 
-                                <!-- Line numbers -->
+                                <!-- Old line number -->
                                 <Border Grid.Column="0" Background="#16162A"
-                                        BorderBrush="#2A2A3C" BorderThickness="0,0,1,0"
-                                        Padding="4,2 8,2" MinWidth="80">
-                                    <TextBlock Text="{Binding LineNumbers}"
+                                        BorderBrush="#2A2A3C" BorderThickness="0,0,0,0"
+                                        Padding="4,2 4,2" MinWidth="36"
+                                        Visibility="{Binding HasOld, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{Binding OldNumberDisplay}"
                                                FontFamily="Consolas" FontSize="12"
-                                               Foreground="#666"
+                                               Foreground="{Binding NumberFg}"
                                                HorizontalAlignment="Right" />
                                 </Border>
 
-                                <!-- Old side -->
+                                <!-- Old content -->
                                 <Border Grid.Column="1"
-                                        Background="{Binding OldBackground}"
+                                        Background="{Binding OldBg}"
                                         BorderBrush="#2A2A3C" BorderThickness="0,0,1,0"
                                         Padding="8,2">
-                                    <TextBlock Text="{Binding OldLine}"
-                                               Foreground="{Binding OldForeground}"
+                                    <TextBlock Text="{Binding OldText}"
+                                               Foreground="{Binding OldFg}"
                                                FontFamily="Consolas" FontSize="12"
                                                TextWrapping="NoWrap" />
                                 </Border>
 
-                                <!-- New side -->
-                                <Border Grid.Column="2"
-                                        Background="{Binding NewBackground}"
+                                <!-- New line number -->
+                                <Border Grid.Column="2" Background="#16162A"
+                                        BorderBrush="#2A2A3C" BorderThickness="0,0,0,0"
+                                        Padding="4,2 4,2" MinWidth="36"
+                                        Visibility="{Binding HasNew, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{Binding NewNumberDisplay}"
+                                               FontFamily="Consolas" FontSize="12"
+                                               Foreground="{Binding NumberFg}"
+                                               HorizontalAlignment="Right" />
+                                </Border>
+
+                                <!-- New content -->
+                                <Border Grid.Column="3"
+                                        Background="{Binding NewBg}"
                                         Padding="8,2">
-                                    <TextBlock Text="{Binding NewLine}"
-                                               Foreground="{Binding NewForeground}"
+                                    <TextBlock Text="{Binding NewText}"
+                                               Foreground="{Binding NewFg}"
                                                FontFamily="Consolas" FontSize="12"
                                                TextWrapping="NoWrap" />
                                 </Border>

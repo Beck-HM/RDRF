@@ -6,62 +6,46 @@ namespace RDRF.App.ViewModels;
 public class SideBySideDiffLine
 {
     public DiffLineType Type { get; }
-    public string OldLine { get; }
-    public string NewLine { get; }
+    public string OldText { get; }
+    public string NewText { get; }
     public int OldLineNumber { get; }
     public int NewLineNumber { get; }
-    public bool IsOldLine => !string.IsNullOrEmpty(OldLine);
-    public bool IsNewLine => !string.IsNullOrEmpty(NewLine);
-    public string LineNumbers { get; }
+    public string OldNumberDisplay { get; }
+    public string NewNumberDisplay { get; }
+    public bool HasOld => OldLineNumber > 0;
+    public bool HasNew => NewLineNumber > 0;
 
-    public SolidColorBrush OldBackground { get; }
-    public SolidColorBrush NewBackground { get; }
-    public SolidColorBrush OldForeground { get; }
-    public SolidColorBrush NewForeground { get; }
+    public SolidColorBrush OldBg { get; }
+    public SolidColorBrush NewBg { get; }
+    public SolidColorBrush OldFg { get; }
+    public SolidColorBrush NewFg { get; }
+    public SolidColorBrush NumberFg { get; }
 
     private static readonly SolidColorBrush Transparent = new(Color.FromArgb(0, 0, 0, 0));
-    private static readonly SolidColorBrush DeletionBg = new(Color.FromArgb(0x18, 0xFF, 0x55, 0x55));
-    private static readonly SolidColorBrush AdditionBg = new(Color.FromArgb(0x18, 0x50, 0xFA, 0x7B));
-    private static readonly SolidColorBrush HeaderBg = new(Color.FromArgb(0x18, 0xAA, 0xAA, 0xCC));
+    private static readonly SolidColorBrush DelBg = new(Color.FromArgb(0x18, 0xFF, 0x55, 0x55));
+    private static readonly SolidColorBrush AddBg = new(Color.FromArgb(0x18, 0x50, 0xFA, 0x7B));
+    private static readonly SolidColorBrush HdrBg = new(Color.FromArgb(0x18, 0xAA, 0xAA, 0xCC));
+    private static readonly SolidColorBrush Red = new(Color.FromRgb(0xFF, 0x55, 0x55));
+    private static readonly SolidColorBrush Green = new(Color.FromRgb(0x50, 0xFA, 0x7B));
+    private static readonly SolidColorBrush Purple = new(Color.FromRgb(0xBB, 0x88, 0xFF));
+    private static readonly SolidColorBrush Light = new(Color.FromRgb(0xE0, 0xE0, 0xE8));
+    private static readonly SolidColorBrush Dim = new(Color.FromRgb(0x66, 0x66, 0x66));
 
-    public SideBySideDiffLine(DiffLineType type, string oldLine, string newLine,
+    public SideBySideDiffLine(DiffLineType type, string oldText, string newText,
         int oldLineNumber = 0, int newLineNumber = 0)
     {
         Type = type;
-        OldLine = oldLine;
-        NewLine = newLine;
+        OldText = oldText;
+        NewText = newText;
         OldLineNumber = oldLineNumber;
         NewLineNumber = newLineNumber;
+        OldNumberDisplay = oldLineNumber > 0 ? oldLineNumber.ToString() : "";
+        NewNumberDisplay = newLineNumber > 0 ? newLineNumber.ToString() : "";
 
-        LineNumbers = IsOldLine && IsNewLine
-            ? $"{OldLineNumber,4} | {NewLineNumber,-4}"
-            : IsOldLine
-                ? $"{OldLineNumber,4} |"
-                : $"     | {NewLineNumber,-4}";
-
-        OldBackground = type switch
-        {
-            DiffLineType.Deletion => DeletionBg,
-            DiffLineType.Header => HeaderBg,
-            _ => Transparent,
-        };
-        NewBackground = type switch
-        {
-            DiffLineType.Addition => AdditionBg,
-            DiffLineType.Header => HeaderBg,
-            _ => Transparent,
-        };
-        OldForeground = type switch
-        {
-            DiffLineType.Deletion => new SolidColorBrush(Color.FromRgb(0xFF, 0x55, 0x55)),
-            DiffLineType.Header => new SolidColorBrush(Color.FromRgb(0xBB, 0x88, 0xFF)),
-            _ => new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE8)),
-        };
-        NewForeground = type switch
-        {
-            DiffLineType.Addition => new SolidColorBrush(Color.FromRgb(0x50, 0xFA, 0x7B)),
-            DiffLineType.Header => new SolidColorBrush(Color.FromRgb(0xBB, 0x88, 0xFF)),
-            _ => new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE8)),
-        };
+        NumberFg = Dim;
+        OldBg = type == DiffLineType.Deletion ? DelBg : type == DiffLineType.Header ? HdrBg : Transparent;
+        NewBg = type == DiffLineType.Addition ? AddBg : type == DiffLineType.Header ? HdrBg : Transparent;
+        OldFg = type == DiffLineType.Deletion ? Red : type == DiffLineType.Header ? Purple : Light;
+        NewFg = type == DiffLineType.Addition ? Green : type == DiffLineType.Header ? Purple : Light;
     }
 }
