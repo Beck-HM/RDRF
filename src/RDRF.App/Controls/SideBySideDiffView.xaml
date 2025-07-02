@@ -25,11 +25,13 @@
                     <TextBlock Text="Files" Foreground="#AAA" FontSize="11"
                                FontFamily="Consolas" FontWeight="SemiBold" />
                 </Border>
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
                     <TreeView x:Name="FileTreeView"
                               ItemsSource="{Binding FileTreeSource, RelativeSource={RelativeSource AncestorType=UserControl}}"
                               Background="Transparent"
                               BorderThickness="0"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                               SelectedItemChanged="OnFileTreeSelectionChanged">
                         <TreeView.ItemContainerStyle>
                             <Style TargetType="TreeViewItem">
@@ -108,7 +110,7 @@
             <!-- Body -->
             <ScrollViewer x:Name="BodyScroll" Grid.Row="1" Grid.ColumnSpan="4"
                           VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Auto">
+                          HorizontalScrollBarVisibility="Disabled">
                 <ItemsControl x:Name="DiffItems" Background="Transparent"
                               BorderThickness="0" Focusable="False">
                     <ItemsControl.ItemTemplate>

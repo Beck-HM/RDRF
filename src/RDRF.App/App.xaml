@@ -41,5 +41,48 @@
         <CornerRadius x:Key="CornerRadiusSmall">4</CornerRadius>
         <CornerRadius x:Key="CornerRadiusNormal">8</CornerRadius>
         <CornerRadius x:Key="CornerRadiusLarge">12</CornerRadius>
+
+        <!-- Custom ScrollBar -->
+        <Style x:Key="FlatScrollBarThumb" TargetType="Thumb">
+            <Setter Property="Background" Value="#4A4A5C" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="MinWidth" Value="6" />
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="3" Margin="1" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Border Background="Transparent">
+                            <Track x:Name="PART_Track"
+                                   ViewportSize="{TemplateBinding ViewportSize}"
+                                   Minimum="{TemplateBinding Minimum}"
+                                   Maximum="{TemplateBinding Maximum}"
+                                   Value="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Value, Mode=TwoWay}"
+                                   Orientation="{TemplateBinding Orientation}">
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource FlatScrollBarThumb}" />
+                                </Track.Thumb>
+                            </Track>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ScrollViewer">
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
     </Application.Resources>
 </Application>
