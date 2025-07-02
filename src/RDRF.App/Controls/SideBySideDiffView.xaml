@@ -60,8 +60,7 @@
                                 <!-- Old line number -->
                                 <Border Grid.Column="0" Background="#16162A"
                                         BorderBrush="#2A2A3C" BorderThickness="0,0,0,0"
-                                        Padding="4,2 4,2" MinWidth="36"
-                                        Visibility="{Binding HasOld, Converter={StaticResource BoolToVis}}">
+                                        Padding="4,2 4,2" MinWidth="36">
                                     <TextBlock Text="{Binding OldNumberDisplay}"
                                                FontFamily="Consolas" FontSize="12"
                                                Foreground="{Binding NumberFg}"
@@ -82,8 +81,7 @@
                                 <!-- New line number -->
                                 <Border Grid.Column="2" Background="#16162A"
                                         BorderBrush="#2A2A3C" BorderThickness="0,0,0,0"
-                                        Padding="4,2 4,2" MinWidth="36"
-                                        Visibility="{Binding HasNew, Converter={StaticResource BoolToVis}}">
+                                        Padding="4,2 4,2" MinWidth="36">
                                     <TextBlock Text="{Binding NewNumberDisplay}"
                                                FontFamily="Consolas" FontSize="12"
                                                Foreground="{Binding NumberFg}"

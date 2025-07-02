@@ -291,16 +291,15 @@ public class HistoryViewModel : ViewModelBase
     private void OnSelectedVersionChanged()
     {
         SideBySideLines.Clear();
-        if (_selectedItem != null && !string.IsNullOrEmpty(_selectedItem.Diff))
-        {
-            SideBySideLines.Clear();
-            ShowDiffPanel = true;
-            foreach (var line in Controls.SideBySideDiffView.ParseSideBySide(_selectedItem.Diff))
-                SideBySideLines.Add(line);
-        }
-        else
+        if (_selectedItem == null || string.IsNullOrEmpty(_selectedItem.Diff))
         {
             ShowDiffPanel = false;
+            return;
         }
+
+        ShowDiffPanel = true;
+        var lines = Controls.SideBySideDiffView.ParseSideBySide(_selectedItem.Diff);
+        foreach (var line in lines)
+            SideBySideLines.Add(line);
     }
 }
