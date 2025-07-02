@@ -19,6 +19,7 @@ public class VersionHistoryItem
     public string Timestamp { get; set; } = "";
     public string Message { get; set; } = "";
     public string Diff { get; set; } = "";
+    public List<FileEntry>? Files { get; set; }
 }
 
 public class HistoryViewModel : ViewModelBase
@@ -109,6 +110,7 @@ public class HistoryViewModel : ViewModelBase
 
     public ObservableCollection<VersionHistoryItem> Versions { get; } = new();
     public ObservableCollection<SideBySideDiffLine> SideBySideLines { get; } = new();
+    public ObservableCollection<FileTreeNode> FileTree { get; } = new();
 
     public System.Windows.Input.ICommand BrowseBackupCommand { get; }
     public System.Windows.Input.ICommand BrowseIncrementalCommand { get; }
@@ -274,7 +276,8 @@ public class HistoryViewModel : ViewModelBase
                     Version = r.Version,
                     Timestamp = DateTimeOffset.FromUnixTimeSeconds(r.CreatedAt).LocalDateTime.ToString("yyyy-MM-dd HH:mm"),
                     Message = r.UserMessage,
-                    Diff = r.SystemDiff
+                    Diff = r.SystemDiff,
+                    Files = r.Files,
                 });
             }
 
@@ -291,15 +294,75 @@ public class HistoryViewModel : ViewModelBase
     private void OnSelectedVersionChanged()
     {
         SideBySideLines.Clear();
-        if (_selectedItem == null || string.IsNullOrEmpty(_selectedItem.Diff))
+        FileTree.Clear();
+        if (_selectedItem == null)
         {
             ShowDiffPanel = false;
             return;
         }
 
         ShowDiffPanel = true;
-        var lines = Controls.SideBySideDiffView.ParseSideBySide(_selectedItem.Diff);
-        foreach (var line in lines)
-            SideBySideLines.Add(line);
+
+        var files = _selectedItem.Files;
+        if (files == null || files.Count == 0)
+        {
+            BuildTreeFromDiff(_selectedItem.Diff);
+        }
+        else
+        {
+            foreach (var fe in files)
+                InsertIntoTree(FileTree, fe.Path, fe.ChangeType, fe.Diff);
+        }
+    }
+
+    private void BuildTreeFromDiff(string diff)
+    {
+        var root = new FileTreeNode
+        {
+            Name = _selectedItem?.Message ?? "file",
+            FullPath = "file",
+            ChangeType = "modified",
+            Diff = diff,
+        };
+        FileTree.Add(root);
+    }
+
+    private static void InsertIntoTree(ObservableCollection<FileTreeNode> root, string path,
+        string changeType, string diff)
+    {
+        var parts = path.Split('/', '\\');
+        var current = root;
+
+        for (int i = 0; i < parts.Length; i++)
+        {
+            bool isLast = i == parts.Length - 1;
+            string part = parts[i];
+            var existing = current.FirstOrDefault(n =>
+                n.Name == part && n.IsDirectory == !isLast);
+
+            if (existing != null)
+            {
+                if (isLast)
+                {
+                    existing.ChangeType = changeType;
+                    existing.Diff = diff;
+                }
+                current = existing.Children;
+            }
+            else
+            {
+                var node = new FileTreeNode
+                {
+                    Name = part,
+                    FullPath = string.Join("/", parts[..(i + 1)]),
+                    IsDirectory = !isLast,
+                    ChangeType = isLast ? changeType : "unchanged",
+                    Diff = isLast ? diff : "",
+                };
+                current.Add(node);
+                if (!isLast)
+                    current = node.Children;
+            }
+        }
     }
 }

@@ -346,6 +346,20 @@ public static class IndexManager
             w.WriteInt64(v.CreatedAt);
             w.WriteTextString("file_fingerprint");
             w.WriteTextString(v.FileFingerprint);
+            if (v.Files is { Count: > 0 })
+            {
+                w.WriteTextString("files");
+                w.WriteStartArray(null);
+                foreach (var f in v.Files)
+                {
+                    w.WriteStartMap(null);
+                    w.WriteTextString("path"); w.WriteTextString(f.Path);
+                    w.WriteTextString("change_type"); w.WriteTextString(f.ChangeType);
+                    w.WriteTextString("diff"); w.WriteTextString(f.Diff);
+                    w.WriteEndMap();
+                }
+                w.WriteEndArray();
+            }
             w.WriteEndMap();
         }
         w.WriteEndArray();
@@ -368,6 +382,28 @@ public static class IndexManager
                     case "system_diff":      v.SystemDiff = r.ReadTextString(); break;
                     case "created_at":       v.CreatedAt = r.ReadInt64(); break;
                     case "file_fingerprint": v.FileFingerprint = r.ReadTextString(); break;
+                    case "files":
+                        v.Files = new List<FileEntry>();
+                        r.ReadStartArray();
+                        while (r.PeekState() != CborReaderState.EndArray)
+                        {
+                            var fe = new FileEntry();
+                            r.ReadStartMap();
+                            while (r.PeekState() != CborReaderState.EndMap)
+                            {
+                                switch (r.ReadTextString())
+                                {
+                                    case "path":        fe.Path = r.ReadTextString(); break;
+                                    case "change_type": fe.ChangeType = r.ReadTextString(); break;
+                                    case "diff":        fe.Diff = r.ReadTextString(); break;
+                                    default:            r.SkipValue(); break;
+                                }
+                            }
+                            r.ReadEndMap();
+                            v.Files.Add(fe);
+                        }
+                        r.ReadEndArray();
+                        break;
                     default:                 r.SkipValue(); break;
                 }
             }

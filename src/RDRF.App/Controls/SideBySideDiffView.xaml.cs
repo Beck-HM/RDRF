@@ -14,10 +14,21 @@ public partial class SideBySideDiffView : UserControl
             typeof(SideBySideDiffView),
             new PropertyMetadata(null, OnItemsSourceChanged));
 
+    public static readonly DependencyProperty FileTreeSourceProperty =
+        DependencyProperty.Register(nameof(FileTreeSource), typeof(IEnumerable),
+            typeof(SideBySideDiffView),
+            new PropertyMetadata(null));
+
     public IEnumerable? ItemsSource
     {
         get => (IEnumerable?)GetValue(ItemsSourceProperty);
         set => SetValue(ItemsSourceProperty, value);
+    }
+
+    public IEnumerable? FileTreeSource
+    {
+        get => (IEnumerable?)GetValue(FileTreeSourceProperty);
+        set => SetValue(FileTreeSourceProperty, value);
     }
 
     public SideBySideDiffView()
@@ -31,8 +42,13 @@ public partial class SideBySideDiffView : UserControl
             view.DiffItems.ItemsSource = items;
     }
 
-    private void OnScrollChanged(object sender, ScrollChangedEventArgs e)
+    private void OnFileTreeSelectionChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
+        if (e.NewValue is FileTreeNode node && !node.IsDirectory && !string.IsNullOrEmpty(node.Diff))
+        {
+            var lines = ParseSideBySide(node.Diff);
+            DiffItems.ItemsSource = lines;
+        }
     }
 
     public static List<SideBySideDiffLine> ParseSideBySide(string diff)
