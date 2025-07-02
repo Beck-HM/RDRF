@@ -1364,7 +1364,8 @@
                                             Padding="0"
                                             MaxHeight="500">
                                         <controls:SideBySideDiffView
-                                            ItemsSource="{Binding SideBySideLines}" />
+                                            ItemsSource="{Binding SideBySideLines}"
+                                            FileTreeSource="{Binding FileTree}" />
                                     </Border>
                                 </StackPanel>
                             </Border>

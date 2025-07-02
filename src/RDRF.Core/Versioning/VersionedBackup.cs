@@ -90,6 +90,16 @@ public static class VersionedBackup
         byte[] newData = await File.ReadAllBytesAsync(filePath, ct).ConfigureAwait(false);
         var diffResult = new DiffEngine().ComputeDiff(oldData, newData);
 
+        var fileEntries = new List<FileEntry>
+        {
+            new FileEntry
+            {
+                Path = Path.GetFileName(filePath),
+                ChangeType = diffResult.IsBinary ? "modified (binary)" : "modified",
+                Diff = diffResult.HumanDiff,
+            }
+        };
+
         string actualFingerprint;
         using (var orchestrator = new BackupOrchestrator((byte[])password.Clone(), (byte[])salt.Clone(), storage))
         {
@@ -98,7 +108,7 @@ public static class VersionedBackup
                 progress: progress, cancellationToken: ct).ConfigureAwait(false);
         }
 
-        AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage, diffResult.HumanDiff, oldVersions);
+        AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage, diffResult.HumanDiff, oldVersions, fileEntries);
 
         CleanupOldFragments(storage, prevFingerprint);
         return actualFingerprint;
@@ -140,7 +150,8 @@ public static class VersionedBackup
     private static void AppendVersionRecord(
         StorageAdapter storage, string fingerprint, byte[] password, byte[] salt,
         int previousVersion, string userMessage, string systemDiff,
-        List<VersionRecord>? inheritedVersions = null)
+        List<VersionRecord>? inheritedVersions = null,
+        List<FileEntry>? fileEntries = null)
     {
         byte[] encryptedIndex = storage.ReadIndex(fingerprint);
         (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
@@ -158,7 +169,8 @@ public static class VersionedBackup
             UserMessage = userMessage,
             SystemDiff = systemDiff,
             CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            FileFingerprint = fingerprint
+            FileFingerprint = fingerprint,
+            Files = fileEntries,
         });
 
         index.VersionNumber = newVersion;

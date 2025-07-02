@@ -6,102 +6,162 @@
              mc:Ignorable="d"
              d:DesignHeight="400" d:DesignWidth="800">
     <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" MinWidth="160" MaxWidth="300" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!-- Headers -->
-        <Border Grid.Row="0" Grid.Column="0" BorderBrush="#2A2A3C" BorderThickness="0,0,0,1"
-                Background="#1A1A2E" Padding="4,3" MinWidth="36">
-            <TextBlock Text="Old" Foreground="#888" FontSize="11"
-                       FontFamily="Consolas" HorizontalAlignment="Right" />
-        </Border>
-        <Border Grid.Row="0" Grid.Column="1" BorderBrush="#2A2A3C" BorderThickness="0,0,1,1"
-                Background="#1A1A2E" Padding="8,3">
-            <TextBlock Text="Old Content" Foreground="#888" FontSize="11"
-                       FontFamily="Consolas" />
-        </Border>
-        <Border Grid.Row="0" Grid.Column="2" BorderBrush="#2A2A3C" BorderThickness="0,0,0,1"
-                Background="#1A1A2E" Padding="4,3" MinWidth="36">
-            <TextBlock Text="New" Foreground="#888" FontSize="11"
-                       FontFamily="Consolas" HorizontalAlignment="Right" />
-        </Border>
-        <Border Grid.Row="0" Grid.Column="3" BorderBrush="#2A2A3C" BorderThickness="0,0,0,1"
-                Background="#1A1A2E" Padding="8,3">
-            <TextBlock Text="New Content" Foreground="#888" FontSize="11"
-                       FontFamily="Consolas" />
-        </Border>
-
-        <!-- Body -->
-        <ScrollViewer x:Name="BodyScroll" Grid.Row="1" Grid.ColumnSpan="4"
-                      VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Auto"
-                      ScrollChanged="OnScrollChanged">
-            <ItemsControl x:Name="DiffItems" Background="Transparent"
-                          BorderThickness="0" Focusable="False">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border BorderBrush="#1E1E30" BorderThickness="0,0,0,1" Padding="0">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Old line number -->
-                                <Border Grid.Column="0" Background="#16162A"
-                                        BorderBrush="#2A2A3C" BorderThickness="0,0,0,0"
-                                        Padding="4,2 4,2" MinWidth="36">
-                                    <TextBlock Text="{Binding OldNumberDisplay}"
+        <!-- Left: File tree -->
+        <Border Grid.Column="0" Background="#1A1A2E"
+                BorderBrush="#2A2A3C" BorderThickness="0,0,1,0" Padding="0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" BorderBrush="#2A2A3C" BorderThickness="0,0,0,1"
+                        Background="#16162A" Padding="8,6">
+                    <TextBlock Text="Files" Foreground="#AAA" FontSize="11"
+                               FontFamily="Consolas" FontWeight="SemiBold" />
+                </Border>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <TreeView x:Name="FileTreeView"
+                              ItemsSource="{Binding FileTreeSource, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              SelectedItemChanged="OnFileTreeSelectionChanged">
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="TreeViewItem">
+                                <Setter Property="IsExpanded" Value="{Binding IsExpanded}" />
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="Padding" Value="2" />
+                                <Setter Property="Cursor" Value="Hand" />
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="{Binding RelativeSource={RelativeSource Self}, Path=Foreground, Converter={x:Null}}" />
+                                        <Setter Property="Background" Value="#2A2A4C" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TreeView.ItemContainerStyle>
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                <StackPanel Orientation="Horizontal" Margin="2,1">
+                                    <TextBlock Text="{Binding Icon}" FontSize="14" Margin="0,0,4,0" />
+                                    <TextBlock Text="{Binding ChangeGlyph}"
+                                               Foreground="{Binding ChangeColor}"
                                                FontFamily="Consolas" FontSize="12"
-                                               Foreground="{Binding NumberFg}"
-                                               HorizontalAlignment="Right" />
-                                </Border>
+                                               Margin="0,0,2,0" />
+                                    <TextBlock Text="{Binding Name}"
+                                               Foreground="#E0E0E8"
+                                               FontSize="12"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                </ScrollViewer>
+            </Grid>
+        </Border>
 
-                                <!-- Old content -->
-                                <Border Grid.Column="1"
-                                        Background="{Binding OldBg}"
-                                        BorderBrush="#2A2A3C" BorderThickness="0,0,1,0"
-                                        Padding="8,2">
-                                    <TextBlock Text="{Binding OldText}"
-                                               Foreground="{Binding OldFg}"
-                                               FontFamily="Consolas" FontSize="12"
-                                               TextWrapping="NoWrap" />
-                                </Border>
+        <!-- Resizer -->
+        <GridSplitter Grid.Column="1" Width="3" Background="#2A2A3C"
+                      HorizontalAlignment="Stretch" Cursor="SizeWE" />
 
-                                <!-- New line number -->
-                                <Border Grid.Column="2" Background="#16162A"
-                                        BorderBrush="#2A2A3C" BorderThickness="0,0,0,0"
-                                        Padding="4,2 4,2" MinWidth="36">
-                                    <TextBlock Text="{Binding NewNumberDisplay}"
-                                               FontFamily="Consolas" FontSize="12"
-                                               Foreground="{Binding NumberFg}"
-                                               HorizontalAlignment="Right" />
-                                </Border>
+        <!-- Right: Diff content -->
+        <Grid Grid.Column="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-                                <!-- New content -->
-                                <Border Grid.Column="3"
-                                        Background="{Binding NewBg}"
-                                        Padding="8,2">
-                                    <TextBlock Text="{Binding NewText}"
-                                               Foreground="{Binding NewFg}"
-                                               FontFamily="Consolas" FontSize="12"
-                                               TextWrapping="NoWrap" />
-                                </Border>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+            <!-- Headers -->
+            <Border Grid.Row="0" Grid.Column="0" BorderBrush="#2A2A3C" BorderThickness="0,0,0,1"
+                    Background="#1A1A2E" Padding="4,3" MinWidth="36">
+                <TextBlock Text="Old" Foreground="#888" FontSize="11"
+                           FontFamily="Consolas" HorizontalAlignment="Right" />
+            </Border>
+            <Border Grid.Row="0" Grid.Column="1" BorderBrush="#2A2A3C" BorderThickness="0,0,1,1"
+                    Background="#1A1A2E" Padding="8,3">
+                <TextBlock Text="Old Content" Foreground="#888" FontSize="11"
+                           FontFamily="Consolas" />
+            </Border>
+            <Border Grid.Row="0" Grid.Column="2" BorderBrush="#2A2A3C" BorderThickness="0,0,0,1"
+                    Background="#1A1A2E" Padding="4,3" MinWidth="36">
+                <TextBlock Text="New" Foreground="#888" FontSize="11"
+                           FontFamily="Consolas" HorizontalAlignment="Right" />
+            </Border>
+            <Border Grid.Row="0" Grid.Column="3" BorderBrush="#2A2A3C" BorderThickness="0,0,0,1"
+                    Background="#1A1A2E" Padding="8,3">
+                <TextBlock Text="New Content" Foreground="#888" FontSize="11"
+                           FontFamily="Consolas" />
+            </Border>
+
+            <!-- Body -->
+            <ScrollViewer x:Name="BodyScroll" Grid.Row="1" Grid.ColumnSpan="4"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="DiffItems" Background="Transparent"
+                              BorderThickness="0" Focusable="False">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderBrush="#1E1E30" BorderThickness="0,0,0,1" Padding="0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0" Background="#16162A"
+                                            Padding="4,2 4,2" MinWidth="36">
+                                        <TextBlock Text="{Binding OldNumberDisplay}"
+                                                   FontFamily="Consolas" FontSize="12"
+                                                   Foreground="{Binding NumberFg}"
+                                                   HorizontalAlignment="Right" />
+                                    </Border>
+
+                                    <Border Grid.Column="1"
+                                            Background="{Binding OldBg}"
+                                            BorderBrush="#2A2A3C" BorderThickness="0,0,1,0"
+                                            Padding="8,2">
+                                        <TextBlock Text="{Binding OldText}"
+                                                   Foreground="{Binding OldFg}"
+                                                   FontFamily="Consolas" FontSize="12"
+                                                   TextWrapping="NoWrap" />
+                                    </Border>
+
+                                    <Border Grid.Column="2" Background="#16162A"
+                                            Padding="4,2 4,2" MinWidth="36">
+                                        <TextBlock Text="{Binding NewNumberDisplay}"
+                                                   FontFamily="Consolas" FontSize="12"
+                                                   Foreground="{Binding NumberFg}"
+                                                   HorizontalAlignment="Right" />
+                                    </Border>
+
+                                    <Border Grid.Column="3"
+                                            Background="{Binding NewBg}"
+                                            Padding="8,2">
+                                        <TextBlock Text="{Binding NewText}"
+                                                   Foreground="{Binding NewFg}"
+                                                   FontFamily="Consolas" FontSize="12"
+                                                   TextWrapping="NoWrap" />
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
     </Grid>
 </UserControl>
