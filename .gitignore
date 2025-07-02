@@ -17,3 +17,5 @@ tests/*.mp4
 # Scratch/temp
 tools/EtnDemo.Interactive/
 fix_tests*.ps1
+wpf_test_files/
+wpf_test_storage/
