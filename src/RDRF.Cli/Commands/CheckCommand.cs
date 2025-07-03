@@ -113,7 +113,8 @@ public class CheckCommand : Command
             return;
         }
 
-        var tree = new Tree("");
+        var fileGrid = new Grid();
+        fileGrid.AddColumn();
         foreach (var f in files)
         {
             string color = f.ChangeType switch
@@ -128,20 +129,10 @@ public class CheckCommand : Command
                 "deleted" => "[-]",
                 _ => "[*]",
             };
-
-            var parts = f.Path.Split('/', '\\');
-            if (parts.Length == 1)
-            {
-                tree.AddNode($"[{color}]{glyph}[/] [white]{f.Path}[/]");
-            }
-            else
-            {
-                var dirPath = string.Join("/", parts[..^1]);
-                tree.AddNode($"[grey]{dirPath}/[/]/{parts[^1]}");
-            }
+            fileGrid.AddRow(new Markup($"  [{color}]{glyph.EscapeMarkup()}[/] [white]{f.Path.EscapeMarkup()}[/]"));
         }
-
-        AnsiConsole.Write(tree);
+        AnsiConsole.Write(new Panel(fileGrid).Header("Changed files").BorderColor(Color.Grey));
+        Console.WriteLine();
         Console.WriteLine();
 
         if (files.Count == 1)

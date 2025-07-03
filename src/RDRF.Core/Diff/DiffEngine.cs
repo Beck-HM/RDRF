@@ -8,6 +8,8 @@ public class DiffEngine
     {
         _strategies =
         [
+            new Strategies.JsonDiffStrategy(),
+            new Strategies.IniDiffStrategy(),
             new Strategies.TextGenericStrategy(),
             new Strategies.BinaryDefaultStrategy(),
         ];
@@ -17,6 +19,8 @@ public class DiffEngine
     {
         _strategies = new List<IDiffStrategy>
         {
+            new Strategies.JsonDiffStrategy(),
+            new Strategies.IniDiffStrategy(),
             new Strategies.TextGenericStrategy(),
             new Strategies.BinaryDefaultStrategy(),
         };
