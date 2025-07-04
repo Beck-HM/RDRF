@@ -10,6 +10,8 @@ public class DiffEngine
         [
             new Strategies.JsonDiffStrategy(),
             new Strategies.IniDiffStrategy(),
+            new Strategies.ImageDiffStrategy(),
+            new Strategies.MediaDiffStrategy(),
             new Strategies.TextGenericStrategy(),
             new Strategies.BinaryDefaultStrategy(),
         ];
@@ -21,6 +23,8 @@ public class DiffEngine
         {
             new Strategies.JsonDiffStrategy(),
             new Strategies.IniDiffStrategy(),
+            new Strategies.ImageDiffStrategy(),
+            new Strategies.MediaDiffStrategy(),
             new Strategies.TextGenericStrategy(),
             new Strategies.BinaryDefaultStrategy(),
         };
