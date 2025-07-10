@@ -1,61 +1,40 @@
+using System.Security.Cryptography;
+
 namespace RDRF.Core.FSS;
 
 public static class LtCode
 {
     public const int DefaultBlockSize = 256;
 
-    private static readonly double[] DegreeProbs = { 0.50, 0.30, 0.12, 0.05, 0.02, 0.005, 0.003, 0.002 };
+    private static readonly double[] DegreeProbs = { 0.10, 0.20, 0.20, 0.20, 0.15, 0.10, 0.04, 0.01 };
 
     public static (List<byte[]> symbols, int seed) Encode(
         byte[][] allBlocks, int symbolCount, int blockSize)
     {
-        int seed = System.Security.Cryptography.RandomNumberGenerator.GetInt32(int.MaxValue);
+        int K = allBlocks.Length;
+        int N = 2 * K;
+        int seed = RandomNumberGenerator.GetInt32(int.MaxValue);
         ulong prng = (ulong)seed;
-        int blockCount = allBlocks.Length;
+
+        var inter = Precode.Encode(allBlocks, blockSize);
 
         var result = new List<byte[]>(symbolCount);
-
-        // Phase 1: guarantee at least one deg-1 symbol per block
-        int guaranteed = Math.Min(symbolCount / 2, blockCount);
-        var covered = new bool[blockCount];
-        for (int bi = 0; bi < guaranteed; bi++)
-        {
-            byte[] data = new byte[blockSize];
-            Buffer.BlockCopy(allBlocks[bi % blockCount], 0, data, 0, blockSize);
-            result.Add(data);
-            covered[bi % blockCount] = true;
-        }
-
-        // Phase 2: repair symbols for remaining (if any)
-        int remaining = symbolCount - result.Count;
-        for (int si = 0; si < remaining; si++)
+        for (int si = 0; si < symbolCount; si++)
         {
             int deg = SelectDegree(ref prng);
-            if (deg > blockCount) deg = blockCount;
+            if (deg > N) deg = N;
 
             var indices = new HashSet<int>();
             while (indices.Count < deg)
-                indices.Add(NextPseudo(ref prng) % blockCount);
+                indices.Add(NextPseudo(ref prng) % N);
 
             byte[] data = new byte[blockSize];
             foreach (int idx in indices)
             {
                 for (int b = 0; b < blockSize; b++)
-                    data[b] ^= allBlocks[idx][b];
+                    data[b] ^= inter[idx][b];
             }
             result.Add(data);
-        }
-
-        // If we still have uncovered blocks, add deg-1 for each
-        for (int bi = 0; bi < blockCount && result.Count < symbolCount; bi++)
-        {
-            if (!covered[bi])
-            {
-                byte[] data = new byte[blockSize];
-                Buffer.BlockCopy(allBlocks[bi], 0, data, 0, blockSize);
-                result.Add(data);
-                covered[bi] = true;
-            }
         }
 
         return (result, seed);
@@ -66,107 +45,141 @@ public static class LtCode
         int symbolCount, int seed, byte[] allSymbolData,
         int blockCount, int blockSize)
     {
+        int K = blockCount;
+        int N = 2 * K;
         ulong prng = (ulong)seed;
 
-        int guaranteed = Math.Min(symbolCount / 2, blockCount);
-        var symbolDeg = new int[symbolCount];
-        var symbolIdx = new int[symbolCount][];
-        var symbolData = new byte[symbolCount][];
+        var inter = new byte[N][];
+        for (int i = 0; i < K; i++)
+            inter[i] = allBlocks[i];
+        for (int i = K; i < N; i++)
+            inter[i] = new byte[blockSize];
 
-        int dataOff = 0;
-        for (int si = 0; si < symbolCount; si++)
+        var known = new bool[N];
+        var srcKnown = new bool[K];
+        int totalBad = 0;
+        for (int i = 0; i < K; i++)
         {
-            int deg;
-            var indices = new HashSet<int>();
-
-            if (si < guaranteed)
-            {
-                deg = 1;
-                indices.Add(si % blockCount);
-            }
-            else
-            {
-                deg = SelectDegree(ref prng);
-                if (deg > blockCount) deg = blockCount;
-                while (indices.Count < deg)
-                    indices.Add(NextPseudo(ref prng) % blockCount);
-            }
-
-            symbolDeg[si] = deg;
-            symbolIdx[si] = indices.ToArray();
-            symbolData[si] = new byte[blockSize];
-            Buffer.BlockCopy(allSymbolData, dataOff, symbolData[si], 0, blockSize);
-            dataOff += blockSize;
+            if (!isCorrupted[i]) { known[i] = true; srcKnown[i] = true; }
+            else totalBad++;
         }
 
-        var blockToSymbols = new List<int>[blockCount];
-        for (int i = 0; i < blockCount; i++)
-            blockToSymbols[i] = new List<int>();
+        Precode.Derive(inter, known, K, blockSize);
+
+        var symDeg = new int[symbolCount];
+        var symIdx = new int[symbolCount][];
+        var symData = new byte[symbolCount][];
+        int dataOff = 0;
 
         for (int si = 0; si < symbolCount; si++)
-            foreach (int bi in symbolIdx[si])
-                blockToSymbols[bi].Add(si);
+        {
+            int deg = SelectDegree(ref prng);
+            if (deg > N) deg = N;
+            symDeg[si] = deg;
+            var indices = new HashSet<int>();
+            while (indices.Count < deg)
+                indices.Add(NextPseudo(ref prng) % N);
+            symIdx[si] = indices.ToArray();
+            symData[si] = new byte[blockSize];
+            Buffer.BlockCopy(allSymbolData, dataOff, symData[si], 0, blockSize);
+            dataOff += blockSize;
+        }
 
         var remainingDeg = new int[symbolCount];
         for (int si = 0; si < symbolCount; si++)
         {
-            int actualDeg = symbolDeg[si];
-            byte[] data = symbolData[si];
-
-            foreach (int bi in symbolIdx[si])
+            int deg = symDeg[si];
+            byte[] sd = symData[si];
+            foreach (int bi in symIdx[si])
             {
-                if (!isCorrupted[bi] && allBlocks[bi] != null)
+                if (known[bi])
                 {
                     for (int b = 0; b < blockSize; b++)
-                        data[b] ^= allBlocks[bi][b];
-                    actualDeg--;
+                        sd[b] ^= inter[bi][b];
+                    deg--;
                 }
             }
-            remainingDeg[si] = actualDeg;
+            remainingDeg[si] = deg;
         }
 
-        var queue = new System.Collections.Generic.Queue<int>();
+        var symToBlock = new List<int>[N];
+        for (int i = 0; i < N; i++) symToBlock[i] = new List<int>();
         for (int si = 0; si < symbolCount; si++)
-            if (remainingDeg[si] == 1)
-                queue.Enqueue(si);
+            foreach (int bi in symIdx[si])
+                symToBlock[bi].Add(si);
+
+        var queue = new Queue<int>();
+        for (int si = 0; si < symbolCount; si++)
+            if (remainingDeg[si] == 1) queue.Enqueue(si);
 
         int recovered = 0;
-        bool[] recoveredFlag = new bool[blockCount];
-        int totalBad = 0;
-        for (int i = 0; i < blockCount; i++)
-            if (isCorrupted[i]) totalBad++;
 
-        while (queue.Count > 0 && recovered < totalBad)
+        while (recovered < totalBad)
         {
-            int si = queue.Dequeue();
-            if (remainingDeg[si] != 1) continue;
+            bool progress = false;
 
-            int targetBlock = -1;
-            foreach (int bi in symbolIdx[si])
+            while (queue.Count > 0)
             {
-                if (isCorrupted[bi] && !recoveredFlag[bi])
+                int si = queue.Dequeue();
+                if (remainingDeg[si] != 1) continue;
+
+                int target = -1;
+                foreach (int bi in symIdx[si])
+                    if (!known[bi]) { target = bi; break; }
+                if (target < 0) continue;
+
+                inter[target] = symData[si];
+                known[target] = true;
+
+                if (target < K && !srcKnown[target])
                 {
-                    targetBlock = bi;
-                    break;
+                    Buffer.BlockCopy(inter[target], 0, allBlocks[target], 0, blockSize);
+                    srcKnown[target] = true;
+                    recovered++;
+                    progress = true;
+                }
+
+                foreach (int si2 in symToBlock[target])
+                {
+                    if (remainingDeg[si2] <= 1) continue;
+                    for (int b = 0; b < blockSize; b++)
+                        symData[si2][b] ^= inter[target][b];
+                    remainingDeg[si2]--;
+                    if (remainingDeg[si2] == 1)
+                        queue.Enqueue(si2);
                 }
             }
-            if (targetBlock < 0) continue;
 
-            allBlocks[targetBlock] = symbolData[si];
-            recoveredFlag[targetBlock] = true;
-            recovered++;
-
-            foreach (int si2 in blockToSymbols[targetBlock])
+            int unlocked = Precode.Unlock(inter, known, srcKnown,
+                allBlocks, K, blockSize);
+            if (unlocked > 0)
             {
-                if (remainingDeg[si2] <= 1) continue;
+                recovered += unlocked;
+                progress = true;
 
-                for (int b = 0; b < blockSize; b++)
-                    symbolData[si2][b] ^= allBlocks[targetBlock][b];
-                remainingDeg[si2]--;
+                Precode.Derive(inter, known, K, blockSize);
 
-                if (remainingDeg[si2] == 1)
-                    queue.Enqueue(si2);
+                queue.Clear();
+                for (int si = 0; si < symbolCount; si++)
+                {
+                    Buffer.BlockCopy(allSymbolData, si * blockSize,
+                        symData[si], 0, blockSize);
+                    int d = symDeg[si];
+                    foreach (int bi in symIdx[si])
+                    {
+                        if (known[bi])
+                        {
+                            for (int b = 0; b < blockSize; b++)
+                                symData[si][b] ^= inter[bi][b];
+                            d--;
+                        }
+                    }
+                    remainingDeg[si] = d;
+                    if (d == 1) queue.Enqueue(si);
+                }
             }
+
+            if (!progress) break;
         }
 
         return recovered >= totalBad;
