@@ -48,16 +48,20 @@ public class CheckCommand : Command
             while (true)
             {
                 int maxV = records.Max(r => r.Version);
-                int? choice = AnsiConsole.Prompt(
-                    new TextPrompt<int>("Enter version [grey](1-[/]" + maxV + "[grey], 0 to exit)[/]:")
+                string? input = AnsiConsole.Prompt(
+                    new TextPrompt<string>($"[grey]Enter version ([/]1[grey]-[/]{maxV}[grey], q to exit)[/]:")
                         .PromptStyle("cyan")
-                        .ValidationErrorMessage("Invalid version number")
-                        .Validate(input => input >= 0 && input <= maxV
-                            ? ValidationResult.Success()
-                            : ValidationResult.Error($"Enter 0-{maxV}")));
+                        .ValidationErrorMessage("Invalid input")
+                        .Validate(val =>
+                        {
+                            if (val.Equals("q", StringComparison.OrdinalIgnoreCase)) return ValidationResult.Success();
+                            if (int.TryParse(val, out int n) && n >= 1 && n <= maxV) return ValidationResult.Success();
+                            return ValidationResult.Error($"Enter 1-{maxV} or q");
+                        }));
 
-                if (choice == 0) break;
+                if (input.Equals("q", StringComparison.OrdinalIgnoreCase)) break;
 
+                int choice = int.Parse(input);
                 var selected = records.FirstOrDefault(r => r.Version == choice);
                 if (selected == null)
                 {
@@ -144,17 +148,21 @@ public class CheckCommand : Command
             return;
         }
 
-        int? fileChoice = AnsiConsole.Prompt(
-            new TextPrompt<int>("Enter file [grey](1-[/]" + files.Count + "[grey], 0 to go back)[/]:")
+        string? fileInput = AnsiConsole.Prompt(
+            new TextPrompt<string>($"[grey]Enter file ([/]1[grey]-[/]{files.Count}[grey], q to go back)[/]:")
                 .PromptStyle("cyan")
-                .ValidationErrorMessage("Invalid file number")
-                .Validate(input => input >= 0 && input <= files.Count
-                    ? ValidationResult.Success()
-                    : ValidationResult.Error($"Enter 0-{files.Count}")));
+                .ValidationErrorMessage("Invalid input")
+                .Validate(val =>
+                {
+                    if (val.Equals("q", StringComparison.OrdinalIgnoreCase)) return ValidationResult.Success();
+                    if (int.TryParse(val, out int n) && n >= 1 && n <= files.Count) return ValidationResult.Success();
+                    return ValidationResult.Error($"Enter 1-{files.Count} or q");
+                }));
 
-        if (fileChoice == 0 || fileChoice > files.Count) return;
+        if (fileInput.Equals("q", StringComparison.OrdinalIgnoreCase)) return;
 
-        var fe = files[fileChoice.Value - 1];
+        int fileChoice = int.Parse(fileInput);
+        var fe = files[fileChoice - 1];
         ShowDiffText(fe.Diff);
         Console.WriteLine();
         AnsiConsole.Markup("[dim]Press Enter to return...[/]");
