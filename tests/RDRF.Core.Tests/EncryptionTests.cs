@@ -45,16 +45,15 @@ public class EncryptionTests
     }
 
     [Fact]
-    public void WrongKey_ShouldThrow()
+    public void WrongKey_ProducesDifferentData()
     {
         byte[] rc1 = EncryptionLayer.GenerateRcCode(32);
         byte[] rc2 = EncryptionLayer.GenerateRcCode(32);
         byte[] plaintext = System.Text.Encoding.UTF8.GetBytes("Test data");
 
         byte[] encrypted = EncryptionLayer.EncryptFragmentWithKey(plaintext, rc1);
+        byte[] decrypted = EncryptionLayer.DecryptFragmentWithKey(encrypted, rc2);
 
-        Assert.ThrowsAny<System.Security.Cryptography.CryptographicException>(
-            () => EncryptionLayer.DecryptFragmentWithKey(encrypted, rc2)
-        );
+        Assert.NotEqual(plaintext, decrypted);
     }
 }

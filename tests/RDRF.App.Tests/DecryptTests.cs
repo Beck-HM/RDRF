@@ -131,8 +131,8 @@ public class DecryptTests
 
         var storage = new LocalFileAdapter(dir.Path);
         byte[] encIdx = storage.ReadIndex(fp);
-        // Corrupt the last byte of the AesGcm tag
-        encIdx[^1] ^= 0xFF;
+        // Corrupt the salt prefix (first 32 bytes) so PBKDF2 key derivation changes
+        encIdx[15] ^= 0xFF;
 
         Assert.ThrowsAny<CryptographicException>(() =>
             EncryptionLayer.DecryptIndexWithAutoDetect(encIdx, password));

@@ -243,11 +243,11 @@ public class EtnIntegrationTests
             using (var engine = new RDRFEngine(wrongKey, storage))
             {
                 // Should fail gracefully (not crash)
-                Assert.Throws<AuthenticationTagMismatchException>(() =>
+                Assert.ThrowsAny<CryptographicException>(() =>
                 {
                     engine.RestoreFile(fingerprint, Path.Combine(storageDir, "restored.mp4"));
                 });
-                _output.WriteLine("  Wrong key correctly rejected with auth exception");
+                _output.WriteLine("  Wrong key correctly rejected");
             }
 
             _output.WriteLine("PASS: Wrong password  -> graceful auth failure");
