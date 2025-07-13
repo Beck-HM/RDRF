@@ -1,3 +1,4 @@
+using System.Formats.Cbor;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -8,7 +9,7 @@ public static class EncryptionLayer
     public static readonly byte[] PasswordSalt = Encoding.UTF8.GetBytes("RDRF.NET-PBKDF2-SALT-v1");
 
     private const int Pbkdf2Iterations = 600_000;
-    private const int MinNewFormatSize = Constants.SaltPrefixLength + Constants.NonceLength + 1 + Constants.TagLength;
+    private const int MinNewFormatSize = Constants.SaltPrefixLength + Constants.NonceLength + 1;
 
     public static byte[] DeriveKey(byte[] rcCode, byte[]? salt = null)
     {
@@ -21,50 +22,34 @@ public static class EncryptionLayer
     public static byte[] GenerateRcCode(int length = 64)
         => RandomNumberGenerator.GetBytes(length);
 
-    public static byte[] EncryptFragmentWithKey(byte[] plaintext, byte[] aesKey, byte[]? associatedData = null)
+    public static byte[] EncryptFragmentWithKey(byte[] plaintext, byte[] aesKey)
+        => EncryptFragmentCtrWithKey(plaintext, aesKey);
+
+    public static byte[] EncryptFragmentWithKey(byte[] plaintext, byte[] aesKey, byte[] nonce)
     {
-        byte[] nonce = RandomNumberGenerator.GetBytes(Constants.NonceLength);
-        return EncryptFragmentWithKey(plaintext, aesKey, nonce, associatedData);
-    }
-
-    public static byte[] EncryptFragmentWithKey(byte[] plaintext, byte[] aesKey, byte[] nonce, byte[]? associatedData = null)
-    {
-        byte[] ciphertext = new byte[plaintext.Length];
-        byte[] tag = new byte[Constants.TagLength];
-
-        using var aes = new AesGcm(aesKey, Constants.TagLength);
-        aes.Encrypt(nonce, plaintext, ciphertext, tag, associatedData);
-
-        byte[] result = new byte[Constants.NonceLength + ciphertext.Length + tag.Length];
+        byte[] ciphertext = CtrCryptWithKey(plaintext, aesKey, nonce);
+        byte[] result = new byte[Constants.NonceLength + ciphertext.Length];
         Buffer.BlockCopy(nonce, 0, result, 0, nonce.Length);
         Buffer.BlockCopy(ciphertext, 0, result, nonce.Length, ciphertext.Length);
-        Buffer.BlockCopy(tag, 0, result, nonce.Length + ciphertext.Length, tag.Length);
         return result;
     }
 
-    public static byte[] DecryptFragmentWithKey(byte[] encryptedData, byte[] aesKey, byte[]? associatedData = null)
-        => DecryptFragmentWithKey(encryptedData, 0, aesKey, associatedData);
+    public static byte[] DecryptFragmentWithKey(byte[] encryptedData, byte[] aesKey)
+        => DecryptFragmentCtrWithKey(encryptedData, aesKey);
 
-    public static byte[] DecryptFragmentWithKey(byte[] encryptedData, int offset, byte[] aesKey, byte[]? associatedData = null)
+    public static byte[] DecryptFragmentWithKey(byte[] encryptedData, int offset, byte[] aesKey)
     {
         int nonceLen = Constants.NonceLength;
-        int tagLen = Constants.TagLength;
-        int ciphertextLen = encryptedData.Length - offset - nonceLen - tagLen;
+        int ciphertextLen = encryptedData.Length - offset - nonceLen;
         if (ciphertextLen < 0)
             throw new CryptographicException("Invalid encrypted data length.");
 
         byte[] nonce = new byte[nonceLen];
         byte[] ciphertext = new byte[ciphertextLen];
-        byte[] tag = new byte[tagLen];
-
         Buffer.BlockCopy(encryptedData, offset, nonce, 0, nonceLen);
         Buffer.BlockCopy(encryptedData, offset + nonceLen, ciphertext, 0, ciphertextLen);
-        Buffer.BlockCopy(encryptedData, offset + nonceLen + ciphertextLen, tag, 0, tagLen);
 
-        byte[] plaintext = new byte[ciphertextLen];
-        using var aes = new AesGcm(aesKey, Constants.TagLength);
-        aes.Decrypt(nonce, ciphertext, tag, plaintext, associatedData);
-        return plaintext;
+        return CtrCryptWithKey(ciphertext, aesKey, nonce);
     }
 
     private static byte[] CtrCryptWithKey(byte[] data, byte[] aesKey, byte[] nonce)
@@ -137,6 +122,11 @@ public static class EncryptionLayer
     public static byte[] EncryptFragmentCtrWithKey(byte[] plaintext, byte[] aesKey)
     {
         byte[] nonce = RandomNumberGenerator.GetBytes(Constants.NonceLength);
+        return EncryptFragmentCtrWithKey(plaintext, aesKey, nonce);
+    }
+
+    public static byte[] EncryptFragmentCtrWithKey(byte[] plaintext, byte[] aesKey, byte[] nonce)
+    {
         byte[] ciphertext = CtrCryptWithKey(plaintext, aesKey, nonce);
         byte[] result = new byte[nonce.Length + ciphertext.Length];
         Buffer.BlockCopy(nonce, 0, result, 0, nonce.Length);
@@ -221,20 +211,39 @@ public static class EncryptionLayer
             byte[] encrypted = new byte[data.Length - Constants.SaltPrefixLength];
             Buffer.BlockCopy(data, Constants.SaltPrefixLength, encrypted, 0, encrypted.Length);
 
-            try
-            {
-                byte[] aesKey = DeriveKey(password, salt);
-                byte[] cbor = DecryptIndexWithKey(encrypted, aesKey);
+            byte[] aesKey = DeriveKey(password, salt);
+            byte[] cbor = DecryptIndexWithKey(encrypted, aesKey);
+            if (IsValidCbor(cbor))
                 return (aesKey, cbor);
-            }
-            catch (CryptographicException)
-            {
-                // Not new-format, fall through to legacy
-            }
         }
 
         byte[] legacyKey = DeriveKey(password);
         byte[] legacyCbor = DecryptIndexWithKey(data, legacyKey);
-        return (legacyKey, legacyCbor);
+        if (IsValidCbor(legacyCbor))
+            return (legacyKey, legacyCbor);
+
+        throw new CryptographicException("Wrong password or corrupt index file");
+    }
+
+    private static bool IsValidCbor(byte[] data)
+    {
+        try
+        {
+            var reader = new CborReader(data);
+            reader.ReadStartMap();
+            // Verify at least one expected key exists (file_fingerprint or version)
+            while (reader.PeekState() != CborReaderState.EndMap)
+            {
+                string key = reader.ReadTextString();
+                if (key is "file_fingerprint" or "version" or "original_name")
+                    return true;
+                reader.SkipValue();
+            }
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

@@ -19,7 +19,19 @@ public static class LtCode
         var inter = Precode.Encode(allBlocks, blockSize);
 
         var result = new List<byte[]>(symbolCount);
-        for (int si = 0; si < symbolCount; si++)
+
+        // Phase 1: guaranteed deg-1 covering each source block cyclically
+        int deg1 = Math.Max(1, symbolCount / 2);
+        for (int si = 0; si < deg1; si++)
+        {
+            int bi = si % K;
+            byte[] data = new byte[blockSize];
+            Buffer.BlockCopy(inter[bi], 0, data, 0, blockSize);
+            result.Add(data);
+        }
+
+        // Phase 2: uniform distribution over N
+        for (int si = deg1; si < symbolCount; si++)
         {
             int deg = SelectDegree(ref prng);
             if (deg > N) deg = N;
@@ -51,7 +63,10 @@ public static class LtCode
 
         var inter = new byte[N][];
         for (int i = 0; i < K; i++)
-            inter[i] = allBlocks[i];
+        {
+            inter[i] = new byte[blockSize];
+            Buffer.BlockCopy(allBlocks[i], 0, inter[i], 0, blockSize);
+        }
         for (int i = K; i < N; i++)
             inter[i] = new byte[blockSize];
 
@@ -128,7 +143,8 @@ public static class LtCode
                     if (!known[bi]) { target = bi; break; }
                 if (target < 0) continue;
 
-                inter[target] = symData[si];
+                inter[target] = new byte[blockSize];
+                Buffer.BlockCopy(symData[si], 0, inter[target], 0, blockSize);
                 known[target] = true;
 
                 if (target < K && !srcKnown[target])
@@ -159,6 +175,7 @@ public static class LtCode
 
                 Precode.Derive(inter, known, K, blockSize);
 
+                // Rebuild symData from scratch and recompute remainingDeg
                 queue.Clear();
                 for (int si = 0; si < symbolCount; si++)
                 {
