@@ -1,6 +1,7 @@
 using System.Formats.Cbor;
 using System.Text.Json;
 using RDRF.Core.Encryption;
+using RDRF.Core.FSS;
 using RDRF.Core.Versioning;
 
 namespace RDRF.Core.Index;
@@ -77,6 +78,8 @@ public static class IndexManager
         WriteField(writer, "version_number", index.VersionNumber);
         WriteVersions(writer, index.Versions);
         WriteFragents(writer, index.Fragents);
+        WriteRepairData(writer, "fss61_repair_b", index.Fss61RepairB);
+        WriteRepairData(writer, "fss61_repair_c", index.Fss61RepairC);
 
         writer.WriteEndMap();
         return writer.Encode();
@@ -111,6 +114,8 @@ public static class IndexManager
                 case "version_number":               index.VersionNumber = reader.ReadInt32(); break;
                 case "versions":                     index.Versions = ReadVersions(reader); break;
                 case "fragments":                   index.Fragents = ReadFragents(reader); break;
+                case "fss61_repair_b":              index.Fss61RepairB = ReadRepairData(reader); break;
+                case "fss61_repair_c":              index.Fss61RepairC = ReadRepairData(reader); break;
                 default:                            reader.SkipValue(); break;
             }
         }
@@ -420,6 +425,37 @@ public static class IndexManager
         w.WriteTextString(key);
         w.WriteInt32(value.Value);
     }
+
+    private static void WriteRepairData(CborWriter w, string key, FSS.Fss61RepairData? r)
+    {
+        if (r == null) return;
+        w.WriteTextString(key);
+        w.WriteStartMap(null);
+        w.WriteTextString("seed"); w.WriteInt32(r.Seed);
+        w.WriteTextString("block_count"); w.WriteInt32(r.BlockCount);
+        w.WriteTextString("block_size"); w.WriteInt32(r.BlockSize);
+        w.WriteTextString("data"); w.WriteByteString(r.Data);
+        w.WriteEndMap();
+    }
+
+    private static FSS.Fss61RepairData? ReadRepairData(CborReader r)
+    {
+        var rd = new FSS.Fss61RepairData();
+        r.ReadStartMap();
+        while (r.PeekState() != CborReaderState.EndMap)
+        {
+            switch (r.ReadTextString())
+            {
+                case "seed":        rd.Seed = r.ReadInt32(); break;
+                case "block_count": rd.BlockCount = r.ReadInt32(); break;
+                case "block_size":  rd.BlockSize = r.ReadInt32(); break;
+                case "data":        rd.Data = r.ReadByteString(); break;
+                default:            r.SkipValue(); break;
+            }
+        }
+        r.ReadEndMap();
+        return rd;
+    }
 }
 
 public class RdrfIndex
@@ -443,6 +479,8 @@ public class RdrfIndex
     public int? VersionNumber { get; set; }
     public List<Versioning.VersionRecord>? Versions { get; set; }
     public List<FragentInfo>? Fragents { get; set; }
+    public FSS.Fss61RepairData? Fss61RepairB { get; set; }
+    public FSS.Fss61RepairData? Fss61RepairC { get; set; }
 }
 
 public class FragentInfo

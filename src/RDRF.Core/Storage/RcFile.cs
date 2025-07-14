@@ -1,4 +1,5 @@
 using System.Formats.Cbor;
+using RDRF.Core.FSS;
 
 namespace RDRF.Core.Storage;
 
@@ -10,11 +11,8 @@ public class RcFile
     public List<List<string>> FragentBlockMaps { get; set; } = new();
     public long CreatedAt { get; set; }
 
-    // FSS6.1 repair data (null for non-FSS6.1 backups)
-    public int? RepairSeed { get; set; }
-    public int? RepairCount { get; set; }
-    public int? RepairBlockSize { get; set; }
-    public byte[]? RepairData { get; set; }
+    public Fss61RepairData? RepairA { get; set; }
+    public Fss61RepairData? RepairB { get; set; }
 
     public byte[] ToCborBytes()
     {
@@ -27,10 +25,8 @@ public class RcFile
         writer.WriteTextString("fragment_block_maps"); WriteNestedStringList(writer, FragentBlockMaps);
         writer.WriteTextString("created_at"); writer.WriteInt64(CreatedAt);
 
-        if (RepairSeed.HasValue) { writer.WriteTextString("repair_seed"); writer.WriteInt32(RepairSeed.Value); }
-        if (RepairCount.HasValue) { writer.WriteTextString("repair_count"); writer.WriteInt32(RepairCount.Value); }
-        if (RepairBlockSize.HasValue) { writer.WriteTextString("repair_block_size"); writer.WriteInt32(RepairBlockSize.Value); }
-        if (RepairData != null) { writer.WriteTextString("repair_data"); writer.WriteByteString(RepairData); }
+        WriteRepair(writer, "repair_a", RepairA);
+        WriteRepair(writer, "repair_b", RepairB);
 
         writer.WriteEndMap();
         return writer.Encode();
@@ -51,15 +47,44 @@ public class RcFile
                 case "index_block_map":      rc.IndexBlockMap = ReadStringList(reader); break;
                 case "fragment_block_maps":  rc.FragentBlockMaps = ReadNestedStringList(reader); break;
                 case "created_at":           rc.CreatedAt = reader.ReadInt64(); break;
-                case "repair_seed":          rc.RepairSeed = reader.ReadInt32(); break;
-                case "repair_count":         rc.RepairCount = reader.ReadInt32(); break;
-                case "repair_block_size":    rc.RepairBlockSize = reader.ReadInt32(); break;
-                case "repair_data":          rc.RepairData = reader.ReadByteString(); break;
+                case "repair_a":             rc.RepairA = ReadRepair(reader); break;
+                case "repair_b":             rc.RepairB = ReadRepair(reader); break;
                 default:                     reader.SkipValue(); break;
             }
         }
         reader.ReadEndMap();
         return rc;
+    }
+
+    private static void WriteRepair(CborWriter w, string key, Fss61RepairData? r)
+    {
+        if (r == null) return;
+        w.WriteTextString(key);
+        w.WriteStartMap(null);
+        w.WriteTextString("seed"); w.WriteInt32(r.Seed);
+        w.WriteTextString("block_count"); w.WriteInt32(r.BlockCount);
+        w.WriteTextString("block_size"); w.WriteInt32(r.BlockSize);
+        w.WriteTextString("data"); w.WriteByteString(r.Data);
+        w.WriteEndMap();
+    }
+
+    private static Fss61RepairData ReadRepair(CborReader r)
+    {
+        var rd = new Fss61RepairData();
+        r.ReadStartMap();
+        while (r.PeekState() != CborReaderState.EndMap)
+        {
+            switch (r.ReadTextString())
+            {
+                case "seed":        rd.Seed = r.ReadInt32(); break;
+                case "block_count": rd.BlockCount = r.ReadInt32(); break;
+                case "block_size":  rd.BlockSize = r.ReadInt32(); break;
+                case "data":        rd.Data = r.ReadByteString(); break;
+                default:            r.SkipValue(); break;
+            }
+        }
+        r.ReadEndMap();
+        return rd;
     }
 
     private static void WriteStringList(CborWriter writer, List<string> list)

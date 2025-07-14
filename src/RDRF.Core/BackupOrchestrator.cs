@@ -242,50 +242,75 @@ public class BackupOrchestrator : IDisposable
             rcBytes = etnRcJson;
         }
 
-        // FSS6.1: generate LT repair symbols from fragments and embed in RC file
+        // FSS6.1: three-node independent LT repair generation
         if (hasFss61 && rcBytes.Length > 0)
         {
             try
             {
                 var rcFile = RcFile.FromCbor(rcBytes);
-                int blockCount = 0;
-                foreach (var fm in rcFile.FragentBlockMaps)
-                    blockCount += fm.Count;
+                var indexObj = IndexManager.DeserializeIndex(serializedIndex);
+                int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
 
-                if (blockCount > 0)
+                // A: Index blocks
+                var indexBlocks = SplitToBlocks(serializedIndex, bs);
+                if (indexBlocks.Length > 0)
                 {
-                    int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
-                    int repairCount = Math.Max(1, blockCount / 20); // 5% repair symbols
-                    var allBlocks = new List<byte[]>();
-                    foreach (var frag in fragments)
+                    var (sym, seed) = LtCode.Encode(indexBlocks, indexBlocks.Length, bs);
+                    rcFile.RepairA = new Fss61RepairData
                     {
-                        var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
+                        Seed = seed,
+                        BlockCount = indexBlocks.Length,
+                        BlockSize = bs,
+                        Data = FlattenSymbols(sym, bs),
+                    };
+                }
 
-                        for (int off = 0; off < rawData.Length; off += bs)
-                        {
-                            int len = Math.Min(bs, rawData.Length - off);
-                            byte[] block = new byte[bs];
-                            Buffer.BlockCopy(rawData, off, block, 0, len);
-                            allBlocks.Add(block);
-                        }
-                    }
-
-                    if (allBlocks.Count >= blockCount)
+                // B: Fragment blocks (all fragments combined, trailers stripped)
+                var fragBlocks = new List<byte[]>();
+                foreach (var frag in fragments)
+                {
+                    var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
+                    for (int off = 0; off < rawData.Length; off += bs)
                     {
-                        var (symbols, seed) = LtCode.Encode(allBlocks.ToArray(), repairCount, bs);
-                        var repairData = new byte[symbols.Count * bs];
-                        for (int i = 0; i < symbols.Count; i++)
-                            Buffer.BlockCopy(symbols[i], 0, repairData, i * bs, bs);
-
-                        rcFile.RepairSeed = seed;
-                        rcFile.RepairCount = symbols.Count;
-                        rcFile.RepairBlockSize = bs;
-                        rcFile.RepairData = repairData;
-                        rcBytes = rcFile.ToCborBytes();
+                        int len = Math.Min(bs, rawData.Length - off);
+                        byte[] block = new byte[bs];
+                        Buffer.BlockCopy(rawData, off, block, 0, len);
+                        fragBlocks.Add(block);
                     }
                 }
+                if (fragBlocks.Count > 0)
+                {
+                    var allFrags = fragBlocks.ToArray();
+                    var (sym, seed) = LtCode.Encode(allFrags, allFrags.Length, bs);
+                    var repairB = new Fss61RepairData
+                    {
+                        Seed = seed,
+                        BlockCount = allFrags.Length,
+                        BlockSize = bs,
+                        Data = FlattenSymbols(sym, bs),
+                    };
+                    rcFile.RepairB = repairB;
+                    indexObj.Fss61RepairB = repairB;
+                }
+
+                // C: RC blocks
+                var rcBlocks = SplitToBlocks(rcBytes, bs);
+                if (rcBlocks.Length > 0)
+                {
+                    var (sym, seed) = LtCode.Encode(rcBlocks, rcBlocks.Length, bs);
+                    indexObj.Fss61RepairC = new Fss61RepairData
+                    {
+                        Seed = seed,
+                        BlockCount = rcBlocks.Length,
+                        BlockSize = bs,
+                        Data = FlattenSymbols(sym, bs),
+                    };
+                }
+
+                rcBytes = rcFile.ToCborBytes();
+                serializedIndex = IndexManager.SerializeIndex(indexObj);
             }
-            catch (Exception ex) { Debug.WriteLine($"FSS6.1 LT generation failed: {ex.Message}"); }
+            catch (Exception ex) { Debug.WriteLine($"FSS6.1 triple repair generation failed: {ex.Message}"); }
         }
 
         // Strip BM fields from the Index before embedding in fragment headers
@@ -365,5 +390,27 @@ public class BackupOrchestrator : IDisposable
             CryptographicOperations.ZeroMemory(_salt);
         (_metadata as IDisposable)?.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    private static byte[][] SplitToBlocks(byte[] data, int blockSize)
+    {
+        int count = (data.Length + blockSize - 1) / blockSize;
+        var blocks = new byte[count][];
+        for (int i = 0; i < count; i++)
+        {
+            int off = i * blockSize;
+            int len = Math.Min(blockSize, data.Length - off);
+            blocks[i] = new byte[blockSize];
+            Buffer.BlockCopy(data, off, blocks[i], 0, len);
+        }
+        return blocks;
+    }
+
+    private static byte[] FlattenSymbols(List<byte[]> symbols, int blockSize)
+    {
+        var data = new byte[symbols.Count * blockSize];
+        for (int i = 0; i < symbols.Count; i++)
+            Buffer.BlockCopy(symbols[i], 0, data, i * blockSize, blockSize);
+        return data;
     }
 }
