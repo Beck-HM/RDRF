@@ -250,19 +250,20 @@ public class Fss61Tests
             FileFingerprint = "test",
             IndexBlockMap = ["abc", "def"],
             FragentBlockMaps = [["a", "b"], ["c"]],
-            RepairSeed = 42,
-            RepairCount = 10,
-            RepairBlockSize = 256,
-            RepairData = [1, 2, 3, 4, 5],
+            RepairA = new Fss61RepairData { Seed = 42, BlockCount = 10, BlockSize = 256, Data = [1, 2, 3, 4, 5] },
+            RepairB = new Fss61RepairData { Seed = 99, BlockCount = 5, BlockSize = 128, Data = [9, 8, 7] },
         };
 
         byte[] cbor = rc.ToCborBytes();
         var rc2 = RcFile.FromCbor(cbor);
 
-        Assert.Equal(42, rc2.RepairSeed);
-        Assert.Equal(10, rc2.RepairCount);
-        Assert.Equal(256, rc2.RepairBlockSize);
-        Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, rc2.RepairData);
+        Assert.NotNull(rc2.RepairA);
+        Assert.Equal(42, rc2.RepairA.Seed);
+        Assert.Equal(10, rc2.RepairA.BlockCount);
+        Assert.Equal(256, rc2.RepairA.BlockSize);
+        Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, rc2.RepairA.Data);
+        Assert.NotNull(rc2.RepairB);
+        Assert.Equal(99, rc2.RepairB.Seed);
     }
 
     [Fact]
@@ -278,10 +279,8 @@ public class Fss61Tests
         byte[] cbor = rc.ToCborBytes();
         var rc2 = RcFile.FromCbor(cbor);
 
-        Assert.Null(rc2.RepairSeed);
-        Assert.Null(rc2.RepairCount);
-        Assert.Null(rc2.RepairBlockSize);
-        Assert.Null(rc2.RepairData);
+        Assert.Null(rc2.RepairA);
+        Assert.Null(rc2.RepairB);
     }
 
     // ── FSS6.1 Integration Tests ──
