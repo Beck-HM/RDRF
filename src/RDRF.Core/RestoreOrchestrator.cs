@@ -253,10 +253,19 @@ public class RestoreOrchestrator : IDisposable
                 fileFingerprint, ct).ConfigureAwait(false);
         }
 
-        // Always strip ETN trailers (safe on non-ETN data)
-        var etn = (Fss6Etn)_fss.GetStrategy(Constants.FssLevel6);
-        foreach (int idx in decryptedFragments.Keys.ToList())
-            decryptedFragments[idx] = etn.Strip(decryptedFragments[idx]);
+        // Strip ETN/FSS6.1 trailers
+        bool isFss61 = fssStrategy == Constants.FssLevel61;
+        if (isFss61)
+        {
+            foreach (int idx in decryptedFragments.Keys.ToList())
+                decryptedFragments[idx] = StripAnyTrailer(decryptedFragments[idx]);
+        }
+        else
+        {
+            var etn = (Fss6Etn)_fss.GetStrategy(Constants.FssLevel6);
+            foreach (int idx in decryptedFragments.Keys.ToList())
+                decryptedFragments[idx] = etn.Strip(decryptedFragments[idx]);
+        }
 
         // Recovery
         if (allowFssRecovery)
@@ -395,7 +404,7 @@ public class RestoreOrchestrator : IDisposable
 
                 var cvResult = Fss6Etn.CrossValidate(
                     indexBytes,
-                    decryptedFragments.OrderBy(k => k.Key).Select(k => k.Value).ToList(),
+                    decryptedFragments.OrderBy(k => k.Key).Select(k => StripAnyTrailer(k.Value)).ToList(),
                     rcBytes);
 
                 if (!cvResult.IsValid)
@@ -433,28 +442,42 @@ public class RestoreOrchestrator : IDisposable
             var rcFile = RcFile.FromCbor(rcBytes);
             bool anyRepair = false;
 
-            // Repair A (Index) from RC.RepairA
-            if (cvResult.IndexCorrupted && rcFile.RepairA != null)
+            // Read repair_A and repair_C from first available fragment trailer
+            FSS.Fss61RepairData? fragRepairA = null;
+            FSS.Fss61RepairData? fragRepairC = null;
+            foreach (var kvp in decryptedFragments)
             {
-                var ra = rcFile.RepairA;
-                byte[] idxBytes = IndexManager.SerializeIndex(index);
-                var blocks = SplitToBlocks(idxBytes, bs);
-                var isBad = new bool[blocks.Length];
-                for (int i = 0; i < cvResult.IndexCorruptedBlocks.Count && i < blocks.Length; i++)
-                    isBad[cvResult.IndexCorruptedBlocks[i]] = true;
+                var (_, _, _, ra, rc) = FSS.Fss61RepairTrailer.Parse(kvp.Value);
+                if (ra != null) fragRepairA = ra;
+                if (rc != null) fragRepairC = rc;
+                if (fragRepairA != null && fragRepairC != null) break;
+            }
 
-                bool ok = FSS.LtCode.Decode(blocks, isBad, ra.BlockCount, ra.Seed,
-                    ra.Data, blocks.Length, bs);
-                if (ok)
+            // Repair A (Index) from RC.RepairA or fragment trailer
+            if (cvResult.IndexCorrupted)
+            {
+                var ra = rcFile.RepairA ?? fragRepairA;
+                if (ra != null)
                 {
-                    var fixedIndex = IndexManager.DeserializeIndex(MergeBlocks(blocks, idxBytes.Length, bs));
-                    if (fixedIndex != null)
+                    byte[] idxBytes = IndexManager.SerializeIndex(index);
+                    var blocks = SplitToBlocks(idxBytes, bs);
+                    var isBad = new bool[blocks.Length];
+                    for (int i = 0; i < cvResult.IndexCorruptedBlocks.Count && i < blocks.Length; i++)
+                        isBad[cvResult.IndexCorruptedBlocks[i]] = true;
+
+                    bool ok = FSS.LtCode.Decode(blocks, isBad, ra.BlockCount, ra.Seed,
+                        ra.Data, blocks.Length, bs);
+                    if (ok)
                     {
-                        index.FileFingerprint = fixedIndex.FileFingerprint;
-                        index.OriginalName = fixedIndex.OriginalName;
-                        index.OriginalHash = fixedIndex.OriginalHash;
-                        anyRepair = true;
-                        Debug.WriteLine("  LT repaired Index (A) from RC.RepairA");
+                        var fixedIndex = IndexManager.DeserializeIndex(MergeBlocks(blocks, idxBytes.Length, bs));
+                        if (fixedIndex != null)
+                        {
+                            index.FileFingerprint = fixedIndex.FileFingerprint;
+                            index.OriginalName = fixedIndex.OriginalName;
+                            index.OriginalHash = fixedIndex.OriginalHash;
+                            anyRepair = true;
+                            Debug.WriteLine("  LT repaired Index (A) from repair data");
+                        }
                     }
                 }
             }
@@ -470,7 +493,7 @@ public class RestoreOrchestrator : IDisposable
                     var rawLengths = new List<int>();
                     foreach (var kvp in sorted)
                     {
-                        var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(kvp.Value);
+                        var (rawData, _, _, _, _) = FSS.Fss61RepairTrailer.Parse(kvp.Value);
                         rawLengths.Add(rawData.Length);
                         totalBlocks += (rawData.Length + bs - 1) / bs;
                     }
@@ -482,7 +505,7 @@ public class RestoreOrchestrator : IDisposable
                         int gIdx = 0;
                         for (int fi = 0; fi < sorted.Count; fi++)
                         {
-                            var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(sorted[fi].Value);
+                            var (rawData, _, _, _, _) = FSS.Fss61RepairTrailer.Parse(sorted[fi].Value);
                             cvResult.CorruptedFragmentBlocks.TryGetValue(fi, out var badBlocks);
                             for (int off = 0; off < rawData.Length; off += bs)
                             {
@@ -523,22 +546,25 @@ public class RestoreOrchestrator : IDisposable
                 }
             }
 
-            // Repair C (RC) from index.Fss61RepairC
-            if (cvResult.RcCorrupted && index.Fss61RepairC != null)
+            // Repair C (RC) from index.Fss61RepairC or fragment trailer
+            if (cvResult.RcCorrupted)
             {
-                var rc = index.Fss61RepairC;
-                var blocks = SplitToBlocks(rcBytes, bs);
-                var isBad = new bool[blocks.Length];
-                for (int i = 0; i < cvResult.RcCorruptedBlocks.Count && i < blocks.Length; i++)
-                    isBad[cvResult.RcCorruptedBlocks[i]] = true;
-
-                bool ok = FSS.LtCode.Decode(blocks, isBad, rc.BlockCount, rc.Seed,
-                    rc.Data, blocks.Length, bs);
-                if (ok)
+                var rc = index.Fss61RepairC ?? fragRepairC;
+                if (rc != null)
                 {
-                    rcBytes = MergeBlocks(blocks, rcBytes.Length, bs);
-                    anyRepair = true;
-                    Debug.WriteLine("  LT repaired RC (C) from index.Fss61RepairC");
+                    var blocks = SplitToBlocks(rcBytes, bs);
+                    var isBad = new bool[blocks.Length];
+                    for (int i = 0; i < cvResult.RcCorruptedBlocks.Count && i < blocks.Length; i++)
+                        isBad[cvResult.RcCorruptedBlocks[i]] = true;
+
+                    bool ok = FSS.LtCode.Decode(blocks, isBad, rc.BlockCount, rc.Seed,
+                        rc.Data, blocks.Length, bs);
+                    if (ok)
+                    {
+                        rcBytes = MergeBlocks(blocks, rcBytes.Length, bs);
+                        anyRepair = true;
+                        Debug.WriteLine("  LT repaired RC (C) from repair data");
+                    }
                 }
             }
 
@@ -575,6 +601,14 @@ public class RestoreOrchestrator : IDisposable
             Buffer.BlockCopy(blocks[i], 0, data, off, len);
         }
         return data;
+    }
+
+    private static byte[] StripAnyTrailer(byte[] frag)
+    {
+        var (raw61, _, _, _, _) = FSS.Fss61RepairTrailer.Parse(frag);
+        if (raw61.Length < frag.Length) return raw61;
+        var (rawEtn, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
+        return rawEtn;
     }
 
     // ── Strip FSS Encoding ──

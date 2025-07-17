@@ -15,12 +15,15 @@ public class Fss61Etn : IFssStrategy
         var result = new List<byte[]>();
         for (int i = 0; i < originalFragmentCount; i++)
             if (encodedFragments.TryGetValue(i, out var data))
-                result.Add(data);
+                result.Add(StripSingle(data, i));
         return result;
     }
 
     public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)
-        => encodedFragment;
+    {
+        var (data, _, _, _, _) = Fss61RepairTrailer.Parse(encodedFragment);
+        return data;
+    }
 
     public Dictionary<int, byte[]> Decode(
         Dictionary<int, byte[]> available,
