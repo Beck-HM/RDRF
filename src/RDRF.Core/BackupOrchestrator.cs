@@ -307,6 +307,18 @@ public class BackupOrchestrator : IDisposable
                     };
                 }
 
+                if (rcFile.RepairA != null && indexObj.Fss61RepairC != null)
+                {
+                    // Replace ETN trailer on each fragment with FSS6.1 repair trailer
+                    string fp = filePrefix ?? fileFingerprint;
+                    for (int i = 0; i < fragments.Count; i++)
+                    {
+                        var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(fragments[i]);
+                        fragments[i] = Fss61RepairTrailer.Build(rawData, fp, fp,
+                            rcFile.RepairA, indexObj.Fss61RepairC);
+                    }
+                }
+
                 rcBytes = rcFile.ToCborBytes();
                 serializedIndex = IndexManager.SerializeIndex(indexObj);
             }
