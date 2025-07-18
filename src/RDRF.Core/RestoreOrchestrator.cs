@@ -438,7 +438,6 @@ public class RestoreOrchestrator : IDisposable
     {
         try
         {
-            int bs = 256;
             var rcFile = RcFile.FromCbor(rcBytes);
             bool anyRepair = false;
 
@@ -459,6 +458,7 @@ public class RestoreOrchestrator : IDisposable
                 var ra = rcFile.RepairA ?? fragRepairA;
                 if (ra != null)
                 {
+                    int bs = ra.BlockSize;
                     byte[] idxBytes = IndexManager.SerializeIndex(index);
                     var blocks = SplitToBlocks(idxBytes, bs);
                     var isBad = new bool[blocks.Length];
@@ -488,6 +488,7 @@ public class RestoreOrchestrator : IDisposable
                 FSS.Fss61RepairData? rb = index.Fss61RepairB ?? rcFile.RepairB;
                 if (rb != null)
                 {
+                    int bs = rb.BlockSize;
                     var sorted = decryptedFragments.OrderBy(k => k.Key).ToList();
                     int totalBlocks = 0;
                     var rawLengths = new List<int>();
@@ -543,6 +544,10 @@ public class RestoreOrchestrator : IDisposable
                             Debug.WriteLine($"  LT repaired Fragments (B) from repair data");
                         }
                     }
+                    else
+                    {
+                        Debug.WriteLine($"  B repair skipped: totalBlocks={totalBlocks} != BlockCount={rb.BlockCount}");
+                    }
                 }
             }
 
@@ -552,6 +557,7 @@ public class RestoreOrchestrator : IDisposable
                 var rc = index.Fss61RepairC ?? fragRepairC;
                 if (rc != null)
                 {
+                    int bs = rc.BlockSize;
                     var blocks = SplitToBlocks(rcBytes, bs);
                     var isBad = new bool[blocks.Length];
                     for (int i = 0; i < cvResult.RcCorruptedBlocks.Count && i < blocks.Length; i++)

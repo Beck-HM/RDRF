@@ -364,34 +364,41 @@ foreach (string strategy in strategies)
         customResults.Add(("keep_one", (double)sDel / totalFrags * 100, sR && sSha));
     }
 
-    // FSS6.1: block corruption test (ETN detects, LT repairs via repair_B in Index)
+    // FSS6.1: block corruption test — corrupt encrypted bytes directly
     if (strategy == "FSS6.1")
     {
         var bcDir = Path.Combine(testRoot, "custom_block_corrupt");
         Directory.CreateDirectory(bcDir);
         WriteTrialDir(bcDir, null);
 
-        var (embeddedIdx, fragData, bcSalt) = RDRFEngine.DecryptFragment(
-            allFragBytes[0], aesKey);
-        if (embeddedIdx != null)
-        {
-            // Corrupt bytes near the start of the fragment (deg-1 covers blocks 0..59)
-            fragData[0] ^= 0xFF;
-            fragData[1] ^= 0xFF;
+        // Diagnostic: verify Fss61RepairB in Index
+        var idxBytes2 = File.ReadAllBytes(Path.Combine(bcDir, $"{prefix}.indrdrf"));
+        var (_, cbor2) = EncryptionLayer.DecryptIndexWithAutoDetect(idxBytes2, rcClone());
+        var idx2 = IndexManager.DeserializeIndex(cbor2);
+        var rb = idx2.Fss61RepairB;
+        Console.Error.WriteLine($"  [FSS6.1] Fss61RepairB: {(rb != null ? $"BlockCount={rb.BlockCount} DataLen={rb.Data.Length} Seed={rb.Seed}" : "NULL")}");
 
-            byte[] reEnc = FragmentFileHeader.EncryptWithEmbeddedIndex(
-                fragData, embeddedIdx, aesKey, bcSalt);
-            File.WriteAllBytes(Path.Combine(bcDir, $"{prefix}_0.rdrf"), reEnc);
+        // Find raw data offset in encrypted file: [hdr][nonce(12)][4B idxLen][serializedIndex][rawData+trailer]
+        byte[] frag0Enc = allFragBytes[0];
+        int hdrSz = FragmentFileHeader.GetTotalHeaderSize(frag0Enc);
+        byte[] dec = EncryptionLayer.DecryptFragmentCtrWithKey(frag0Enc, hdrSz, aesKey);
+        int idxLen = BitConverter.ToInt32(dec.AsSpan(0, 4));
+        int rawOff = hdrSz + 12 + 4 + idxLen;
 
-            var bcTs = new LocalFileAdapter(bcDir);
-            sw.Restart();
-            bool bcR;
-            using (var r = new RestoreOrchestrator(rcClone(), bcTs))
-                bcR = r.RestoreFileAsync(fingerprint, Path.Combine(bcDir, "restored.bin")).GetAwaiter().GetResult();
-            bool bcSha = bcR && VerifySha(Path.Combine(bcDir, "restored.bin"), originalHash);
-            csv.Add($"\"{strategy}\",custom_block_corrupt,0,0,{totalFrags},0,{bcR},{bcSha},{sw.Elapsed.TotalMilliseconds:F0},\"block_corrupted_repaired\"");
-            customResults.Add(("block_corrupt", 0, bcR && bcSha));
-        }
+        // Corrupt block 0 bytes (deg-1 symbol 0 covers block 0)
+        byte[] corrupt = (byte[])frag0Enc.Clone();
+        corrupt[rawOff] ^= 0xFF;
+        corrupt[rawOff + 1] ^= 0xFF;
+        File.WriteAllBytes(Path.Combine(bcDir, $"{prefix}_0.rdrf"), corrupt);
+
+        var bcTs = new LocalFileAdapter(bcDir);
+        sw.Restart();
+        bool bcR;
+        using (var r = new RestoreOrchestrator(rcClone(), bcTs))
+            bcR = r.RestoreFileAsync(fingerprint, Path.Combine(bcDir, "restored.bin")).GetAwaiter().GetResult();
+        bool bcSha = bcR && VerifySha(Path.Combine(bcDir, "restored.bin"), originalHash);
+        csv.Add($"\"{strategy}\",custom_block_corrupt,0,0,{totalFrags},0,{bcR},{bcSha},{sw.Elapsed.TotalMilliseconds:F0},\"block_corrupted_repaired\"");
+        customResults.Add(("block_corrupt", 0, bcR && bcSha));
     }
 
     // ── Targeted tests ──
