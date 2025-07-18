@@ -20,18 +20,7 @@ public static class LtCode
 
         var result = new List<byte[]>(symbolCount);
 
-        // Phase 1: guaranteed deg-1 covering each source block cyclically
-        int deg1 = Math.Max(1, symbolCount / 2);
-        for (int si = 0; si < deg1; si++)
-        {
-            int bi = si % K;
-            byte[] data = new byte[blockSize];
-            Buffer.BlockCopy(inter[bi], 0, data, 0, blockSize);
-            result.Add(data);
-        }
-
-        // Phase 2: uniform distribution over N
-        for (int si = deg1; si < symbolCount; si++)
+        for (int si = 0; si < symbolCount; si++)
         {
             int deg = SelectDegree(ref prng);
             if (deg > N) deg = N;
