@@ -364,7 +364,7 @@ foreach (string strategy in strategies)
         customResults.Add(("keep_one", (double)sDel / totalFrags * 100, sR && sSha));
     }
 
-    // FSS6.1: block corruption test (ETN detects, LT repairs)
+    // FSS6.1: block corruption test (ETN detects, LT repairs via repair_B in Index)
     if (strategy == "FSS6.1")
     {
         var bcDir = Path.Combine(testRoot, "custom_block_corrupt");
@@ -375,8 +375,9 @@ foreach (string strategy in strategies)
             allFragBytes[0], aesKey);
         if (embeddedIdx != null)
         {
-            int corruptOff = Math.Min(4096, Math.Max(1, fragData.Length - 256));
-            RandomNumberGenerator.Fill(fragData.AsSpan(corruptOff, 128));
+            // Corrupt bytes near the start of the fragment (deg-1 covers blocks 0..59)
+            fragData[0] ^= 0xFF;
+            fragData[1] ^= 0xFF;
 
             byte[] reEnc = FragmentFileHeader.EncryptWithEmbeddedIndex(
                 fragData, embeddedIdx, aesKey, bcSalt);

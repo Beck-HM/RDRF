@@ -355,4 +355,65 @@ public class Fss61Tests
         byte[] hash = SHA256.HashData(stream);
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
+
+    [Fact]
+    public void Fss61_RepairDataSurvivesBackupRoundTrip()
+    {
+        // Force execution to verify test is running
+        Assert.True(File.Exists(EtnTestHelpers.TestFile), $"Test file not found: {EtnTestHelpers.TestFile}");
+
+        string storageDir = EtnTestHelpers.CreateStorageDir();
+        try
+        {
+            byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
+            var storage = new LocalFileAdapter(storageDir);
+            string fingerprint;
+
+            using (var engine = new RDRFEngine((byte[])rcCode.Clone(), storage))
+            {
+                fingerprint = engine.BackupFile(EtnTestHelpers.TestFile, "FSS6.1");
+                _output.WriteLine($"Fingerprint: {fingerprint}");
+            }
+
+            Assert.False(string.IsNullOrEmpty(fingerprint));
+            Assert.True(storage.RcExists(fingerprint), "RC file should exist after FSS6.1 backup");
+
+            // Derive correct AES key from salt (first 32 bytes of encrypted index)
+            byte[] encryptedIndex = storage.ReadIndex(fingerprint);
+            byte[] salt = new byte[32];
+            Buffer.BlockCopy(encryptedIndex, 0, salt, 0, 32);
+            byte[] aesKey = EncryptionLayer.DeriveKey(rcCode, salt);
+
+            // Check RC file repair data
+            byte[] encryptedRc = storage.ReadRc(fingerprint);
+            byte[] rcBytes = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, aesKey);
+            var rcFile = RcFile.FromCbor(rcBytes);
+
+            _output.WriteLine($"RC.RepairA: {(rcFile.RepairA != null ? $"OK ({rcFile.RepairA.BlockCount} blocks, {rcFile.RepairA.Data.Length}B)" : "NULL")}");
+            _output.WriteLine($"RC.RepairB: {(rcFile.RepairB != null ? $"OK ({rcFile.RepairB.BlockCount} blocks, {rcFile.RepairB.Data.Length}B)" : "NULL")}");
+
+            Assert.NotNull(rcFile.RepairA);
+            Assert.True(rcFile.RepairA.Data.Length > 0);
+            Assert.NotNull(rcFile.RepairB);
+            Assert.True(rcFile.RepairB.Data.Length > 0);
+
+            // Check Index repair data
+            (_, byte[] indexCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcCode);
+            var index = IndexManager.DeserializeIndex(indexCbor);
+
+            _output.WriteLine($"Index.Fss61RepairB: {(index.Fss61RepairB != null ? $"OK ({index.Fss61RepairB.BlockCount} blocks, {index.Fss61RepairB.Data.Length}B)" : "NULL")}");
+            _output.WriteLine($"Index.Fss61RepairC: {(index.Fss61RepairC != null ? $"OK ({index.Fss61RepairC.BlockCount} blocks, {index.Fss61RepairC.Data.Length}B)" : "NULL")}");
+
+            Assert.NotNull(index.Fss61RepairB);
+            Assert.True(index.Fss61RepairB.Data.Length > 0);
+            Assert.NotNull(index.Fss61RepairC);
+            Assert.True(index.Fss61RepairC.Data.Length > 0);
+
+            _output.WriteLine("PASS: All repair data survives backup round-trip");
+        }
+        finally
+        {
+            EtnTestHelpers.Cleanup(storageDir);
+        }
+    }
 }
