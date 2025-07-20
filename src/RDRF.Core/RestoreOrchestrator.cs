@@ -513,7 +513,8 @@ public class RestoreOrchestrator : IDisposable
                                 int len = Math.Min(bs, rawData.Length - off);
                                 allBlocks[gIdx] = new byte[bs];
                                 Buffer.BlockCopy(rawData, off, allBlocks[gIdx], 0, len);
-                                if (badBlocks != null && badBlocks.Contains(gIdx))
+                                int localIdx = off / bs;
+                                if (badBlocks != null && badBlocks.Contains(localIdx))
                                     isBad[gIdx] = true;
                                 gIdx++;
                             }
@@ -529,10 +530,10 @@ public class RestoreOrchestrator : IDisposable
                                 byte[] frag = sorted[fi].Value;
                                 int rawLen = rawLengths[fi];
                                 cvResult.CorruptedFragmentBlocks.TryGetValue(fi, out var badBlocks);
-                                if (badBlocks == null) { gIdx += (rawLen + bs - 1) / bs; continue; }
                                 for (int off = 0; off < rawLen; off += bs)
                                 {
-                                    if (badBlocks.Contains(gIdx))
+                                    int localIdx = off / bs;
+                                    if (badBlocks != null && badBlocks.Contains(localIdx))
                                     {
                                         int len = Math.Min(bs, rawLen - off);
                                         Buffer.BlockCopy(allBlocks[gIdx], 0, frag, off, len);
