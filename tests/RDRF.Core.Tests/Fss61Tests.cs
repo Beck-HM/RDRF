@@ -416,4 +416,161 @@ public class Fss61Tests
             EtnTestHelpers.Cleanup(storageDir);
         }
     }
+
+    [Fact]
+    public void Fss61_RepairIndex_FromRC()
+    {
+        string storageDir = EtnTestHelpers.CreateStorageDir();
+        string outputFile = Path.Combine(EtnTestHelpers.TestOutputDir,
+            $"repair_idx_{Guid.NewGuid():N}.mp4");
+        string originalHash = ComputeSha256(EtnTestHelpers.TestFile);
+
+        try
+        {
+            byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
+            var storage = new LocalFileAdapter(storageDir);
+            string fingerprint;
+
+            using (var engine = new RDRFEngine((byte[])rcCode.Clone(), storage))
+            {
+                fingerprint = engine.BackupFile(EtnTestHelpers.TestFile, "FSS6.1");
+            }
+
+            // Corrupt Index: decrypt, modify original_name, re-encrypt
+            byte[] encryptedIndex = storage.ReadIndex(fingerprint);
+            byte[] salt = new byte[32];
+            Buffer.BlockCopy(encryptedIndex, 0, salt, 0, 32);
+            (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcCode);
+            var idx = IndexManager.DeserializeIndex(cbor);
+            idx.OriginalName = idx.OriginalName + "_CORRUPTED";
+            byte[] newCbor = IndexManager.SerializeIndex(idx);
+            byte[] newEncrypted = EncryptionLayer.EncryptIndexWithSaltPrefix(newCbor, rcCode, salt);
+            storage.WriteIndex(fingerprint, newEncrypted);
+
+            // Restore should repair Index from RC.RepairA
+            using (var engine = new RDRFEngine((byte[])rcCode.Clone(), storage))
+            {
+                bool restored = engine.RestoreFile(fingerprint, outputFile);
+                Assert.True(restored, "Should repair corrupted Index from RC.RepairA");
+
+                string restoredHash = ComputeSha256(outputFile);
+                Assert.Equal(originalHash, restoredHash);
+                _output.WriteLine("PASS: Index repaired from RC.RepairA");
+            }
+        }
+        finally
+        {
+            EtnTestHelpers.Cleanup(storageDir);
+            try { File.Delete(outputFile); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Fss61_RepairRc_FromIndex()
+    {
+        string storageDir = EtnTestHelpers.CreateStorageDir();
+        string outputFile = Path.Combine(EtnTestHelpers.TestOutputDir,
+            $"repair_rc_{Guid.NewGuid():N}.mp4");
+        string originalHash = ComputeSha256(EtnTestHelpers.TestFile);
+
+        try
+        {
+            byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
+            var storage = new LocalFileAdapter(storageDir);
+            string fingerprint;
+
+            using (var engine = new RDRFEngine((byte[])rcCode.Clone(), storage))
+            {
+                fingerprint = engine.BackupFile(EtnTestHelpers.TestFile, "FSS6.1");
+            }
+
+            // Derive AES key from salt for RC encryption
+            byte[] encryptedIndex = storage.ReadIndex(fingerprint);
+            byte[] salt = new byte[32];
+            Buffer.BlockCopy(encryptedIndex, 0, salt, 0, 32);
+            byte[] aesKey = EncryptionLayer.DeriveKey(rcCode, salt);
+
+            // Corrupt RC: decrypt, modify FileFingerprint, re-encrypt
+            byte[] encryptedRc = storage.ReadRc(fingerprint);
+            byte[] rcBytes = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, aesKey);
+            var rcFile = RcFile.FromCbor(rcBytes);
+            rcFile.FileFingerprint = rcFile.FileFingerprint + "_CORRUPTED";
+            byte[] newRcBytes = rcFile.ToCborBytes();
+            byte[] newEncrypted = EncryptionLayer.EncryptFragmentWithKey(newRcBytes, aesKey);
+            storage.WriteRc(fingerprint, newEncrypted);
+
+            // Restore should repair RC from Index.Fss61RepairC
+            using (var engine = new RDRFEngine((byte[])rcCode.Clone(), storage))
+            {
+                bool restored = engine.RestoreFile(fingerprint, outputFile);
+                Assert.True(restored, "Should repair corrupted RC from Index.Fss61RepairC");
+
+                string restoredHash = ComputeSha256(outputFile);
+                Assert.Equal(originalHash, restoredHash);
+                _output.WriteLine("PASS: RC repaired from Index.Fss61RepairC");
+            }
+        }
+        finally
+        {
+            EtnTestHelpers.Cleanup(storageDir);
+            try { File.Delete(outputFile); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Fss61_RepairBoth_IndexAndRcCorrupted_TrailerFallback()
+    {
+        string storageDir = EtnTestHelpers.CreateStorageDir();
+        string outputFile = Path.Combine(EtnTestHelpers.TestOutputDir,
+            $"repair_both_{Guid.NewGuid():N}.mp4");
+        string originalHash = ComputeSha256(EtnTestHelpers.TestFile);
+
+        try
+        {
+            byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
+            byte[] rcClone = (byte[])rcCode.Clone();
+            var storage = new LocalFileAdapter(storageDir);
+            string fingerprint;
+
+            using (var engine = new RDRFEngine(rcCode, storage))
+            {
+                fingerprint = engine.BackupFile(EtnTestHelpers.TestFile, "FSS6.1");
+            }
+
+            byte[] encryptedIndex = storage.ReadIndex(fingerprint);
+            byte[] salt = new byte[32];
+            Buffer.BlockCopy(encryptedIndex, 0, salt, 0, 32);
+            byte[] aesKey = EncryptionLayer.DeriveKey(rcClone, salt);
+
+            // Corrupt Index
+            (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcClone);
+            var idx = IndexManager.DeserializeIndex(cbor);
+            idx.OriginalName = idx.OriginalName + "_CORRUPTED";
+            byte[] newCbor = IndexManager.SerializeIndex(idx);
+            storage.WriteIndex(fingerprint, EncryptionLayer.EncryptIndexWithSaltPrefix(newCbor, rcClone, salt));
+
+            // Corrupt RC too
+            byte[] encryptedRc = storage.ReadRc(fingerprint);
+            byte[] rcBytes = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, aesKey);
+            var rcf = RcFile.FromCbor(rcBytes);
+            rcf.FileFingerprint = rcf.FileFingerprint + "_CORRUPTED";
+            storage.WriteRc(fingerprint, EncryptionLayer.EncryptFragmentWithKey(rcf.ToCborBytes(), aesKey));
+
+            // Restore must repair both Index and RC from fragment trailer fallback
+            using (var engine = new RDRFEngine(rcClone, storage))
+            {
+                bool restored = engine.RestoreFile(fingerprint, outputFile);
+                Assert.True(restored, "Should repair both Index and RC from fragment trailer");
+
+                string restoredHash = ComputeSha256(outputFile);
+                Assert.Equal(originalHash, restoredHash);
+                _output.WriteLine("PASS: Both Index and RC repaired from fragment trailer fallback");
+            }
+        }
+        finally
+        {
+            EtnTestHelpers.Cleanup(storageDir);
+            try { File.Delete(outputFile); } catch { }
+        }
+    }
 }
