@@ -155,6 +155,9 @@ public static class LtCode
                 }
             }
 
+            // Re-derive intermediates from newly BP-recovered source blocks
+            Precode.Derive(inter, known, K, blockSize);
+
             int unlocked = Precode.Unlock(inter, known, srcKnown,
                 allBlocks, K, blockSize);
             if (unlocked > 0)
@@ -163,7 +166,10 @@ public static class LtCode
                 progress = true;
 
                 Precode.Derive(inter, known, K, blockSize);
+            }
 
+            if (progress)
+            {
                 // Rebuild symData from scratch and recompute remainingDeg
                 queue.Clear();
                 for (int si = 0; si < symbolCount; si++)
