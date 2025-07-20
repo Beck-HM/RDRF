@@ -404,7 +404,7 @@ public class RestoreOrchestrator : IDisposable
 
                 var cvResult = Fss6Etn.CrossValidate(
                     indexBytes,
-                    decryptedFragments.OrderBy(k => k.Key).Select(k => StripAnyTrailer(k.Value)).ToList(),
+                    decryptedFragments.OrderBy(k => k.Key).Select(k => k.Value).ToList(),
                     rcBytes);
 
                 if (!cvResult.IsValid)

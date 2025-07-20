@@ -39,6 +39,10 @@ public static class Fss61RepairTrailer
         if (trailerStart < 0)
             return (fileData, "", "", null, null);
 
+        // Minimum trailer: 32+32 + 2*16 + 4 + 4 = 104 bytes
+        if (trailerSize < 104)
+            return (fileData, "", "", null, null);
+
         var r = new BinaryReader(new MemoryStream(fileData, trailerStart, trailerSize));
 
         string aFp = BytesToHex(r.ReadBytes(32));
@@ -67,11 +71,15 @@ public static class Fss61RepairTrailer
 
     private static Fss61RepairData? ReadRepair(BinaryReader r)
     {
+        if (r.BaseStream.Length - r.BaseStream.Position < 16)
+            return null;
         int seed = r.ReadInt32();
         int blockCount = r.ReadInt32();
         int blockSize = r.ReadInt32();
         int dataLen = r.ReadInt32();
         if (dataLen < 0 || dataLen > 100_000_000)
+            return null;
+        if (r.BaseStream.Length - r.BaseStream.Position < dataLen)
             return null;
         byte[] data = r.ReadBytes(dataLen);
         if (data.Length != dataLen)

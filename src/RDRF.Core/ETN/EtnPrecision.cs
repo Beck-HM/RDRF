@@ -1,3 +1,4 @@
+using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using RDRF.Core.Storage;
 
@@ -50,7 +51,8 @@ public static class EtnPrecision
 
         Parallel.For(0, n, i =>
         {
-            var (data, tFragFlat, tFragCnt, tIdxFlat, tIdxCnt, tRcFlat, tRcCnt) = EtnTrailer.Parse(fragmentsWithTrailers[i]);
+            var (data, tFragFlat, tFragCnt, tIdxFlat, tIdxCnt, tRcFlat, tRcCnt)
+                = ParseAnyTrailer(fragmentsWithTrailers[i]);
             actualFragmentFlats[i] = EtnBlockMap.Build(data, blockSize);
             fragmentBlockCounts[i] = EtnBlockMap.BlockCount(actualFragmentFlats[i]);
             trailerFragmentFlats[i] = tFragFlat;
@@ -259,6 +261,16 @@ public static class EtnPrecision
         index.Fss6FragentBlockMaps = null;
         index.Fss6RcBlockMap = null;
         return IndexManager.SerializeIndex(index);
+    }
+
+    private static (byte[] data, byte[] fragFlat, int fragCount, byte[] indexFlat, int indexCount, byte[] rcFlat, int rcCount) ParseAnyTrailer(byte[] fragmentData)
+    {
+        // Try FSS6.1 repair trailer first
+        var (raw61, _, _, _, _) = Fss61RepairTrailer.Parse(fragmentData);
+        if (raw61.Length < fragmentData.Length)
+            return (raw61, [], 0, [], 0, [], 0);
+        // Fall back to ETN trailer
+        return EtnTrailer.Parse(fragmentData);
     }
 }
 
