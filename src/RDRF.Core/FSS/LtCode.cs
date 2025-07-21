@@ -19,15 +19,17 @@ public static class LtCode
         var inter = Precode.Encode(allBlocks, blockSize);
 
         var result = new List<byte[]>(symbolCount);
-
         for (int si = 0; si < symbolCount; si++)
         {
             int deg = SelectDegree(ref prng);
             if (deg > N) deg = N;
 
-            var indices = new HashSet<int>();
+            var indices = new List<int>(deg);
             while (indices.Count < deg)
-                indices.Add(NextPseudo(ref prng) % N);
+            {
+                int idx = NextPseudo(ref prng) % N;
+                if (!indices.Contains(idx)) indices.Add(idx);
+            }
 
             byte[] data = new byte[blockSize];
             foreach (int idx in indices)
@@ -80,9 +82,12 @@ public static class LtCode
             int deg = SelectDegree(ref prng);
             if (deg > N) deg = N;
             symDeg[si] = deg;
-            var indices = new HashSet<int>();
+            var indices = new List<int>(deg);
             while (indices.Count < deg)
-                indices.Add(NextPseudo(ref prng) % N);
+            {
+                int idx = NextPseudo(ref prng) % N;
+                if (!indices.Contains(idx)) indices.Add(idx);
+            }
             symIdx[si] = indices.ToArray();
             symData[si] = new byte[blockSize];
             Buffer.BlockCopy(allSymbolData, dataOff, symData[si], 0, blockSize);
@@ -121,6 +126,7 @@ public static class LtCode
         while (recovered < totalBad)
         {
             bool progress = false;
+            var newlyKnown = new List<int>();
 
             while (queue.Count > 0)
             {
@@ -132,9 +138,9 @@ public static class LtCode
                     if (!known[bi]) { target = bi; break; }
                 if (target < 0) continue;
 
-                inter[target] = new byte[blockSize];
                 Buffer.BlockCopy(symData[si], 0, inter[target], 0, blockSize);
                 known[target] = true;
+                newlyKnown.Add(target);
 
                 if (target < K && !srcKnown[target])
                 {
@@ -155,8 +161,12 @@ public static class LtCode
                 }
             }
 
-            // Re-derive intermediates from newly BP-recovered source blocks
+            // Derive ladder/global from newly known source blocks
             Precode.Derive(inter, known, K, blockSize);
+            // Track newly derived blocks
+            for (int i = K; i < N; i++)
+                if (known[i] && !newlyKnown.Contains(i))
+                    newlyKnown.Add(i);
 
             int unlocked = Precode.Unlock(inter, known, srcKnown,
                 allBlocks, K, blockSize);
@@ -164,30 +174,32 @@ public static class LtCode
             {
                 recovered += unlocked;
                 progress = true;
+                // Track newly unlocked source blocks
+                for (int i = 0; i < K; i++)
+                    if (known[i] && !newlyKnown.Contains(i))
+                        newlyKnown.Add(i);
 
                 Precode.Derive(inter, known, K, blockSize);
+                for (int i = K; i < N; i++)
+                    if (known[i] && !newlyKnown.Contains(i))
+                        newlyKnown.Add(i);
             }
 
-            if (progress)
+            if (progress && newlyKnown.Count > 0)
             {
-                // Rebuild symData from scratch and recompute remainingDeg
+                // Incremental update: XOR newly known blocks from symbols
                 queue.Clear();
-                for (int si = 0; si < symbolCount; si++)
+                foreach (int nk in newlyKnown)
                 {
-                    Buffer.BlockCopy(allSymbolData, si * blockSize,
-                        symData[si], 0, blockSize);
-                    int d = symDeg[si];
-                    foreach (int bi in symIdx[si])
+                    foreach (int si in symToBlock[nk])
                     {
-                        if (known[bi])
-                        {
-                            for (int b = 0; b < blockSize; b++)
-                                symData[si][b] ^= inter[bi][b];
-                            d--;
-                        }
+                        if (remainingDeg[si] <= 1) continue;
+                        for (int b = 0; b < blockSize; b++)
+                            symData[si][b] ^= inter[nk][b];
+                        remainingDeg[si]--;
+                        if (remainingDeg[si] == 1)
+                            queue.Enqueue(si);
                     }
-                    remainingDeg[si] = d;
-                    if (d == 1) queue.Enqueue(si);
                 }
             }
 
