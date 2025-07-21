@@ -92,7 +92,7 @@ public class PrecodeTests
         known[0] = true; srcKnown[0] = true;
         known[K] = true;  // ladder[0] = s0 XOR s1
 
-        int recovered = Precode.Unlock(inter, known, srcKnown, allBlocks, K, bs);
+        var (recovered, _) = Precode.Unlock(inter, known, srcKnown, allBlocks, K, bs);
 
         Assert.True(recovered >= 1);
         Assert.True(srcKnown[1]);
@@ -113,7 +113,7 @@ public class PrecodeTests
         known[2] = true; srcKnown[2] = true;
         known[K + 1] = true; // ladder[1] = s1 XOR s2
 
-        int recovered = Precode.Unlock(inter, known, srcKnown, allBlocks, K, bs);
+        var (recovered, _) = Precode.Unlock(inter, known, srcKnown, allBlocks, K, bs);
 
         Assert.True(recovered >= 1);
         Assert.True(srcKnown[1]);
@@ -134,7 +134,7 @@ public class PrecodeTests
         for (int i = 0; i < K - 1; i++) { known[i] = true; srcKnown[i] = true; }
         known[2 * K - 1] = true; // global
 
-        int recovered = Precode.Unlock(inter, known, srcKnown, allBlocks, K, bs);
+        var (recovered, _) = Precode.Unlock(inter, known, srcKnown, allBlocks, K, bs);
 
         Assert.True(recovered >= 1);
         Assert.True(srcKnown[K - 1]);

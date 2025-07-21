@@ -27,8 +27,9 @@ public static class Precode
         return inter;
     }
 
-    public static void Derive(byte[][] inter, bool[] known, int K, int blockSize)
+    public static List<int> Derive(byte[][] inter, bool[] known, int K, int blockSize)
     {
+        var derived = new List<int>();
         int N = 2 * K;
 
         for (int i = 0; i < K - 1; i++)
@@ -39,6 +40,7 @@ public static class Precode
                 inter[idx] ??= new byte[blockSize];
                 XorAssign(inter[idx], inter[i], inter[i + 1], blockSize);
                 known[idx] = true;
+                derived.Add(idx);
             }
         }
 
@@ -54,14 +56,18 @@ public static class Precode
                 for (int i = 0; i < K; i++)
                     XorInto(inter[gIdx], inter[i], blockSize);
                 known[gIdx] = true;
+                derived.Add(gIdx);
             }
         }
+
+        return derived;
     }
 
-    public static int Unlock(byte[][] inter, bool[] known,
+    public static (int recovered, List<int> newSources) Unlock(byte[][] inter, bool[] known,
         bool[] srcKnown, byte[][] allBlocks, int K, int blockSize)
     {
         int recovered = 0;
+        var newSources = new List<int>();
 
         for (int i = 0; i < K - 1; i++)
         {
@@ -74,6 +80,7 @@ public static class Precode
                 srcKnown[i + 1] = true;
                 Buffer.BlockCopy(inter[i + 1], 0, allBlocks[i + 1], 0, blockSize);
                 recovered++;
+                newSources.Add(i + 1);
             }
         }
 
@@ -88,6 +95,7 @@ public static class Precode
                 srcKnown[i] = true;
                 Buffer.BlockCopy(inter[i], 0, allBlocks[i], 0, blockSize);
                 recovered++;
+                newSources.Add(i);
             }
         }
 
@@ -115,10 +123,11 @@ public static class Precode
                 srcKnown[missing] = true;
                 Buffer.BlockCopy(inter[missing], 0, allBlocks[missing], 0, blockSize);
                 recovered++;
+                newSources.Add(missing);
             }
         }
 
-        return recovered;
+        return (recovered, newSources);
     }
 
     internal static void XorAssign(byte[] target, byte[] a, byte[] b, int len)
@@ -131,4 +140,3 @@ public static class Precode
         for (int i = 0; i < len; i++) target[i] ^= src[i];
     }
 }
-
