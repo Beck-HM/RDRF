@@ -15,7 +15,10 @@ public static class Precode
         }
 
         for (int i = 0; i < K - 1; i++)
-            inter[K + i] = Xor(inter[i], inter[i + 1], blockSize);
+        {
+            inter[K + i] = new byte[blockSize];
+            XorAssign(inter[K + i], inter[i], inter[i + 1], blockSize);
+        }
 
         inter[N - 1] = new byte[blockSize];
         for (int i = 0; i < K; i++)
@@ -33,7 +36,8 @@ public static class Precode
             int idx = K + i;
             if (!known[idx] && known[i] && known[i + 1])
             {
-                inter[idx] = Xor(inter[i], inter[i + 1], blockSize);
+                inter[idx] ??= new byte[blockSize];
+                XorAssign(inter[idx], inter[i], inter[i + 1], blockSize);
                 known[idx] = true;
             }
         }
@@ -45,7 +49,8 @@ public static class Precode
             for (int i = 0; i < K; i++) { if (!known[i]) { all = false; break; } }
             if (all)
             {
-                inter[gIdx] = new byte[blockSize];
+                inter[gIdx] ??= new byte[blockSize];
+                Array.Clear(inter[gIdx], 0, blockSize);
                 for (int i = 0; i < K; i++)
                     XorInto(inter[gIdx], inter[i], blockSize);
                 known[gIdx] = true;
@@ -63,7 +68,8 @@ public static class Precode
             int qi = K + i;
             if (!srcKnown[i + 1] && srcKnown[i] && known[qi])
             {
-                inter[i + 1] = Xor(inter[i], inter[qi], blockSize);
+                inter[i + 1] ??= new byte[blockSize];
+                XorAssign(inter[i + 1], inter[i], inter[qi], blockSize);
                 known[i + 1] = true;
                 srcKnown[i + 1] = true;
                 Buffer.BlockCopy(inter[i + 1], 0, allBlocks[i + 1], 0, blockSize);
@@ -76,7 +82,8 @@ public static class Precode
             int qi = K + i;
             if (!srcKnown[i] && srcKnown[i + 1] && known[qi])
             {
-                inter[i] = Xor(inter[i + 1], inter[qi], blockSize);
+                inter[i] ??= new byte[blockSize];
+                XorAssign(inter[i], inter[i + 1], inter[qi], blockSize);
                 known[i] = true;
                 srcKnown[i] = true;
                 Buffer.BlockCopy(inter[i], 0, allBlocks[i], 0, blockSize);
@@ -96,7 +103,8 @@ public static class Precode
             }
             if (count == K - 1 && missing >= 0)
             {
-                inter[missing] = new byte[blockSize];
+                inter[missing] ??= new byte[blockSize];
+                Array.Clear(inter[missing], 0, blockSize);
                 Buffer.BlockCopy(inter[gIdx], 0, inter[missing], 0, blockSize);
                 for (int i = 0; i < K; i++)
                 {
@@ -113,11 +121,9 @@ public static class Precode
         return recovered;
     }
 
-    internal static byte[] Xor(byte[] a, byte[] b, int len)
+    internal static void XorAssign(byte[] target, byte[] a, byte[] b, int len)
     {
-        byte[] r = new byte[len];
-        for (int i = 0; i < len; i++) r[i] = (byte)(a[i] ^ b[i]);
-        return r;
+        for (int i = 0; i < len; i++) target[i] = (byte)(a[i] ^ b[i]);
     }
 
     internal static void XorInto(byte[] target, byte[] src, int len)
@@ -125,3 +131,4 @@ public static class Precode
         for (int i = 0; i < len; i++) target[i] ^= src[i];
     }
 }
+
