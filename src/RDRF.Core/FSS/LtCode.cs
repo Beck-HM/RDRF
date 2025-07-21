@@ -19,20 +19,18 @@ public static class LtCode
         var inter = Precode.Encode(allBlocks, blockSize);
 
         var result = new List<byte[]>(symbolCount);
+        var idxSet = new HashSet<int>();
         for (int si = 0; si < symbolCount; si++)
         {
             int deg = SelectDegree(ref prng);
             if (deg > N) deg = N;
 
-            var indices = new List<int>(deg);
-            while (indices.Count < deg)
-            {
-                int idx = NextPseudo(ref prng) % N;
-                if (!indices.Contains(idx)) indices.Add(idx);
-            }
+            idxSet.Clear();
+            while (idxSet.Count < deg)
+                idxSet.Add(NextPseudo(ref prng) % N);
 
             byte[] data = new byte[blockSize];
-            foreach (int idx in indices)
+            foreach (int idx in idxSet)
             {
                 for (int b = 0; b < blockSize; b++)
                     data[b] ^= inter[idx][b];
@@ -77,18 +75,16 @@ public static class LtCode
         var symData = new byte[symbolCount][];
         int dataOff = 0;
 
+        var idxSet = new HashSet<int>();
         for (int si = 0; si < symbolCount; si++)
         {
             int deg = SelectDegree(ref prng);
             if (deg > N) deg = N;
             symDeg[si] = deg;
-            var indices = new List<int>(deg);
-            while (indices.Count < deg)
-            {
-                int idx = NextPseudo(ref prng) % N;
-                if (!indices.Contains(idx)) indices.Add(idx);
-            }
-            symIdx[si] = indices.ToArray();
+            idxSet.Clear();
+            while (idxSet.Count < deg)
+                idxSet.Add(NextPseudo(ref prng) % N);
+            symIdx[si] = idxSet.ToArray();
             symData[si] = new byte[blockSize];
             Buffer.BlockCopy(allSymbolData, dataOff, symData[si], 0, blockSize);
             dataOff += blockSize;
@@ -126,7 +122,7 @@ public static class LtCode
         while (recovered < totalBad)
         {
             bool progress = false;
-            var newlyKnown = new List<int>();
+            var newlyKnown = new HashSet<int>();
 
             while (queue.Count > 0)
             {
@@ -162,27 +158,22 @@ public static class LtCode
             }
 
             // Derive ladder/global from newly known source blocks
-            Precode.Derive(inter, known, K, blockSize);
-            // Track newly derived blocks
-            for (int i = K; i < N; i++)
-                if (known[i] && !newlyKnown.Contains(i))
-                    newlyKnown.Add(i);
+            var derived = Precode.Derive(inter, known, K, blockSize);
+            foreach (int d in derived)
+                newlyKnown.Add(d);
 
-            int unlocked = Precode.Unlock(inter, known, srcKnown,
+            var (unlocked, newSrcs) = Precode.Unlock(inter, known, srcKnown,
                 allBlocks, K, blockSize);
             if (unlocked > 0)
             {
                 recovered += unlocked;
                 progress = true;
-                // Track newly unlocked source blocks
-                for (int i = 0; i < K; i++)
-                    if (known[i] && !newlyKnown.Contains(i))
-                        newlyKnown.Add(i);
+                foreach (int s in newSrcs)
+                    newlyKnown.Add(s);
 
-                Precode.Derive(inter, known, K, blockSize);
-                for (int i = K; i < N; i++)
-                    if (known[i] && !newlyKnown.Contains(i))
-                        newlyKnown.Add(i);
+                var derived2 = Precode.Derive(inter, known, K, blockSize);
+                foreach (int d in derived2)
+                    newlyKnown.Add(d);
             }
 
             if (progress && newlyKnown.Count > 0)
