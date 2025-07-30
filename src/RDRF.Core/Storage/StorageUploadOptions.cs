@@ -2,8 +2,11 @@ namespace RDRF.Storage;
 
 public class StorageUploadOptions
 {
+    public string Fingerprint { get; set; } = string.Empty;
     public string FileType { get; set; } = string.Empty;
     public long FileSize { get; set; }
+    public int FragmentCount { get; set; }
+    public int FragmentIndex { get; set; } = -1;
 
     public string? OriginalFileName { get; set; }
     public string? ForceBackend { get; set; }
