@@ -14,4 +14,7 @@ public class StorageUploadOptions
     public string? OverridePolicy { get; set; }
     public string? Note { get; set; }
     public int? Priority { get; set; }
+
+    public List<string>? Backends { get; set; }
+    public Dictionary<string, Dictionary<string, string>>? BackendOverrides { get; set; }
 }

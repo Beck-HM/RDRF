@@ -21,6 +21,13 @@ public class ManagementFile
 
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
+            CREATE TABLE IF NOT EXISTS remotes (
+                name TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                config_json TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS projects (
                 fingerprint TEXT PRIMARY KEY,
                 original_name TEXT,
@@ -51,6 +58,87 @@ public class ManagementFile
             CREATE INDEX IF NOT EXISTS idx_fl_lookup
                 ON fragment_locations(fingerprint, version_number);
         ";
+        cmd.ExecuteNonQuery();
+    }
+
+    public void RecordRemote(string name, string type,
+        Dictionary<string, string> config)
+    {
+        using var conn = CreateConnection();
+        conn.Open();
+
+        var json = System.Text.Json.JsonSerializer.Serialize(config);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            INSERT OR REPLACE INTO remotes (name, type, config_json, created_at)
+            VALUES ($name, $type, $json, $now)";
+        cmd.Parameters.AddWithValue("$name", name);
+        cmd.Parameters.AddWithValue("$type", type);
+        cmd.Parameters.AddWithValue("$json", json);
+        cmd.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        cmd.ExecuteNonQuery();
+    }
+
+    public RemoteConfig? GetRemote(string name)
+    {
+        using var conn = CreateConnection();
+        conn.Open();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT type, config_json FROM remotes WHERE name = $name";
+        cmd.Parameters.AddWithValue("$name", name);
+
+        using var reader = cmd.ExecuteReader();
+        if (!reader.Read()) return null;
+
+        var json = reader.GetString(1);
+        var config = System.Text.Json.JsonSerializer
+            .Deserialize<Dictionary<string, string>>(json)
+            ?? new Dictionary<string, string>();
+
+        return new RemoteConfig
+        {
+            Name = name,
+            Type = reader.GetString(0),
+            Config = config,
+        };
+    }
+
+    public List<RemoteConfig> ListRemotes()
+    {
+        var results = new List<RemoteConfig>();
+        using var conn = CreateConnection();
+        conn.Open();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT name, type, config_json FROM remotes ORDER BY name";
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var json = reader.GetString(2);
+            var config = System.Text.Json.JsonSerializer
+                .Deserialize<Dictionary<string, string>>(json)
+                ?? new Dictionary<string, string>();
+
+            results.Add(new RemoteConfig
+            {
+                Name = reader.GetString(0),
+                Type = reader.GetString(1),
+                Config = config,
+            });
+        }
+        return results;
+    }
+
+    public void DeleteRemote(string name)
+    {
+        using var conn = CreateConnection();
+        conn.Open();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM remotes WHERE name = $name";
+        cmd.Parameters.AddWithValue("$name", name);
         cmd.ExecuteNonQuery();
     }
 
@@ -249,4 +337,11 @@ public class FragmentLocation
     public long FileSize { get; set; }
     public string? FileHash { get; set; }
     public DateTimeOffset UploadedAt { get; set; }
+}
+
+public class RemoteConfig
+{
+    public string Name { get; set; } = "";
+    public string Type { get; set; } = "";
+    public Dictionary<string, string> Config { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
