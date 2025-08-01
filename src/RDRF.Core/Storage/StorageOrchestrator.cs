@@ -34,6 +34,7 @@ public class StorageOrchestrator
     public async Task WriteFragmentAsync(byte[] data, StorageUploadOptions options,
         IProgress<StorageProgress>? progress = null)
     {
+        EnsureConfigured(options);
         var backend = SelectBackend(options);
         var path = BuildPath(options.Fingerprint, options.FragmentCount, options.FragmentIndex);
         var hash = SHA256.HashData(data);
@@ -50,6 +51,7 @@ public class StorageOrchestrator
     public async Task WriteRcAsync(byte[] data, StorageUploadOptions options,
         IProgress<StorageProgress>? progress = null)
     {
+        EnsureConfigured(options);
         var backend = SelectBackendForRc(options);
         var path = BuildRcPath(options.Fingerprint, options.FragmentCount);
         var hash = SHA256.HashData(data);
@@ -145,16 +147,39 @@ public class StorageOrchestrator
                 $"Failed to delete some fragments for {fingerprint} v{version}", errors.Select(e => new Exception(e)));
     }
 
+    private void EnsureConfigured(StorageUploadOptions options)
+    {
+        if (options.Backends != null)
+        {
+            foreach (var name in options.Backends)
+            {
+                if (!_backends.TryGetValue(name, out var backend))
+                    throw new InvalidOperationException(
+                        $"Backend '{name}' not registered. Call RegisterBackend first.");
+
+                // Record remote config if available
+                var existing = _management.GetRemote(name);
+                if (existing == null)
+                {
+                    var overrides = options.BackendOverrides?.GetValueOrDefault(name);
+                    var config = overrides ?? new Dictionary<string, string>(
+                        StringComparer.OrdinalIgnoreCase);
+                    _management.RecordRemote(name, name, config);
+                }
+            }
+        }
+    }
+
     private IStorageBackend SelectBackend(StorageUploadOptions options)
     {
         if (options.ForceBackend != null)
             return ResolveBackend(options.ForceBackend);
 
-        var candidates = GetCandidates(options.ExcludeBackends);
+        var candidates = GetCandidates(options.Backends, options.ExcludeBackends);
         if (candidates.Count == 0)
             throw new InvalidOperationException("No available backends");
 
-        if (options.FragmentCount <= 0 || candidates.Count == 0)
+        if (options.FragmentCount <= 0)
             return candidates[0];
 
         return candidates[options.FragmentIndex % candidates.Count];
@@ -165,23 +190,25 @@ public class StorageOrchestrator
         if (options.ForceBackend != null)
             return ResolveBackend(options.ForceBackend);
 
-        // RC goes to the first available backend
-        var candidates = GetCandidates(options.ExcludeBackends);
+        var candidates = GetCandidates(options.Backends, options.ExcludeBackends);
         if (candidates.Count == 0)
             throw new InvalidOperationException("No available backends");
         return candidates[0];
     }
 
-    private List<IStorageBackend> GetCandidates(List<string>? exclude)
+    private List<IStorageBackend> GetCandidates(List<string>? backends,
+        List<string>? exclude)
     {
-        if (_backendOrder.Count == 0)
-            throw new InvalidOperationException("No backends registered");
+        var names = backends ?? _backendOrder;
+
+        if (names.Count == 0)
+            throw new InvalidOperationException("No backends specified");
 
         var excludeSet = exclude?.ToHashSet(StringComparer.OrdinalIgnoreCase)
             ?? new HashSet<string>();
 
-        return _backendOrder
-            .Where(n => !excludeSet.Contains(n))
+        return names
+            .Where(n => !excludeSet.Contains(n) && _backends.ContainsKey(n))
             .Select(n => _backends[n])
             .ToList();
     }
