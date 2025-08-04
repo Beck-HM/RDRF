@@ -17,6 +17,10 @@ class Program
         root.Subcommands.Add(new StatusCommand());
         root.Subcommands.Add(new NextCommand());
         root.Subcommands.Add(new CheckCommand());
+        root.Subcommands.Add(new InitCommand());
+        root.Subcommands.Add(new ListCommand());
+        root.Subcommands.Add(new RemoveBackendCommand());
+        root.Subcommands.Add(new ResetCommand());
         var parseResult = root.Parse(args);
         return await parseResult.InvokeAsync();
     }
