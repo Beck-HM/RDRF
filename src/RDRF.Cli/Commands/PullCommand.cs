@@ -1,7 +1,6 @@
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Storage;
-using RDRF.Cli.Services;
 using System.CommandLine;
 
 namespace RDRF.Cli.Commands;
@@ -11,21 +10,18 @@ public class PullCommand : Command
     public PullCommand() : base("pull", "Pull fragments from backends and restore")
     {
         var indexArg = new Argument<FileInfo>("indexFile") { Description = "Path to the .indrdrf index file" };
-        var versionOpt = new Option<int>("-v") { Description = "Version number to pull (default: latest)" };
-        var checkOpt = new Option<bool>("check") { Description = "List version history without downloading" };
-        var listOpt = new Option<bool>("list") { Description = "List versions (use with -v) as 'list'" };
+        var versionOpt = new Option<string>("-v") { Description = "Version to pull (number or 'list' for version list)" };
+        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (INSECURE: visible in process list; omit for secure prompt)" };
 
         Add(indexArg);
         Add(versionOpt);
-        Add(checkOpt);
-        Add(listOpt);
+        Add(passwordOpt);
 
-        SetAction((ParseResult parseResult) =>
+        SetAction(async (ParseResult parseResult) =>
         {
             var indexFile = parseResult.GetValue(indexArg);
-            var version = parseResult.GetValue(versionOpt);
-            bool check = parseResult.GetValue(checkOpt);
-            bool list = parseResult.GetValue(listOpt);
+            var versionArg = parseResult.GetValue(versionOpt);
+            var pwd = parseResult.GetValue(passwordOpt);
 
             if (!indexFile.Exists)
             {
@@ -33,37 +29,29 @@ public class PullCommand : Command
                 return 1;
             }
 
-            byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
-            byte[] password = PasswordProvider.ReadInteractive();
-            if (password == null || password.Length == 0)
-            {
-                Console.Error.WriteLine("Error: password is required");
-                return 1;
-            }
+            byte[] password = pwd != null ? System.Text.Encoding.UTF8.GetBytes(pwd) : Services.PasswordProvider.ReadInteractive();
+            if (password.Length == 0) { Console.Error.WriteLine("Error: password cannot be empty"); return 1; }
 
             try
             {
+                byte[] encryptedIndex = await File.ReadAllBytesAsync(indexFile.FullName);
                 (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
                 var idx = IndexManager.DeserializeIndex(cbor);
                 string fingerprint = idx.FileFingerprint;
                 string storageDir = indexFile.DirectoryName!;
 
                 var mgmt = new ManagementFile(storageDir);
+                var versions = mgmt.GetVersionNumbers(fingerprint);
 
-                // Check mode: list versions without downloading
-                if (check && list)
+                // List mode: rdrf pull <index> -v list
+                if (string.Equals(versionArg, "list", StringComparison.OrdinalIgnoreCase))
                 {
-                    var versions = mgmt.GetVersionNumbers(fingerprint);
                     if (versions.Count == 0)
                     {
                         Console.WriteLine("No versions have been pushed yet.");
-                        Console.WriteLine("Use 'rdrf push' after registering backends.");
                         return 0;
                     }
-
                     Console.WriteLine($"Project: {fingerprint}");
-                    Console.WriteLine($"Available versions: {string.Join(", ", versions)}");
-                    Console.WriteLine();
                     foreach (var v in versions)
                     {
                         var records = mgmt.Lookup(fingerprint, v);
@@ -73,8 +61,16 @@ public class PullCommand : Command
                     return 0;
                 }
 
-                // Pull mode
-                var targetVersion = version > 0 ? version : mgmt.GetVersionNumbers(fingerprint).LastOrDefault();
+                // Determine version
+                int targetVersion;
+                if (string.IsNullOrEmpty(versionArg))
+                    targetVersion = versions.LastOrDefault();
+                else if (!int.TryParse(versionArg, out targetVersion))
+                {
+                    Console.Error.WriteLine("Error: -v must be a version number or 'list'");
+                    return 1;
+                }
+
                 if (targetVersion <= 0)
                 {
                     Console.Error.WriteLine("Error: no versions found. Push the project first.");
@@ -96,6 +92,11 @@ public class PullCommand : Command
             {
                 Console.Error.WriteLine($"Error: {ex.Message}");
                 return 1;
+            }
+            finally
+            {
+                if (password.Length > 0)
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(password);
             }
         });
     }
