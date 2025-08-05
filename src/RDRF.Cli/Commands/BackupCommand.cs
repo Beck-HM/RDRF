@@ -19,6 +19,7 @@ public class BackupCommand : Command
         var sizeOpt = new Option<int?>("-size") { Description = "Fragment size in MB (default: 1)" };
         var nameOpt = new Option<string?>("-name") { Description = "Custom name for the backup (optional)" };
         var nextOpt = new Option<bool>("-next", "--next") { Description = "Enable versioning (creates v1, supports 'rdrf next' for increments)" };
+        var nodeOpt = new Option<bool>("-node", "--node") { Description = "Versioned backup with API distribution flag (use with rdrf remote + push)" };
         var fss1 = new Option<bool>("-fss1", new[] { "--fss1" }) { Description = "FSS1 strategy - single-dash for primary, double-dash for auxiliary" };
         var fss2 = new Option<bool>("-fss2", new[] { "--fss2" }) { Description = "FSS2 strategy - single-dash for primary, double-dash for auxiliary" };
         var fss2r = new Option<bool>("-fss2r", new[] { "--fss2r" }) { Description = "FSS2R strategy - single-dash for primary, double-dash for auxiliary" };
@@ -35,7 +36,7 @@ public class BackupCommand : Command
         Options.Add(nameOpt);
         Add(fss1); Add(fss2); Add(fss2r);
         Add(fss3); Add(fss5); Add(fss5p); Add(fss61);
-        Add(fsaOpt); Add(nextOpt);
+        Add(fsaOpt); Add(nextOpt); Add(nodeOpt);
 
         SetAction(async (ParseResult parseResult) =>
         {
@@ -45,6 +46,7 @@ public class BackupCommand : Command
             var sizeMb = parseResult.GetValue(sizeOpt);
             var customName = parseResult.GetValue(nameOpt);
             bool enableNext = parseResult.GetValue(nextOpt);
+            bool enableNode = parseResult.GetValue(nodeOpt);
             bool fsaMode = parseResult.GetValue(fsaOpt);
 
             var flags = new[]
@@ -110,6 +112,28 @@ public class BackupCommand : Command
                 });
                 Console.WriteLine($"Fingerprint: {fp}");
                 Console.WriteLine($"Strategy: {strategy} (versioned)");
+                CryptographicOperations.ZeroMemory(password);
+                return 0;
+            }
+
+            if (enableNode)
+            {
+                if (source is not FileInfo)
+                {
+                    Console.Error.WriteLine("Error: -node is only supported for single-file backups");
+                    return 1;
+                }
+
+                var nf = (FileInfo)source;
+                string fp = "";
+                await ProgressReporter.Run($"Backing up {nf.Name}", async prog =>
+                {
+                    fp = await VersionedBackup.BackupAsync(nf.FullName, storagePath, password,
+                        "Initial backup", strategy, fragmentSize, customName, auxiliary, prog);
+                });
+                Console.WriteLine($"Fingerprint: {fp}");
+                Console.WriteLine($"Strategy: {strategy} (node mode)");
+                Console.WriteLine($"Use 'rdrf remote {fp}.indrdrf -add <backends>' to register backends");
                 CryptographicOperations.ZeroMemory(password);
                 return 0;
             }
