@@ -95,46 +95,26 @@ public class BackupCommand : Command
             string storagePath = outputDir?.FullName ?? Path.Combine(AppContext.BaseDirectory, "backup");
             int fragmentSize = sizeMb.HasValue ? sizeMb.Value * 1024 * 1024 : 0;
 
-            if (enableNext)
+            if (enableNext || enableNode)
             {
                 if (source is not FileInfo)
                 {
-                    Console.Error.WriteLine("Error: -next is only supported for single-file backups");
+                    Console.Error.WriteLine("Error: -next and -node are only supported for single-file backups");
                     return 1;
                 }
 
                 var nf = (FileInfo)source;
                 string fp = "";
+                string mode = enableNode ? "node" : "versioned";
                 await ProgressReporter.Run($"Backing up {nf.Name}", async prog =>
                 {
                     fp = await VersionedBackup.BackupAsync(nf.FullName, storagePath, password,
                         "Initial backup", strategy, fragmentSize, customName, auxiliary, prog);
                 });
                 Console.WriteLine($"Fingerprint: {fp}");
-                Console.WriteLine($"Strategy: {strategy} (versioned)");
-                CryptographicOperations.ZeroMemory(password);
-                return 0;
-            }
-
-            if (enableNode)
-            {
-                if (source is not FileInfo)
-                {
-                    Console.Error.WriteLine("Error: -node is only supported for single-file backups");
-                    return 1;
-                }
-
-                var nf = (FileInfo)source;
-                string fp = "";
-                await ProgressReporter.Run($"Backing up {nf.Name}", async prog =>
-                {
-                    fp = await VersionedBackup.BackupAsync(nf.FullName, storagePath, password,
-                        "Initial backup", strategy, fragmentSize, customName, auxiliary, prog);
-                });
-                Console.WriteLine($"Fingerprint: {fp}");
-                Console.WriteLine($"Strategy: {strategy} (node mode)");
-                Console.WriteLine($"Use 'rdrf remote {fp}.indrdrf -add <backends>' to register backends");
-                CryptographicOperations.ZeroMemory(password);
+                Console.WriteLine($"Strategy: {strategy} ({mode})");
+                if (enableNode)
+                    Console.WriteLine($"Use 'rdrf remote {fp}.indrdrf -add <backends>' to register backends");
                 return 0;
             }
 
