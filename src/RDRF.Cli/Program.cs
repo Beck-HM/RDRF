@@ -23,6 +23,7 @@ class Program
         root.Subcommands.Add(new ResetCommand());
         root.Subcommands.Add(new RemoteCommand());
         root.Subcommands.Add(new PushCommand());
+        root.Subcommands.Add(new PullCommand());
         var parseResult = root.Parse(args);
         return await parseResult.InvokeAsync();
     }
