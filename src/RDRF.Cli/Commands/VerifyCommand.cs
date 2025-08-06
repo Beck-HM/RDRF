@@ -75,17 +75,8 @@ public class VerifyCommand : Command
                 string fname = RDRF.Core.FragmentEngine.Frags.FragentFilename(prefix, i);
                 if (!storage.FragmentExists(fname)) continue;
 
-                byte[] encrypted = storage.ReadFragment(fname);
-                bool hasHeader = FragmentFileHeader.HasHeader(encrypted);
-                int hdrOff = hasHeader ? FragmentFileHeader.GetTotalHeaderSize(encrypted) : 0;
-                byte[] decrypted = EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, hdrOff, aesKey);
-
-                if (hasHeader && decrypted.Length >= 4)
-                {
-                    int idxLen = BitConverter.ToInt32(decrypted.AsSpan(0, 4));
-                    if (idxLen > 4 && idxLen <= decrypted.Length - 4)
-                        decrypted = decrypted[(4 + idxLen)..];
-                }
+                    byte[] encrypted = storage.ReadFragment(fname);
+                    byte[] decrypted = EncryptionLayer.DecryptAndStripFragment(encrypted, aesKey);
 
                 fragments.Add(decrypted);
             }

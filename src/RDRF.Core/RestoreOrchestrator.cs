@@ -349,16 +349,7 @@ public class RestoreOrchestrator : IDisposable
                 string fname = Frags.FragentFilename(filePrefix, i);
                 byte[] encrypted = await _storage.ReadFragmentAsync(fname, ct).ConfigureAwait(false);
 
-                bool hasHeader = FragmentFileHeader.HasHeader(encrypted);
-                int hdrOff = hasHeader ? FragmentFileHeader.GetTotalHeaderSize(encrypted) : 0;
-                byte[] raw = EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, hdrOff, _aesKey);
-
-                if (hasHeader && raw.Length >= 4)
-                {
-                    int idxLen = BitConverter.ToInt32(raw.AsSpan(0, 4));
-                    if (idxLen > 4 && idxLen <= raw.Length - 4)
-                        raw = raw[(4 + idxLen)..];
-                }
+                byte[] raw = EncryptionLayer.DecryptAndStripFragment(encrypted, _aesKey);
 
                 decryptedFragments[i] = raw;
                 totalReadBytes += raw.Length;
@@ -674,17 +665,7 @@ public class RestoreOrchestrator : IDisposable
                 byte[] encrypted = await _storage.ReadFragmentAsync(
                     Frags.FragentFilename(filePrefix, i), ct).ConfigureAwait(false);
 
-                bool header = FragmentFileHeader.HasHeader(encrypted);
-                int headerOffset = header ? FragmentFileHeader.GetTotalHeaderSize(encrypted) : 0;
-
-                byte[] decrypted = EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, headerOffset, _aesKey);
-
-                if (header && decrypted.Length >= 4)
-                {
-                    int idxLen = BitConverter.ToInt32(decrypted.AsSpan(0, 4));
-                    if (idxLen > 4 && idxLen <= decrypted.Length - 4)
-                        decrypted = decrypted[(4 + idxLen)..];
-                }
+                byte[] decrypted = EncryptionLayer.DecryptAndStripFragment(encrypted, _aesKey);
 
                 if (etn != null)
                     decrypted = etn.Strip(decrypted);
