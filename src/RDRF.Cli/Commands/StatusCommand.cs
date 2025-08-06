@@ -43,7 +43,7 @@ public class StatusCommand : Command
             try
             {
                 (aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
-                index = RDRFEngine.DeserializeIndex(cbor);
+                index = IndexManager.DeserializeIndex(cbor);
             }
             catch
             {

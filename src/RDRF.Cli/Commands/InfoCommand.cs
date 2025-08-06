@@ -3,6 +3,7 @@ using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Cli.Services;
 using System.CommandLine;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace RDRF.Cli.Commands;
@@ -17,7 +18,7 @@ public class InfoCommand : Command
         Arguments.Add(indexArg);
         Options.Add(passwordOpt);
 
-        SetAction((ParseResult parseResult) =>
+        SetAction(async (ParseResult parseResult) =>
         {
             var indexFile = parseResult.GetValue(indexArg);
             var pwd = parseResult.GetValue(passwordOpt);
@@ -34,7 +35,8 @@ public class InfoCommand : Command
                 Console.Error.WriteLine("Error: password cannot be empty");
                 return 1;
             }
-            byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
+
+            byte[] encryptedIndex = await File.ReadAllBytesAsync(indexFile.FullName);
 
             RdrfIndex index;
             try
@@ -45,6 +47,7 @@ public class InfoCommand : Command
             catch
             {
                 Console.Error.WriteLine("Error: wrong password or corrupted index file");
+                CryptographicOperations.ZeroMemory(password);
                 return 1;
             }
 
@@ -71,6 +74,7 @@ public class InfoCommand : Command
             }
             if (index.CustomName != null)
                 Console.WriteLine($"CustomName:  {index.CustomName}");
+            CryptographicOperations.ZeroMemory(password);
             return 0;
         });
     }
