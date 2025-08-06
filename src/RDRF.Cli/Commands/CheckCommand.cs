@@ -2,6 +2,7 @@ using RDRF.Core.Versioning;
 using RDRF.Cli.Services;
 using Spectre.Console;
 using System.CommandLine;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace RDRF.Cli.Commands;
@@ -16,7 +17,7 @@ public class CheckCommand : Command
         Arguments.Add(indexArg);
         Options.Add(passwordOpt);
 
-        SetAction((ParseResult parseResult) =>
+        SetAction(async (ParseResult parseResult) =>
         {
             var indexFile = parseResult.GetValue(indexArg);
             var pwd = parseResult.GetValue(passwordOpt);
@@ -28,18 +29,20 @@ public class CheckCommand : Command
             }
 
             byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
-            if (password.Length == 0)
+            try
             {
-                Console.Error.WriteLine("Error: password cannot be empty");
-                return 1;
-            }
+                if (password.Length == 0)
+                {
+                    Console.Error.WriteLine("Error: password cannot be empty");
+                    return 1;
+                }
 
-            var records = VersionedRestore.GetVersionHistory(indexFile.FullName, password);
-            if (records.Count == 0)
-            {
-                Console.Error.WriteLine("Error: no version history found (wrong password or non-versioned backup)");
-                return 1;
-            }
+                var records = VersionedRestore.GetVersionHistory(indexFile.FullName, password);
+                if (records.Count == 0)
+                {
+                    Console.Error.WriteLine("Error: no version history found (wrong password or non-versioned backup)");
+                    return 1;
+                }
 
             bool interactive = !Console.IsInputRedirected;
             RenderTable(records);
@@ -73,6 +76,11 @@ public class CheckCommand : Command
             }
 
             return 0;
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(password);
+            }
         });
     }
 

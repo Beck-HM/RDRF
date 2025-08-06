@@ -19,7 +19,7 @@ public class RemoteCommand : Command
         Add(removeOpt);
         Add(passwordOpt);
 
-        SetAction((ParseResult parseResult) =>
+        SetAction(async (ParseResult parseResult) =>
         {
             var indexFile = parseResult.GetValue(indexArg);
             var addBackends = parseResult.GetValue(addOpt);
@@ -42,7 +42,7 @@ public class RemoteCommand : Command
 
             try
             {
-                byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
+                byte[] encryptedIndex = await File.ReadAllBytesAsync(indexFile.FullName);
                 (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
                 var index = IndexManager.DeserializeIndex(cbor);
                 string fingerprint = index.FileFingerprint;

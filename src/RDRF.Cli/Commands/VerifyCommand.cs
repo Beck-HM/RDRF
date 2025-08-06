@@ -5,6 +5,7 @@ using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
 using RDRF.Cli.Services;
 using System.CommandLine;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace RDRF.Cli.Commands;
@@ -19,7 +20,7 @@ public class VerifyCommand : Command
         Arguments.Add(indexArg);
         Options.Add(passwordOpt);
 
-        SetAction((ParseResult parseResult) =>
+        SetAction(async (ParseResult parseResult) =>
         {
             var indexFile = parseResult.GetValue(indexArg);
             var pwd = parseResult.GetValue(passwordOpt);
@@ -31,35 +32,37 @@ public class VerifyCommand : Command
             }
 
             byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
-            if (password.Length == 0)
-            {
-                Console.Error.WriteLine("Error: password cannot be empty");
-                return 1;
-            }
-            byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
-
-            RdrfIndex index;
-            byte[] aesKey;
             try
             {
-                (aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
-                index = IndexManager.DeserializeIndex(cbor);
-            }
-            catch
-            {
-                Console.Error.WriteLine("Error: wrong password or corrupted index file");
-                return 1;
-            }
+                if (password.Length == 0)
+                {
+                    Console.Error.WriteLine("Error: password cannot be empty");
+                    return 1;
+                }
+                byte[] encryptedIndex = await File.ReadAllBytesAsync(indexFile.FullName);
 
-            if (index.Fss6FragentBlockMaps == null && index.Fss6RcBlockMap == null)
-            {
-                Console.Error.WriteLine("Error: backup does not contain FSS6/ETN data 鈥?verification requires FSS6");
-                return 1;
-            }
+                RdrfIndex index;
+                byte[] aesKey;
+                try
+                {
+                    (aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
+                    index = IndexManager.DeserializeIndex(cbor);
+                }
+                catch
+                {
+                    Console.Error.WriteLine("Error: wrong password or corrupted index file");
+                    return 1;
+                }
 
-            string storageDir = indexFile.DirectoryName!;
-            var storage = new LocalFileAdapter(storageDir);
-            string prefix = index.CustomName ?? index.FileFingerprint;
+                if (index.Fss6FragentBlockMaps == null && index.Fss6RcBlockMap == null)
+                {
+                    Console.Error.WriteLine("Error: backup does not contain FSS6/ETN data 鈥?verification requires FSS6");
+                    return 1;
+                }
+
+                string storageDir = indexFile.DirectoryName!;
+                var storage = new LocalFileAdapter(storageDir);
+                string prefix = index.CustomName ?? index.FileFingerprint;
 
             // Read and decrypt RC file
             byte[] encryptedRc = storage.ReadRc(prefix);
@@ -144,6 +147,11 @@ public class VerifyCommand : Command
                 Console.WriteLine($"Suspicious (false positives): {suspicious}");
 
             return 1;
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(password);
+            }
         });
     }
 
