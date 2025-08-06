@@ -274,7 +274,7 @@ public partial class MainWindow : Window
         long fileSize = fileInfo.Length;
         int fragSizeMB = int.TryParse(FragmentSizeMB.Text, out int mb) && mb >= 1 ? mb : 1;
         int fragSizeBytes = fragSizeMB * 1024 * 1024;
-        int dataFrags = RDRF.Core.FragmentEngine.Frags.GetFragmentCount(fileSize, fragSizeBytes);
+        int dataFrags = RDRF.Core.FragmentEngine.Frags.GetFragentCount(fileSize, fragSizeBytes);
 
         EncryptFragmentSummary.Text = $"{fileSize / 1024.0 / 1024.0:F1} MB  ->  {dataFrags} fragments  x  {fragSizeMB} MB";
 

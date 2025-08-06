@@ -178,7 +178,7 @@ public class DecryptService : IDisposable
             StrategyDisplay = hasFss6 && index.FssStrategy != "FSS6"
                 ? index.FssStrategy + " + FSS6"
                 : index.FssStrategy,
-            FragmentCount = index.FragentCount,
+            FragmentCount = index.FragmentCount,
             CreatedAt = DateTimeOffset.FromUnixTimeSeconds(index.CreatedAt).LocalDateTime,
         };
     }

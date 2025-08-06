@@ -1,3 +1,4 @@
+using RDRF.Core.Storage;
 using System.Formats.Cbor;
 using System.Security.Cryptography;
 using System.Text;
@@ -157,6 +158,26 @@ public static class EncryptionLayer
 
     public static byte[] DecryptFragmentCtr(byte[] encryptedData, byte[] rcCode)
         => DecryptFragmentCtrWithKey(encryptedData, DeriveKey(rcCode));
+
+    /// <summary>
+    /// Decrypt a fragment (with optional 0xFF01 header) and strip the embedded index.
+    /// Returns the raw fragment payload ready for FSS decoding or integrity checks.
+    /// </summary>
+    public static byte[] DecryptAndStripFragment(byte[] encryptedData, byte[] aesKey)
+    {
+        bool hasHeader = FragmentFileHeader.HasHeader(encryptedData);
+        int hdrOff = hasHeader ? FragmentFileHeader.GetTotalHeaderSize(encryptedData) : 0;
+        byte[] decrypted = DecryptFragmentCtrWithKey(encryptedData, hdrOff, aesKey);
+
+        if (hasHeader && decrypted.Length >= 4)
+        {
+            int idxLen = BitConverter.ToInt32(decrypted.AsSpan(0, 4));
+            if (idxLen > 4 && idxLen <= decrypted.Length - 4)
+                decrypted = decrypted[(4 + idxLen)..];
+        }
+
+        return decrypted;
+    }
 
     public static byte[] EncryptIndexWithKey(byte[] indexData, byte[] aesKey)
         => EncryptFragmentWithKey(indexData, aesKey);

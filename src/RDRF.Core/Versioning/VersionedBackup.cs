@@ -126,15 +126,7 @@ public static class VersionedBackup
         {
             string fragName = FragmentEngine.Frags.FragentFilename(prefix, i);
             byte[] encrypted = storage.ReadFragment(fragName);
-            bool hasHeader = FragmentFileHeader.HasHeader(encrypted);
-            int hdrOff = hasHeader ? FragmentFileHeader.GetTotalHeaderSize(encrypted) : 0;
-            byte[] raw = EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, hdrOff, aesKey);
-            if (hasHeader && raw.Length >= 4)
-            {
-                int idxLen = BitConverter.ToInt32(raw.AsSpan(0, 4));
-                if (idxLen > 4 && idxLen <= raw.Length - 4)
-                    raw = raw[(4 + idxLen)..];
-            }
+            byte[] raw = EncryptionLayer.DecryptAndStripFragment(encrypted, aesKey);
             rawFragments.Add(raw);
         }
 
