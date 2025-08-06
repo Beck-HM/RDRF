@@ -217,7 +217,7 @@ public class FssEndToEndTests
             var idxEnc = storage.ReadIndex(fingerprint);
             (byte[] testKey, byte[] idxCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(idxEnc, rcCode);
             var idxData = IndexManager.DeserializeIndex(idxCbor);
-            _output.WriteLine($"  Index: strategy{idxData.FssStrategy}, frags{idxData.FragentCount}");
+            _output.WriteLine($"  Index: strategy{idxData.FssStrategy}, frags{idxData.FragmentCount}");
             if (idxData.FssParams?.TryGetValue("plan", out var pObj) == true)
             {
                 _output.WriteLine($"  plan type{pObj?.GetType().FullName}");

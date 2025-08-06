@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using RDRF.Core;
 using RDRF.Core.Encryption;
@@ -364,7 +364,7 @@ public class RegressionTests
             // Build decrypted fragments (all use the same AES key as the index)
             var decryptedFragments = new Dictionary<int, byte[]>();
 
-            for (int i = 0; i < index.FragentCount; i++)
+            for (int i = 0; i < index.FragmentCount; i++)
             {
                 string fragName = RDRF.Core.FragmentEngine.Frags.FragentFilename(fingerprint, i);
                 if (storage.FragmentExists(fragName))
@@ -439,7 +439,7 @@ public class RegressionTests
             originalHash: "orig_hash",
             fssStrategy: "FSS1",
             originalFragentSizes: new List<int> { 100 },
-            originalFragentCount: 1
+            originalFragmentCount: 1
         );
         // Do NOT set Salt - simulating old backup
 
@@ -489,7 +489,7 @@ public class RegressionTests
         Assert.Equal(key1, key2);
     }
 
-    // ── CBOR round-trip tests ──
+    // 鈹€鈹€ CBOR round-trip tests 鈹€鈹€
 
     [Fact]
     public void RcFile_ToCborBytes_FromCbor_RoundTrip()
@@ -533,7 +533,7 @@ public class RegressionTests
             originalHash: "sha256-original-hash",
             fssStrategy: "FSS6",
             originalFragentSizes: [250_000, 250_000, 250_000, 249_888],
-            originalFragentCount: 4,
+            originalFragmentCount: 4,
             fssParams: new Dictionary<string, object>
             {
                 ["plan"] = "dummy-plan"
@@ -560,8 +560,8 @@ public class RegressionTests
         Assert.Equal(original.CustomName, restored.CustomName);
         Assert.Equal(original.OriginalName, restored.OriginalName);
         Assert.Equal(original.FileSize, restored.FileSize);
-        Assert.Equal(original.FragentCount, restored.FragentCount);
-        Assert.Equal(original.OriginalFragentCount, restored.OriginalFragentCount);
+        Assert.Equal(original.FragmentCount, restored.FragmentCount);
+        Assert.Equal(original.OriginalFragmentCount, restored.OriginalFragmentCount);
         Assert.Equal(original.OriginalFragentSizes, restored.OriginalFragentSizes);
         Assert.Equal(original.FragentHashes, restored.FragentHashes);
         Assert.Equal(original.OriginalHash, restored.OriginalHash);

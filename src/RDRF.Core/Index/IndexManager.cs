@@ -1,4 +1,4 @@
-using System.Formats.Cbor;
+﻿using System.Formats.Cbor;
 using System.Text.Json;
 using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
@@ -17,7 +17,7 @@ public static class IndexManager
         string originalHash,
         string fssStrategy,
         List<int>? originalFragentSizes = null,
-        int? originalFragentCount = null,
+        int? originalFragmentCount = null,
         Dictionary<string, object>? fssParams = null)
     {
         int fragmentCount = fragmentHashes.Count;
@@ -26,7 +26,7 @@ public static class IndexManager
             FileFingerprint = fileFingerprint,
             OriginalName = originalFilename,
             FileSize = originalSize,
-            FragentCount = fragmentCount,
+            FragmentCount = fragmentCount,
             FragentHashes = fragmentHashes,
             OriginalHash = originalHash,
             FssStrategy = fssStrategy,
@@ -48,8 +48,8 @@ public static class IndexManager
         }
         index.Fragents = fragments;
 
-        if (originalFragentCount.HasValue)
-            index.OriginalFragentCount = originalFragentCount.Value;
+        if (originalFragmentCount.HasValue)
+            index.OriginalFragmentCount = originalFragmentCount.Value;
 
         return index;
     }
@@ -63,8 +63,8 @@ public static class IndexManager
         WriteField(writer, "custom_name", index.CustomName);
         WriteField(writer, "original_name", index.OriginalName);
         WriteField(writer, "file_size", index.FileSize);
-        WriteField(writer, "fragment_count", index.FragentCount);
-        WriteField(writer, "original_fragment_count", index.OriginalFragentCount, 0);
+        WriteField(writer, "fragment_count", index.FragmentCount);
+        WriteField(writer, "original_fragment_count", index.OriginalFragmentCount, 0);
         WriteField(writer, "original_fragment_sizes", index.OriginalFragentSizes);
         WriteField(writer, "fragment_hashes", index.FragentHashes);
         WriteField(writer, "original_hash", index.OriginalHash);
@@ -99,8 +99,8 @@ public static class IndexManager
                 case "custom_name":                 index.CustomName = reader.ReadTextString(); break;
                 case "original_name":               index.OriginalName = reader.ReadTextString(); break;
                 case "file_size":                   index.FileSize = reader.ReadInt64(); break;
-                case "fragment_count":              index.FragentCount = reader.ReadInt32(); break;
-                case "original_fragment_count":     index.OriginalFragentCount = reader.ReadInt32(); break;
+                case "fragment_count":              index.FragmentCount = reader.ReadInt32(); break;
+                case "original_fragment_count":     index.OriginalFragmentCount = reader.ReadInt32(); break;
                 case "original_fragment_sizes":     index.OriginalFragentSizes = ReadInt32List(reader); break;
                 case "fragment_hashes":             index.FragentHashes = ReadStringList(reader); break;
                 case "original_hash":               index.OriginalHash = reader.ReadTextString(); break;
@@ -144,7 +144,7 @@ public static class IndexManager
     public static FragentInfo? GetFragentInfo(RdrfIndex index, int fragmentIndex)
         => index.Fragents?.FirstOrDefault(f => f.Index == fragmentIndex);
 
-    // ── CBOR serialization helpers ──
+    // 鈹€鈹€ CBOR serialization helpers 鈹€鈹€
 
     private static void WriteField(CborWriter w, string key, string? value)
     {
@@ -464,8 +464,8 @@ public class RdrfIndex
     public string? CustomName { get; set; }
     public string OriginalName { get; set; } = string.Empty;
     public long FileSize { get; set; }
-    public int FragentCount { get; set; }
-    public int OriginalFragentCount { get; set; }
+    public int FragmentCount { get; set; }
+    public int OriginalFragmentCount { get; set; }
     public List<int> OriginalFragentSizes { get; set; } = new();
     public List<string> FragentHashes { get; set; } = new();
     public string OriginalHash { get; set; } = string.Empty;

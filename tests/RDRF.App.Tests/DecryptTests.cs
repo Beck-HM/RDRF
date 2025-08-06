@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
@@ -26,7 +26,7 @@ public class DecryptTests
         Assert.Equal(originalName, index.OriginalName);
         Assert.True(index.FileSize > 0);
         Assert.Equal("FSS1", index.FssStrategy);
-        Assert.True(index.FragentCount > 0);
+        Assert.True(index.FragmentCount > 0);
     }
 
     [Fact]
@@ -44,12 +44,12 @@ public class DecryptTests
 
         int available = 0;
         string prefix = index.CustomName ?? fp;
-        for (int i = 0; i < index.FragentCount; i++)
+        for (int i = 0; i < index.FragmentCount; i++)
         {
             if (storage.FragmentExists($"{prefix}_{i}.rdrf"))
                 available++;
         }
-        Assert.Equal(index.FragentCount, available);
+        Assert.Equal(index.FragmentCount, available);
     }
 
     [Theory]

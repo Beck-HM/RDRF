@@ -17,7 +17,7 @@ public class NextCommand : Command
     {
         var sourceArg = new Argument<FileInfo>("source") { Description = "New or modified file path" };
         var messageOpt = new Option<string>("-m") { Description = "Commit message describing the change" };
-        var storageOpt = new Option<DirectoryInfo?>("-storage") { Description = "Storage directory (default: ./backup/)" };
+        var storageOpt = new Option<DirectoryInfo?>("-o") { Description = "Storage directory (default: ./backup/)" };
         var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (INSECURE: visible in process list; omit for secure prompt)" };
 
         Arguments.Add(sourceArg);
@@ -89,7 +89,7 @@ public class NextCommand : Command
             var diffResult = new RDRF.Core.Diff.DiffEngine().ComputeDiff(oldBytes, newBytes, oldIndex.OriginalName);
 
             if (diffResult.IsBinary)
-                AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} â†?{newBytes.Length} bytes");
+                AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} é”Ÿ?{newBytes.Length} bytes");
             else
                 AnsiConsole.MarkupLine($"[yellow]Changes:[/] +{diffResult.AddedLines} -{diffResult.RemovedLines} lines (+{diffResult.AddedBytes} bytes)");
 
@@ -125,7 +125,7 @@ public class NextCommand : Command
     {
         string prefix = index.CustomName ?? index.FileFingerprint;
         var rawFragments = new List<byte[]>();
-        for (int i = 0; i < index.FragentCount; i++)
+        for (int i = 0; i < index.FragmentCount; i++)
         {
             string fragName = RDRF.Core.FragmentEngine.Frags.FragentFilename(prefix, i);
             byte[] encrypted = storage.ReadFragment(fragName);
@@ -142,11 +142,11 @@ public class NextCommand : Command
         }
 
         var decoded = new Dictionary<int, byte[]>();
-        for (int i = 0; i < index.OriginalFragentCount && i < rawFragments.Count; i++)
+        for (int i = 0; i < index.OriginalFragmentCount && i < rawFragments.Count; i++)
             decoded[i] = rawFragments[i];
 
         var fssEngine = new RDRF.Core.FSS.FSSEngine();
-        var stripped = fssEngine.Strip(decoded, index.FssStrategy, index.OriginalFragentCount, index.OriginalFragentSizes);
+        var stripped = fssEngine.Strip(decoded, index.FssStrategy, index.OriginalFragmentCount, index.OriginalFragentSizes);
         return RDRF.Core.FragmentEngine.Frags.MergeFragents(stripped);
     }
 }

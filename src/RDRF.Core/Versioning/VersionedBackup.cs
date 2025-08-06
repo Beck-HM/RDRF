@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using RDRF.Core.Diff;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
@@ -122,7 +122,7 @@ public static class VersionedBackup
         string prefix = index.CustomName ?? fingerprint;
 
         var rawFragments = new List<byte[]>();
-        for (int i = 0; i < index.FragentCount; i++)
+        for (int i = 0; i < index.FragmentCount; i++)
         {
             string fragName = FragmentEngine.Frags.FragentFilename(prefix, i);
             byte[] encrypted = storage.ReadFragment(fragName);
@@ -140,10 +140,10 @@ public static class VersionedBackup
 
         var fssEngine = new FSS.FSSEngine();
         var decoded = new Dictionary<int, byte[]>();
-        for (int i = 0; i < index.OriginalFragentCount && i < rawFragments.Count; i++)
+        for (int i = 0; i < index.OriginalFragmentCount && i < rawFragments.Count; i++)
             decoded[i] = rawFragments[i];
 
-        var stripped = fssEngine.Strip(decoded, index.FssStrategy, index.OriginalFragentCount, index.OriginalFragentSizes);
+        var stripped = fssEngine.Strip(decoded, index.FssStrategy, index.OriginalFragmentCount, index.OriginalFragentSizes);
         return FragmentEngine.Frags.MergeFragents(stripped);
     }
 
