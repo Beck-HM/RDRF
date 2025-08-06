@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using RDRF.Core.Integrity;
@@ -41,12 +41,12 @@ public class RecoveryExecutor
         bool skipVerification = false)
     {
         var result = new RecoveryResult();
-        result.TotalFragments = index.FragentCount;
+        result.TotalFragments = index.FragmentCount;
         result.AvailableFragments = availableFragments.Count;
 
         // Step 1: Identify missing fragments
         var missingIndices = new List<int>();
-        for (int i = 0; i < index.FragentCount; i++)
+        for (int i = 0; i < index.FragmentCount; i++)
         {
             if (!availableFragments.ContainsKey(i))
             {
@@ -110,7 +110,7 @@ public class RecoveryExecutor
                 verified,
                 missingIndices,
                 index.FssStrategy,
-                index.FragentCount,
+                index.FragmentCount,
                 index.OriginalFragentSizes);
 
             foreach (var kvp in recovered)
@@ -125,7 +125,7 @@ public class RecoveryExecutor
 
         // Step 4: Final check
         var stillMissing = new List<int>();
-        for (int i = 0; i < index.FragentCount; i++)
+        for (int i = 0; i < index.FragmentCount; i++)
             if (!verified.ContainsKey(i))
                 stillMissing.Add(i);
 

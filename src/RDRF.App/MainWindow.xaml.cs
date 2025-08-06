@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -90,7 +90,7 @@ public partial class MainWindow : Window
         _strategyBorders["FSS6.1"] = StrategyFSS61;
     }
 
-    // ── Window Controls ──
+    // 鈹€鈹€ Window Controls 鈹€鈹€
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -125,7 +125,7 @@ public partial class MainWindow : Window
         }
     }
 
-    // ── Tab Switching ──
+    // 鈹€鈹€ Tab Switching 鈹€鈹€
 
     private void TabEncrypt_Click(object sender, RoutedEventArgs e)
     {
@@ -160,7 +160,7 @@ public partial class MainWindow : Window
         _decryptVM.StopFragmentWatcher();
     }
 
-    // ── Strategy Selection ──
+    // 鈹€鈹€ Strategy Selection 鈹€鈹€
 
     private bool _fsaEnabled;
     private string? _fsaPrimary;
@@ -256,7 +256,7 @@ public partial class MainWindow : Window
     private void StrategyFSS6_Click(object sender, MouseButtonEventArgs e) => SelectStrategy("FSS6");
     private void StrategyFSS61_Click(object sender, MouseButtonEventArgs e) => SelectStrategy("FSS6.1");
 
-    // ── Encrypt Page (thin coordination) ──
+    // 鈹€鈹€ Encrypt Page (thin coordination) 鈹€鈹€
 
     private void EncryptBrowse_Click(object sender, RoutedEventArgs e) => _encryptVM.BrowseFileCommand.Execute(null);
     private void EncryptOutputBrowse_Click(object sender, RoutedEventArgs e) => _encryptVM.BrowseOutputCommand.Execute(null);
@@ -274,7 +274,7 @@ public partial class MainWindow : Window
         long fileSize = fileInfo.Length;
         int fragSizeMB = int.TryParse(FragmentSizeMB.Text, out int mb) && mb >= 1 ? mb : 1;
         int fragSizeBytes = fragSizeMB * 1024 * 1024;
-        int dataFrags = RDRF.Core.FragmentEngine.Frags.GetFragentCount(fileSize, fragSizeBytes);
+        int dataFrags = RDRF.Core.FragmentEngine.Frags.GetFragmentCount(fileSize, fragSizeBytes);
 
         EncryptFragmentSummary.Text = $"{fileSize / 1024.0 / 1024.0:F1} MB  ->  {dataFrags} fragments  x  {fragSizeMB} MB";
 
@@ -296,7 +296,7 @@ public partial class MainWindow : Window
         _encryptVM.StartEncryptCommand.Execute(null);
     }
 
-    // ── Drag and Drop ──
+    // 鈹€鈹€ Drag and Drop 鈹€鈹€
 
     private void EncryptPage_DragEnter(object sender, DragEventArgs e)
     {
@@ -320,7 +320,7 @@ public partial class MainWindow : Window
             _encryptVM.SetDroppedFiles(files);
     }
 
-    // ── Decrypt Page (thin coordination) ──
+    // 鈹€鈹€ Decrypt Page (thin coordination) 鈹€鈹€
 
     private void DecryptBrowse_Click(object sender, RoutedEventArgs e) => _decryptVM.BrowseBackupCommand.Execute(null);
 
@@ -335,7 +335,7 @@ public partial class MainWindow : Window
         _decryptVM.StartDecryptCommand.Execute(null);
     }
 
-    // ── History Page ──
+    // 鈹€鈹€ History Page 鈹€鈹€
 
     private void HistoryBrowseBackup_Click(object sender, RoutedEventArgs e) => _historyVM.BrowseBackupCommand.Execute(null);
 
@@ -347,7 +347,7 @@ public partial class MainWindow : Window
     private void HistoryApply_Click(object sender, RoutedEventArgs e)
         => _historyVM.ApplyIncrementalCommand.Execute(null);
 
-    // ── Config ──
+    // 鈹€鈹€ Config 鈹€鈹€
 
     private void LoadConfig()
     {

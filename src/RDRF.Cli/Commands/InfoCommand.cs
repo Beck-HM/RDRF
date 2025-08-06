@@ -55,7 +55,7 @@ public class InfoCommand : Command
             Console.WriteLine($"File:        {index.OriginalName}");
             Console.WriteLine($"Size:        {index.FileSize:N0} bytes");
             Console.WriteLine($"Strategy:    {index.FssStrategy}");
-            Console.WriteLine($"Fragments:   {index.FragentCount} (original: {index.OriginalFragentCount})");
+            Console.WriteLine($"Fragments:   {index.FragmentCount} (original: {index.OriginalFragmentCount})");
 
             string? fss6 = (index.Fss6FragentBlockMaps != null || index.Fss6RcBlockMap != null)
                 ? "with FSS6/ETN" : null;

@@ -63,7 +63,7 @@ public static class EtnTestHelpers
         // Fragment encryption uses the same AES key as the index (no separate fragment key)
         string prefix = index.CustomName ?? fingerprint;
         var fragments = new List<byte[]>();
-        for (int i = 0; i < index.FragentCount; i++)
+        for (int i = 0; i < index.FragmentCount; i++)
         {
             string fragFilename = $"{prefix}_{i}.rdrf";
             byte[] fragFileBytes = storage.ReadFragment(fragFilename);

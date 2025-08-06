@@ -46,7 +46,7 @@ public class EtnEdgeCaseTests
 
             string prefix = index.CustomName ?? fingerprint;
             var decrypted = new List<byte[]>();
-            for (int i = 0; i < index.FragentCount; i++)
+            for (int i = 0; i < index.FragmentCount; i++)
             {
                 string fname = $"{prefix}_{i}.rdrf";
                 byte[] fileBytes = storage.ReadFragment(fname);

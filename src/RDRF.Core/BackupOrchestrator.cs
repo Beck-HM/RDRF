@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using RDRF.Core.Encryption;
@@ -169,10 +169,10 @@ public class BackupOrchestrator : IDisposable
             originalHash = fileFingerprint;
         }
 
-        int originalFragentCount = originalFragments.Count;
+        int originalFragmentCount = originalFragments.Count;
         var originalFragentSizes = originalFragments.Select(f => f.Length).ToList();
 
-        Debug.WriteLine($"  Step 1: Split into {originalFragentCount} fragments");
+        Debug.WriteLine($"  Step 1: Split into {originalFragmentCount} fragments");
 
         var plan = _fsa.Compute(fssStrategy, auxiliaryStrategies);
         var fragments = new List<byte[]>(originalFragments);
@@ -216,7 +216,7 @@ public class BackupOrchestrator : IDisposable
             originalHash: originalHash,
             fssStrategy: plan.EffectivePrimary,
             originalFragentSizes: originalFragentSizes,
-            originalFragentCount: originalFragentCount,
+            originalFragmentCount: originalFragmentCount,
             fssParams: new Dictionary<string, object>
             {
                 ["plan"] = JsonSerializer.SerializeToElement(plan)

@@ -53,7 +53,7 @@ public class VerifyCommand : Command
 
             if (index.Fss6FragentBlockMaps == null && index.Fss6RcBlockMap == null)
             {
-                Console.Error.WriteLine("Error: backup does not contain FSS6/ETN data â€?verification requires FSS6");
+                Console.Error.WriteLine("Error: backup does not contain FSS6/ETN data éˆ¥?verification requires FSS6");
                 return 1;
             }
 
@@ -67,7 +67,7 @@ public class VerifyCommand : Command
 
             // Read and decrypt all fragments
             var fragments = new List<byte[]>();
-            for (int i = 0; i < index.FragentCount; i++)
+            for (int i = 0; i < index.FragmentCount; i++)
             {
                 string fname = RDRF.Core.FragmentEngine.Frags.FragentFilename(prefix, i);
                 if (!storage.FragmentExists(fname)) continue;
@@ -93,7 +93,7 @@ public class VerifyCommand : Command
             // Print results
             Console.WriteLine($"Fingerprint: {index.FileFingerprint}");
             Console.WriteLine($"Strategy:    {index.FssStrategy} + FSS6");
-            Console.WriteLine($"Fragments:   {fragments.Count}/{index.FragentCount} available");
+            Console.WriteLine($"Fragments:   {fragments.Count}/{index.FragmentCount} available");
 
             if (result.IsValid)
             {
