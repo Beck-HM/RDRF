@@ -7,9 +7,9 @@ public class InitCommand : Command
 {
     public InitCommand() : base("init", "Initialize an RDRF storage backend")
     {
-        var restOpt = new Option<string>("-rest") { Description = "Initialize a REST API backend (name:... & api_url:... & token:...)" };
-        var keyOpt = new Option<string>("-key") { Description = "Initialize an S3-compatible KEY backend (name:... & endpoint:... & bucket:... & access_key:... & secret_key:...)" };
-        var pathOpt = new Option<string>("-path") { Description = "Initialize a PATH backend (name:... & base_path:...)" };
+        var restOpt = new Option<string>("-rest") { Description = "Initialize a REST API backend. Example: -rest \"name:mycloud & api_url:https://api.example.com & token:abc123\"" };
+        var keyOpt = new Option<string>("-key") { Description = "Initialize an S3-compatible KEY backend. Example: -key \"name:minio & endpoint:https://play.min.io & bucket:rdrf & access_key:admin & secret_key:password\"" };
+        var pathOpt = new Option<string>("-path") { Description = "Initialize a PATH backend. Example: -path \"name:local & base_path:C:\\backups\"" };
 
         Add(restOpt);
         Add(keyOpt);

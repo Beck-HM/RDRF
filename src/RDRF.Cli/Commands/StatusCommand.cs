@@ -5,6 +5,7 @@ using RDRF.Core.Encryption;
 using RDRF.Core.Integrity;
 using RDRF.Cli.Services;
 using System.CommandLine;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace RDRF.Cli.Commands;
@@ -19,7 +20,7 @@ public class StatusCommand : Command
         Arguments.Add(indexArg);
         Options.Add(passwordOpt);
 
-        SetAction((ParseResult parseResult) =>
+        SetAction(async (ParseResult parseResult) =>
         {
             var indexFile = parseResult.GetValue(indexArg);
             var pwd = parseResult.GetValue(passwordOpt);
@@ -31,30 +32,32 @@ public class StatusCommand : Command
             }
 
             byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
-            if (password.Length == 0)
-            {
-                Console.Error.WriteLine("Error: password cannot be empty");
-                return 1;
-            }
-            byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
-
-            RdrfIndex index;
-            byte[] aesKey;
             try
             {
-                (aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
-                index = IndexManager.DeserializeIndex(cbor);
-            }
-            catch
-            {
-                Console.Error.WriteLine("Error: wrong password or corrupted index file");
-                return 1;
-            }
+                if (password.Length == 0)
+                {
+                    Console.Error.WriteLine("Error: password cannot be empty");
+                    return 1;
+                }
+                byte[] encryptedIndex = await File.ReadAllBytesAsync(indexFile.FullName);
 
-            string storageDir = indexFile.DirectoryName!;
-            var storage = new LocalFileAdapter(storageDir);
-            string prefix = index.CustomName ?? index.FileFingerprint;
-            string lookupKey = index.CustomName ?? index.FileFingerprint;
+                RdrfIndex index;
+                byte[] aesKey;
+                try
+                {
+                    (aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
+                    index = IndexManager.DeserializeIndex(cbor);
+                }
+                catch
+                {
+                    Console.Error.WriteLine("Error: wrong password or corrupted index file");
+                    return 1;
+                }
+
+                string storageDir = indexFile.DirectoryName!;
+                var storage = new LocalFileAdapter(storageDir);
+                string prefix = index.CustomName ?? index.FileFingerprint;
+                string lookupKey = index.CustomName ?? index.FileFingerprint;
 
             // Check index and RC presence
             bool indexOk = true;
@@ -150,6 +153,11 @@ public class StatusCommand : Command
             Console.WriteLine();
             Console.WriteLine($"Summary: {ok}/{index.FragmentCount} OK, {corrupted} CORRUPTED, {missing} MISSING");
             return missing > 0 || corrupted > 0 ? 1 : 0;
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(password);
+            }
         });
     }
 
