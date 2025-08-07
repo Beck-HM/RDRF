@@ -20,7 +20,10 @@ fix_tests*.ps1
 wpf_test_files/
 wpf_test_storage/
 cli_demo/
-tools/
 diff_test/
 media_test/
 rdrf_config.yaml
+
+# Tools build output (allow source files)
+tools/*/bin/
+tools/*/obj/
