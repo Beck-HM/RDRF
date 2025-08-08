@@ -5,6 +5,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AssemblyName>rdrf-pull</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
