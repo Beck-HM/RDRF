@@ -351,6 +351,11 @@ public static class IndexManager
             w.WriteInt64(v.CreatedAt);
             w.WriteTextString("file_fingerprint");
             w.WriteTextString(v.FileFingerprint);
+            if (v.Salt is { Length: > 0 })
+            {
+                w.WriteTextString("salt");
+                w.WriteByteString(v.Salt);
+            }
             if (v.Files is { Count: > 0 })
             {
                 w.WriteTextString("files");
@@ -387,6 +392,7 @@ public static class IndexManager
                     case "system_diff":      v.SystemDiff = r.ReadTextString(); break;
                     case "created_at":       v.CreatedAt = r.ReadInt64(); break;
                     case "file_fingerprint": v.FileFingerprint = r.ReadTextString(); break;
+                    case "salt":             v.Salt = r.ReadByteString(); break;
                     case "files":
                         v.Files = new List<FileEntry>();
                         r.ReadStartArray();

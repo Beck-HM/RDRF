@@ -6,7 +6,7 @@ namespace RDRF.Storage;
 public static class ConfigManager
 {
     private static readonly string DefaultPath =
-        Path.Combine(Directory.GetCurrentDirectory(), "rdrf_config.yaml");
+        Path.Combine(Directory.GetCurrentDirectory(), ".rdrf", "rdrf_config.yaml");
 
     private sealed class YamlRoot
     {
@@ -84,6 +84,9 @@ public static class ConfigManager
 
     private static void SaveAll(List<BackendConfigEntry> backends, string path)
     {
+        var dir = Path.GetDirectoryName(path);
+        if (dir != null)
+            Directory.CreateDirectory(dir);
         var root = new YamlRoot
         {
             Backends = backends.Select(ToYaml).ToList(),

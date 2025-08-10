@@ -14,5 +14,6 @@ public class VersionRecord
     public string SystemDiff { get; set; } = string.Empty;
     public long CreatedAt { get; set; }
     public string FileFingerprint { get; set; } = string.Empty;
+    public byte[]? Salt { get; set; }
     public List<FileEntry>? Files { get; set; }
 }

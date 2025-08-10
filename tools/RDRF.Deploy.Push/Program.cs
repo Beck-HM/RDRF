@@ -101,8 +101,9 @@ public static class Program
             if (targetBackends.Count == 0)
                 targetBackends = registeredBackends;
 
-            int fragmentCount = index.FragmentCount;
-            int pushed = 0, errors = 0;
+                int fragmentCount = index.FragmentCount;
+                int versionNumber = index.VersionNumber ?? 1;
+                int pushed = 0, errors = 0;
 
             // Push fragments
             for (int i = 0; i < fragmentCount; i++)
@@ -122,6 +123,7 @@ public static class Program
                     Fingerprint = fingerprint,
                     FragmentCount = fragmentCount,
                     FragmentIndex = i,
+                    VersionNumber = versionNumber,
                     Backends = targetBackends,
                     FileSize = data.Length,
                     Note = "pushed via rdrf-push",
@@ -143,6 +145,7 @@ public static class Program
                     Fingerprint = fingerprint,
                     FragmentCount = fragmentCount,
                     FragmentIndex = -1,
+                    VersionNumber = versionNumber,
                     Backends = targetBackends,
                     FileSize = rcData.Length,
                     Note = "pushed via rdrf-push",

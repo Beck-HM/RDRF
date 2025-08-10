@@ -6,6 +6,7 @@ public class StorageOrchestrator
 {
     private readonly List<string> _backendOrder = new();
     private readonly Dictionary<string, IStorageBackend> _backends = new();
+    private readonly Dictionary<IStorageBackend, string> _backendNames = new();
     private readonly ManagementFile _management;
 
     public IReadOnlyList<string> BackendNames => _backendOrder;
@@ -20,6 +21,7 @@ public class StorageOrchestrator
     {
         ArgumentNullException.ThrowIfNull(backend);
         _backends[name] = backend;
+        _backendNames[backend] = name;
         _backendOrder.Add(name);
     }
 
@@ -36,7 +38,7 @@ public class StorageOrchestrator
     {
         EnsureConfigured(options);
         var backend = SelectBackend(options);
-        var path = BuildPath(options.Fingerprint, options.FragmentCount, options.FragmentIndex);
+        var path = BuildPath(options.Fingerprint, options.VersionNumber, options.FragmentIndex);
         var hash = SHA256.HashData(data);
         var hashHex = Convert.ToHexString(hash).ToLowerInvariant();
 
@@ -44,8 +46,8 @@ public class StorageOrchestrator
             .ConfigureAwait(false);
         await stream.WriteAsync(data).ConfigureAwait(false);
 
-        _management.RecordFragment(options.Fingerprint, options.FragmentCount,
-            options.FragmentIndex, backend.Name, path, data.Length, hashHex, options.Note);
+        _management.RecordFragment(options.Fingerprint, options.VersionNumber,
+            options.FragmentIndex, _backendNames[backend], path, data.Length, hashHex, options.Note);
     }
 
     public async Task WriteRcAsync(byte[] data, StorageUploadOptions options,
@@ -53,7 +55,7 @@ public class StorageOrchestrator
     {
         EnsureConfigured(options);
         var backend = SelectBackendForRc(options);
-        var path = BuildRcPath(options.Fingerprint, options.FragmentCount);
+        var path = BuildRcPath(options.Fingerprint, options.VersionNumber);
         var hash = SHA256.HashData(data);
         var hashHex = Convert.ToHexString(hash).ToLowerInvariant();
 
@@ -61,8 +63,8 @@ public class StorageOrchestrator
             .ConfigureAwait(false);
         await stream.WriteAsync(data).ConfigureAwait(false);
 
-        _management.RecordRc(options.Fingerprint, options.FragmentCount,
-            backend.Name, path, data.Length, hashHex, options.Note);
+        _management.RecordRc(options.Fingerprint, options.VersionNumber,
+            _backendNames[backend], path, data.Length, hashHex, options.Note);
     }
 
     public async Task<byte[]> ReadAllFragmentsAsync(string fingerprint, int version)

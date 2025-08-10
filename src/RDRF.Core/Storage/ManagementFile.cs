@@ -8,7 +8,7 @@ public class ManagementFile
 
     public ManagementFile(string? directoryPath = null)
     {
-        directoryPath ??= Directory.GetCurrentDirectory();
+        directoryPath ??= Path.Combine(Directory.GetCurrentDirectory(), ".rdrf");
         _dbPath = Path.Combine(directoryPath, ".rdrf_management");
         Directory.CreateDirectory(directoryPath);
         Initialize();
