@@ -4,6 +4,7 @@ using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.FragmentEngine;
 using RDRF.Core.Index;
+using RDRF.Core.Versioning;
 using RDRF.Storage;
 
 namespace RDRF.Deploy.Pull;
@@ -50,29 +51,28 @@ public static class Program
             byte[] encryptedIndex = await File.ReadAllBytesAsync(indexPath);
             (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
             var index = IndexManager.DeserializeIndex(cbor);
-            string fingerprint = index.FileFingerprint;
-            string prefix = index.CustomName ?? fingerprint;
+            string currentFingerprint = index.FileFingerprint;
             string storageDir = Path.GetDirectoryName(indexPath)!;
+            var allVersions = index.Versions?.OrderBy(v => v.Version).ToList()
+                ?? new List<VersionRecord>();
 
             var mgmt = new ManagementFile(storageDir);
             var configs = ConfigManager.Load();
-            var versions = mgmt.GetVersionNumbers(fingerprint);
 
             // List mode
             if (string.Equals(versionArg, "list", StringComparison.OrdinalIgnoreCase))
             {
-                if (versions.Count == 0)
+                if (allVersions.Count == 0)
                 {
-                    Console.WriteLine("No versions found in management file for this project.");
-                    Console.WriteLine("Note: versions are created when you push. Run rdrf-push first.");
+                    Console.WriteLine("No version history found in index.");
                     return 0;
                 }
-                Console.WriteLine($"Project: {fingerprint}");
-                foreach (var v in versions)
+                Console.WriteLine($"Project: {currentFingerprint}");
+                foreach (var vr in allVersions)
                 {
-                    var records = mgmt.Lookup(fingerprint, v);
+                    var records = mgmt.Lookup(vr.FileFingerprint, vr.Version);
                     int fragCount = records.Count(r => r.ContentType == "fragment");
-                    Console.WriteLine($"  v{v}: {fragCount} fragment(s)");
+                    Console.WriteLine($"  v{vr.Version}: {fragCount} fragment(s)");
                 }
                 return 0;
             }
@@ -89,19 +89,23 @@ public static class Program
             }
             else
             {
-                if (versions.Count == 0)
+                if (allVersions.Count == 0)
                 {
-                    Console.Error.WriteLine("Error: no versions found. Push the project first.");
+                    Console.Error.WriteLine("Error: no version history in index.");
                     return 1;
                 }
-                targetVersion = versions.Last();
+                targetVersion = allVersions.Last().Version;
             }
 
-            if (!versions.Contains(targetVersion))
+            var targetVr = allVersions.FirstOrDefault(v => v.Version == targetVersion);
+            if (targetVr == null)
             {
-                Console.Error.WriteLine($"Error: version {targetVersion} not found");
+                Console.Error.WriteLine($"Error: version {targetVersion} not found in index history");
                 return 1;
             }
+
+            string lookupFingerprint = targetVr.FileFingerprint;
+            string lookupPrefix = index.CustomName ?? lookupFingerprint;
 
             // Load plugins and create backends
             var pluginsDir = Path.Combine(AppContext.BaseDirectory, "plugins");
@@ -126,8 +130,8 @@ public static class Program
                 backends[cfg.Name] = factory.Create(backendConfig);
             }
 
-            // Lookup fragment locations
-            var locations = mgmt.Lookup(fingerprint, targetVersion);
+            // Lookup fragment locations by version's own fingerprint
+            var locations = mgmt.Lookup(lookupFingerprint, targetVersion);
             if (locations.Count == 0)
             {
                 Console.Error.WriteLine($"Error: no fragments found for version {targetVersion}");
@@ -155,8 +159,8 @@ public static class Program
                     byte[] data = ms.ToArray();
 
                     string localName = loc.ContentType == "rc"
-                        ? fingerprint + Constants.RcFileSuffix
-                        : Frags.FragentFilename(prefix, loc.FragmentIndex);
+                        ? lookupFingerprint + Constants.RcFileSuffix
+                        : Frags.FragentFilename(lookupPrefix, loc.FragmentIndex);
 
                     string localPath = Path.Combine(storageDir, localName);
                     await File.WriteAllBytesAsync(localPath, data);

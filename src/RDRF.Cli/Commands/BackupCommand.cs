@@ -92,7 +92,7 @@ public class BackupCommand : Command
                 return 1;
             }
 
-            string storagePath = outputDir?.FullName ?? Path.Combine(AppContext.BaseDirectory, "backup");
+            string storagePath = outputDir?.FullName ?? (enableNode ? ".rdrf" : Path.Combine(AppContext.BaseDirectory, "backup"));
             int fragmentSize = sizeMb.HasValue ? sizeMb.Value * 1024 * 1024 : 0;
 
             if (enableNext || enableNode)

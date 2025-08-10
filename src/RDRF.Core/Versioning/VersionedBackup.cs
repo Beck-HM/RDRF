@@ -162,6 +162,7 @@ public static class VersionedBackup
             SystemDiff = systemDiff,
             CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             FileFingerprint = fingerprint,
+            Salt = (byte[])salt.Clone(),
             Files = fileEntries,
         });
 
@@ -178,11 +179,10 @@ public static class VersionedBackup
         try
         {
             storage.DeleteFragment(fingerprint + Constants.IndexFileSuffix);
+            storage.DeleteFragment(fingerprint + Constants.RcFileSuffix);
             foreach (string fragFile in storage.ListFragments())
-            {
                 if (fragFile.StartsWith(fingerprint + "_", StringComparison.OrdinalIgnoreCase))
                     storage.DeleteFragment(fragFile);
-            }
         }
         catch { }
     }

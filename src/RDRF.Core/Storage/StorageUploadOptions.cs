@@ -7,6 +7,7 @@ public class StorageUploadOptions
     public long FileSize { get; set; }
     public int FragmentCount { get; set; }
     public int FragmentIndex { get; set; } = -1;
+    public int VersionNumber { get; set; }
 
     public string? OriginalFileName { get; set; }
     public string? ForceBackend { get; set; }
