@@ -15,16 +15,19 @@ public class RestoreCommand : Command
     {
         var indexArg = new Argument<FileInfo>("indexFile") { Description = "Path to the .indrdrf index file" };
         var outputOpt = new Option<FileInfo>("-o") { Description = "Output file path for the restored data (required)" };
+        var versionOpt = new Option<int>("-v") { Description = "Version number to restore (default: latest)" };
         var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (INSECURE: visible in process list; omit for secure prompt)" };
 
         Arguments.Add(indexArg);
         Options.Add(outputOpt);
+        Options.Add(versionOpt);
         Options.Add(passwordOpt);
 
         SetAction(async (ParseResult parseResult) =>
         {
             var indexFile = parseResult.GetValue(indexArg);
             var output = parseResult.GetValue(outputOpt);
+            int targetVersion = parseResult.GetValue(versionOpt);
             var pwd = parseResult.GetValue(passwordOpt);
 
             if (!indexFile.Exists)
@@ -51,7 +54,7 @@ public class RestoreCommand : Command
             int exitCode;
             using (var engine = new RDRFEngine(password, new LocalFileAdapter(storageDir)))
             {
-                exitCode = await RunRestore(engine, password, encryptedIndex, output.FullName);
+                exitCode = await RunRestore(engine, password, encryptedIndex, output.FullName, targetVersion);
             }
 
             CryptographicOperations.ZeroMemory(password);
@@ -60,31 +63,27 @@ public class RestoreCommand : Command
     }
 
     private static async Task<int> RunRestore(
-        RDRFEngine engine, byte[] password, byte[] encryptedIndex, string outputPath)
+        RDRFEngine engine, byte[] password, byte[] encryptedIndex, string outputPath, int targetVersion)
     {
         try
         {
             (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
             var index = IndexManager.DeserializeIndex(cbor);
-            string prefix = index.CustomName ?? index.FileFingerprint;
 
-            bool success = false;
-            try
+            string prefix;
+            bool success;
+
+            if (targetVersion > 0)
             {
-                await ProgressReporter.Run($"Restoring {index.OriginalName}", async progress =>
-                {
-                    success = await engine.RestoreFileAsync(index.FileFingerprint, outputPath, filePrefix: prefix, progress: progress);
-                });
+                var vr = index.Versions?.FirstOrDefault(v => v.Version == targetVersion)
+                    ?? throw new InvalidOperationException($"Version {targetVersion} not found in index history");
+                prefix = index.CustomName ?? vr.FileFingerprint;
+                success = await engine.RestoreFileFromFragmentsAsync(prefix, outputPath);
             }
-            catch (AuthenticationTagMismatchException)
+            else
             {
-                Console.Error.WriteLine("Error: wrong password or corrupt index file");
-                return 1;
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Error: {ex.Message}");
-                return 1;
+                prefix = index.CustomName ?? index.FileFingerprint;
+                success = await engine.RestoreFileAsync(index.FileFingerprint, outputPath, filePrefix: prefix);
             }
 
             if (success)
