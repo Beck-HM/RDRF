@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using RDRF.Core.Encryption;
@@ -50,7 +50,7 @@ public class RestoreOrchestrator : IDisposable
         }
     }
 
-    // 鈹€鈹€ Public Restore Methods 鈹€鈹€
+    // ── Public Restore Methods ──
 
     public bool RestoreFile(
         string fileFingerprint,
@@ -72,7 +72,7 @@ public class RestoreOrchestrator : IDisposable
     public bool RestoreFile(string fileFingerprint, FileInfo outputPath, bool allowFssRecovery = true, string? filePrefix = null, IProgress<RdrfProgressReport>? progress = null)
         => RestoreFile(fileFingerprint, outputPath.FullName, allowFssRecovery, filePrefix, progress);
 
-    // 鈹€鈹€ Restore From Fragments 鈹€鈹€
+    // ── Restore From Fragments ──
 
     public bool RestoreFileFromFragments(
         string filePrefix,
@@ -80,7 +80,7 @@ public class RestoreOrchestrator : IDisposable
         bool allowFssRecovery = true,
         IProgress<RdrfProgressReport>? progress = null)
     {
-        string frag0Path = Frags.FragentFilename(filePrefix, 0);
+        string frag0Path = Frags.FragmentFilename(filePrefix, 0);
         if (!_storage.FragmentExists(frag0Path))
             throw new FileNotFoundException($"No fragments found with prefix '{filePrefix}'");
 
@@ -111,7 +111,7 @@ public class RestoreOrchestrator : IDisposable
         return RestoreCore(idx, filePrefix, outputPath, allowFssRecovery, progress);
     }
 
-    // 鈹€鈹€ Async Restore 鈹€鈹€
+    // ── Async Restore ──
 
     public async Task<bool> RestoreFileAsync(
         string fileFingerprint,
@@ -142,7 +142,7 @@ public class RestoreOrchestrator : IDisposable
         IProgress<RdrfProgressReport>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        string frag0Path = Frags.FragentFilename(filePrefix, 0);
+        string frag0Path = Frags.FragmentFilename(filePrefix, 0);
         if (!_storage.FragmentExists(frag0Path))
             throw new FileNotFoundException($"No fragments found with prefix '{filePrefix}'");
 
@@ -173,7 +173,7 @@ public class RestoreOrchestrator : IDisposable
         return await RestoreCoreAsync(idx, filePrefix, outputPath, allowFssRecovery, progress, cancellationToken).ConfigureAwait(false);
     }
 
-    // 鈹€鈹€ Restore From Index Data (pre-loaded encrypted index) 鈹€鈹€
+    // ── Restore From Index Data (pre-loaded encrypted index) ──
 
     public bool RestoreFileFromIndexData(
         byte[] encryptedIndex,
@@ -187,7 +187,7 @@ public class RestoreOrchestrator : IDisposable
         return RestoreCore(index, filePrefix, outputPath, allowFssRecovery, progress);
     }
 
-    // 鈹€鈹€ Synchronous Core 鈹€鈹€
+    // ── Synchronous Core ──
 
     private bool RestoreCore(
         RdrfIndex index,
@@ -200,7 +200,7 @@ public class RestoreOrchestrator : IDisposable
             .GetAwaiter().GetResult();
     }
 
-    // 鈹€鈹€ Async Core 鈹€鈹€
+    // ── Async Core ──
 
     private async Task<bool> RestoreCoreAsync(
         RdrfIndex index,
@@ -212,7 +212,7 @@ public class RestoreOrchestrator : IDisposable
     {
         int fragmentCount = index.FragmentCount;
         string fssStrategy = index.FssStrategy;
-        var originalSizes = index.OriginalFragentSizes;
+        var originalSizes = index.OriginalFragmentSizes;
         int? originalCount = index.OriginalFragmentCount > 0 ? index.OriginalFragmentCount : null;
         string fileFingerprint = index.FileFingerprint;
 
@@ -228,7 +228,7 @@ public class RestoreOrchestrator : IDisposable
             }
         }
 
-        bool hasFss6 = index.Fss6FragentBlockMaps != null || index.Fss6RcBlockMap != null;
+        bool hasFss6 = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
 
         // Try streaming restore when all fragments are on disk (no recovery needed)
         if (await TryStreamingRestoreCoreAsync(index, filePrefix, outputPath,
@@ -299,7 +299,7 @@ public class RestoreOrchestrator : IDisposable
             }
         }
 
-        // Strip FSS encoding 鈫?stream (avoids List<byte[]> intermediate copy)
+        // Strip FSS encoding �?stream (avoids List<byte[]> intermediate copy)
         int origCount = originalCount ?? fragmentCount;
         StripFssEncodingToStream(decryptedFragments, fssStrategy, originalSizes, origCount, outputPath);
 
@@ -316,7 +316,7 @@ public class RestoreOrchestrator : IDisposable
         return false;
     }
 
-    // 鈹€鈹€ Download and Decrypt Fragments 鈹€鈹€
+    // ── Download and Decrypt Fragments ──
     //
     // This is the fallback path (path B) used when fragments are missing or
     // corrupted. All fragments are loaded into memory simultaneously to allow
@@ -346,7 +346,7 @@ public class RestoreOrchestrator : IDisposable
             ct.ThrowIfCancellationRequested();
             try
             {
-                string fname = Frags.FragentFilename(filePrefix, i);
+                string fname = Frags.FragmentFilename(filePrefix, i);
                 byte[] encrypted = await _storage.ReadFragmentAsync(fname, ct).ConfigureAwait(false);
 
                 byte[] raw = EncryptionLayer.DecryptAndStripFragment(encrypted, _aesKey);
@@ -377,7 +377,7 @@ public class RestoreOrchestrator : IDisposable
         return decryptedFragments;
     }
 
-    // 鈹€鈹€ ETN Cross-Validate 鈹€鈹€
+    // ── ETN Cross-Validate ──
 
     private async Task<bool> RunEtnCrossValidateAsync(
         RdrfIndex index, Dictionary<int, byte[]> decryptedFragments,
@@ -609,7 +609,7 @@ public class RestoreOrchestrator : IDisposable
         return rawEtn;
     }
 
-    // 鈹€鈹€ Strip FSS Encoding 鈹€鈹€
+    // ── Strip FSS Encoding ──
 
     private List<byte[]> StripFssEncoding(
         Dictionary<int, byte[]> decryptedFragments,
@@ -637,7 +637,7 @@ public class RestoreOrchestrator : IDisposable
         }
     }
 
-    // 鈹€鈹€ Streaming Restore 鈹€鈹€
+    // ── Streaming Restore ──
 
     private async Task<bool> TryStreamingRestoreCoreAsync(
         RdrfIndex index, string filePrefix, string outputPath,
@@ -647,7 +647,7 @@ public class RestoreOrchestrator : IDisposable
         int origCount = index.OriginalFragmentCount > 0 ? index.OriginalFragmentCount : fragmentCount;
 
         for (int i = 0; i < fragmentCount; i++)
-            if (!_storage.FragmentExists(Frags.FragentFilename(filePrefix, i)))
+            if (!_storage.FragmentExists(Frags.FragmentFilename(filePrefix, i)))
                 return false;
 
         var strategy = _fss.GetStrategy(index.FssStrategy);
@@ -663,7 +663,7 @@ public class RestoreOrchestrator : IDisposable
                 ct.ThrowIfCancellationRequested();
 
                 byte[] encrypted = await _storage.ReadFragmentAsync(
-                    Frags.FragentFilename(filePrefix, i), ct).ConfigureAwait(false);
+                    Frags.FragmentFilename(filePrefix, i), ct).ConfigureAwait(false);
 
                 byte[] decrypted = EncryptionLayer.DecryptAndStripFragment(encrypted, _aesKey);
 
@@ -672,7 +672,7 @@ public class RestoreOrchestrator : IDisposable
 
                 if (i >= origCount) continue;
 
-                byte[] original = strategy.StripSingle(decrypted, i, index.OriginalFragentSizes);
+                byte[] original = strategy.StripSingle(decrypted, i, index.OriginalFragmentSizes);
                 output.Write(original, 0, original.Length);
                 hasher.AppendData(original.AsSpan(0, original.Length));
             }
@@ -690,7 +690,7 @@ public class RestoreOrchestrator : IDisposable
         }
     }
 
-    // 鈹€鈹€ Dispose 鈹€鈹€
+    // ── Dispose ──
 
     public void Dispose()
     {

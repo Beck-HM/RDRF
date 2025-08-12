@@ -160,7 +160,7 @@ public static class Program
 
                     string localName = loc.ContentType == "rc"
                         ? lookupFingerprint + Constants.RcFileSuffix
-                        : Frags.FragentFilename(lookupPrefix, loc.FragmentIndex);
+                        : Frags.FragmentFilename(lookupPrefix, loc.FragmentIndex);
 
                     string localPath = Path.Combine(storageDir, localName);
                     await File.WriteAllBytesAsync(localPath, data);

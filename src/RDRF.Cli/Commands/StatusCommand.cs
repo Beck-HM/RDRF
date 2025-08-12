@@ -72,7 +72,7 @@ public class StatusCommand : Command
                 catch { rcOk = false; }
             }
 
-            bool hasEtn = index.Fss6FragentBlockMaps != null || index.Fss6RcBlockMap != null;
+            bool hasEtn = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
 
             Console.WriteLine();
             Console.WriteLine($"Fingerprint:  {index.FileFingerprint}");
@@ -90,7 +90,7 @@ public class StatusCommand : Command
 
             for (int i = 0; i < index.FragmentCount; i++)
             {
-                string fname = RDRF.Core.FragmentEngine.Frags.FragentFilename(prefix, i);
+                string fname = RDRF.Core.FragmentEngine.Frags.FragmentFilename(prefix, i);
                 if (!storage.FragmentExists(fname))
                 {
                     rows.Add((i, "MISSING", "-", "-"));
@@ -110,11 +110,11 @@ public class StatusCommand : Command
                     }
 
                     string actualHash = IntegrityChecker.HashBytes(decrypted);
-                    string expectedHash = index.FragentHashes.Count > i ? index.FragentHashes[i] : "";
+                    string expectedHash = index.FragmentHashes.Count > i ? index.FragmentHashes[i] : "";
                     bool match = IntegrityChecker.VerifyHash(actualHash, expectedHash);
 
-                    string sizeStr = index.OriginalFragentSizes.Count > i
-                        ? FormatSize(index.OriginalFragentSizes[i]) : FormatSize(decrypted.Length);
+                    string sizeStr = index.OriginalFragmentSizes.Count > i
+                        ? FormatSize(index.OriginalFragmentSizes[i]) : FormatSize(decrypted.Length);
 
                     if (match)
                     {

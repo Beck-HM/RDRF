@@ -1,4 +1,4 @@
-﻿using System.Formats.Cbor;
+using System.Formats.Cbor;
 using System.Text.Json;
 using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
@@ -16,7 +16,7 @@ public static class IndexManager
         List<string> fragmentNonces,
         string originalHash,
         string fssStrategy,
-        List<int>? originalFragentSizes = null,
+        List<int>? originalFragmentSizes = null,
         int? originalFragmentCount = null,
         Dictionary<string, object>? fssParams = null)
     {
@@ -27,26 +27,26 @@ public static class IndexManager
             OriginalName = originalFilename,
             FileSize = originalSize,
             FragmentCount = fragmentCount,
-            FragentHashes = fragmentHashes,
+            FragmentHashes = fragmentHashes,
             OriginalHash = originalHash,
             FssStrategy = fssStrategy,
             CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             FssParams = fssParams,
-            OriginalFragentSizes = originalFragentSizes ?? new List<int>(),
+            OriginalFragmentSizes = originalFragmentSizes ?? new List<int>(),
             Salt = string.Empty,
         };
 
-        var fragments = new List<FragentInfo>(fragmentCount);
+        var fragments = new List<FragmentInfo>(fragmentCount);
         for (int i = 0; i < fragmentCount; i++)
         {
-            fragments.Add(new FragentInfo
+            fragments.Add(new FragmentInfo
             {
                 Index = i,
                 Hash = fragmentHashes[i],
                 Nonce = fragmentNonces[i],
             });
         }
-        index.Fragents = fragments;
+        index.Fragments = fragments;
 
         if (originalFragmentCount.HasValue)
             index.OriginalFragmentCount = originalFragmentCount.Value;
@@ -65,19 +65,19 @@ public static class IndexManager
         WriteField(writer, "file_size", index.FileSize);
         WriteField(writer, "fragment_count", index.FragmentCount);
         WriteField(writer, "original_fragment_count", index.OriginalFragmentCount, 0);
-        WriteField(writer, "original_fragment_sizes", index.OriginalFragentSizes);
-        WriteField(writer, "fragment_hashes", index.FragentHashes);
+        WriteField(writer, "original_fragment_sizes", index.OriginalFragmentSizes);
+        WriteField(writer, "fragment_hashes", index.FragmentHashes);
         WriteField(writer, "original_hash", index.OriginalHash);
         WriteField(writer, "fss_strategy", index.FssStrategy);
         WriteFssParams(writer, index.FssParams);
-        WriteField(writer, "fss6_fragment_block_maps", index.Fss6FragentBlockMaps);
+        WriteField(writer, "fss6_fragment_block_maps", index.Fss6FragmentBlockMaps);
         WriteField(writer, "fss6_rc_block_map", index.Fss6RcBlockMap);
         WriteField(writer, "salt", index.Salt);
         WriteField(writer, "created_at", index.CreatedAt);
         WriteField(writer, "updated_at", index.UpdatedAt);
         WriteField(writer, "version_number", index.VersionNumber);
         WriteVersions(writer, index.Versions);
-        WriteFragents(writer, index.Fragents);
+        WriteFragments(writer, index.Fragments);
         WriteRepairData(writer, "fss61_repair_b", index.Fss61RepairB);
         WriteRepairData(writer, "fss61_repair_c", index.Fss61RepairC);
 
@@ -101,19 +101,19 @@ public static class IndexManager
                 case "file_size":                   index.FileSize = reader.ReadInt64(); break;
                 case "fragment_count":              index.FragmentCount = reader.ReadInt32(); break;
                 case "original_fragment_count":     index.OriginalFragmentCount = reader.ReadInt32(); break;
-                case "original_fragment_sizes":     index.OriginalFragentSizes = ReadInt32List(reader); break;
-                case "fragment_hashes":             index.FragentHashes = ReadStringList(reader); break;
+                case "original_fragment_sizes":     index.OriginalFragmentSizes = ReadInt32List(reader); break;
+                case "fragment_hashes":             index.FragmentHashes = ReadStringList(reader); break;
                 case "original_hash":               index.OriginalHash = reader.ReadTextString(); break;
                 case "fss_strategy":                index.FssStrategy = reader.ReadTextString(); break;
                 case "fss_params":                  index.FssParams = ReadFssParams(reader); break;
-                case "fss6_fragment_block_maps":    index.Fss6FragentBlockMaps = ReadNestedStringList(reader); break;
+                case "fss6_fragment_block_maps":    index.Fss6FragmentBlockMaps = ReadNestedStringList(reader); break;
                 case "fss6_rc_block_map":           index.Fss6RcBlockMap = ReadStringList(reader); break;
                 case "salt":                        index.Salt = reader.ReadTextString(); break;
                 case "created_at":                  index.CreatedAt = reader.ReadInt64(); break;
                 case "updated_at":                  index.UpdatedAt = reader.ReadInt64(); break;
                 case "version_number":               index.VersionNumber = reader.ReadInt32(); break;
                 case "versions":                     index.Versions = ReadVersions(reader); break;
-                case "fragments":                   index.Fragents = ReadFragents(reader); break;
+                case "fragments":                   index.Fragments = ReadFragments(reader); break;
                 case "fss61_repair_b":              index.Fss61RepairB = ReadRepairData(reader); break;
                 case "fss61_repair_c":              index.Fss61RepairC = ReadRepairData(reader); break;
                 default:                            reader.SkipValue(); break;
@@ -141,10 +141,10 @@ public static class IndexManager
     public static RdrfIndex DecryptIndex(byte[] encryptedIndex, byte[] rcCode)
         => DecryptIndexWithKey(encryptedIndex, EncryptionLayer.DeriveKey(rcCode));
 
-    public static FragentInfo? GetFragentInfo(RdrfIndex index, int fragmentIndex)
-        => index.Fragents?.FirstOrDefault(f => f.Index == fragmentIndex);
+    public static FragmentInfo? GetFragmentInfo(RdrfIndex index, int fragmentIndex)
+        => index.Fragments?.FirstOrDefault(f => f.Index == fragmentIndex);
 
-    // 鈹€鈹€ CBOR serialization helpers 鈹€鈹€
+    // ── CBOR serialization helpers ──
 
     private static void WriteField(CborWriter w, string key, string? value)
     {
@@ -216,12 +216,12 @@ public static class IndexManager
         w.WriteEndMap();
     }
 
-    private static void WriteFragents(CborWriter w, List<FragentInfo>? fragents)
+    private static void WriteFragments(CborWriter w, List<FragmentInfo>? Fragments)
     {
-        if (fragents == null) return;
+        if (Fragments == null) return;
         w.WriteTextString("fragments");
         w.WriteStartArray(null);
-        foreach (var f in fragents)
+        foreach (var f in Fragments)
         {
             w.WriteStartMap(null);
             w.WriteTextString("index");    w.WriteInt32(f.Index);
@@ -303,15 +303,15 @@ public static class IndexManager
         return dict;
     }
 
-    private static List<FragentInfo> ReadFragents(CborReader r)
+    private static List<FragmentInfo> ReadFragments(CborReader r)
     {
-        var list = new List<FragentInfo>();
+        var list = new List<FragmentInfo>();
         r.ReadStartArray();
 
         int index = 0;
         while (r.PeekState() != CborReaderState.EndArray)
         {
-            var f = new FragentInfo();
+            var f = new FragmentInfo();
             r.ReadStartMap();
             while (r.PeekState() != CborReaderState.EndMap)
             {
@@ -472,24 +472,24 @@ public class RdrfIndex
     public long FileSize { get; set; }
     public int FragmentCount { get; set; }
     public int OriginalFragmentCount { get; set; }
-    public List<int> OriginalFragentSizes { get; set; } = new();
-    public List<string> FragentHashes { get; set; } = new();
+    public List<int> OriginalFragmentSizes { get; set; } = new();
+    public List<string> FragmentHashes { get; set; } = new();
     public string OriginalHash { get; set; } = string.Empty;
     public string FssStrategy { get; set; } = "FSS1";
     public Dictionary<string, object>? FssParams { get; set; }
-    public List<List<string>>? Fss6FragentBlockMaps { get; set; }
+    public List<List<string>>? Fss6FragmentBlockMaps { get; set; }
     public List<string>? Fss6RcBlockMap { get; set; }
     public string? Salt { get; set; }
     public long CreatedAt { get; set; }
     public long? UpdatedAt { get; set; }
     public int? VersionNumber { get; set; }
     public List<Versioning.VersionRecord>? Versions { get; set; }
-    public List<FragentInfo>? Fragents { get; set; }
+    public List<FragmentInfo>? Fragments { get; set; }
     public FSS.Fss61RepairData? Fss61RepairB { get; set; }
     public FSS.Fss61RepairData? Fss61RepairC { get; set; }
 }
 
-public class FragentInfo
+public class FragmentInfo
 {
     public int Index { get; set; }
     public int Size { get; set; }

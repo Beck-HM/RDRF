@@ -89,7 +89,7 @@ public class NextCommand : Command
             var diffResult = new RDRF.Core.Diff.DiffEngine().ComputeDiff(oldBytes, newBytes, oldIndex.OriginalName);
 
             if (diffResult.IsBinary)
-                AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} é”Ÿ?{newBytes.Length} bytes");
+                AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} é”?{newBytes.Length} bytes");
             else
                 AnsiConsole.MarkupLine($"[yellow]Changes:[/] +{diffResult.AddedLines} -{diffResult.RemovedLines} lines (+{diffResult.AddedBytes} bytes)");
 
@@ -127,7 +127,7 @@ public class NextCommand : Command
         var rawFragments = new List<byte[]>();
         for (int i = 0; i < index.FragmentCount; i++)
         {
-            string fragName = RDRF.Core.FragmentEngine.Frags.FragentFilename(prefix, i);
+            string fragName = RDRF.Core.FragmentEngine.Frags.FragmentFilename(prefix, i);
             byte[] encrypted = storage.ReadFragment(fragName);
             byte[] raw = EncryptionLayer.DecryptAndStripFragment(encrypted, aesKey);
             rawFragments.Add(raw);
@@ -138,7 +138,7 @@ public class NextCommand : Command
             decoded[i] = rawFragments[i];
 
         var fssEngine = new RDRF.Core.FSS.FSSEngine();
-        var stripped = fssEngine.Strip(decoded, index.FssStrategy, index.OriginalFragmentCount, index.OriginalFragentSizes);
-        return RDRF.Core.FragmentEngine.Frags.MergeFragents(stripped);
+        var stripped = fssEngine.Strip(decoded, index.FssStrategy, index.OriginalFragmentCount, index.OriginalFragmentSizes);
+        return RDRF.Core.FragmentEngine.Frags.MergeFragments(stripped);
     }
 }

@@ -5,11 +5,11 @@ namespace RDRF.Core.FragmentEngine;
 
 public static class Frags
 {
-    private const int DefaultFragentSize = 1024 * 1024;
+    private const int DefaultFragmentSize = 1024 * 1024;
 
     public static (List<byte[]> fragments, string fingerprint) SplitFile(string filePath, int fragmentSize = 0)
     {
-        if (fragmentSize <= 0) fragmentSize = DefaultFragentSize;
+        if (fragmentSize <= 0) fragmentSize = DefaultFragmentSize;
 
         byte[] fileData = File.ReadAllBytes(filePath);
         string fingerprint = ComputeFingerprint(fileData);
@@ -27,7 +27,7 @@ public static class Frags
 
     public static IEnumerable<byte[]> EnumerateFragments(string filePath, int fragmentSize = 0)
     {
-        if (fragmentSize <= 0) fragmentSize = DefaultFragentSize;
+        if (fragmentSize <= 0) fragmentSize = DefaultFragmentSize;
         using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
             FileShare.Read, 65536, FileOptions.SequentialScan);
         byte[] buf = new byte[fragmentSize];
@@ -50,7 +50,7 @@ public static class Frags
 
     public static List<byte[]> SplitData(byte[] data, int fragmentSize = 0)
     {
-        if (fragmentSize <= 0) fragmentSize = DefaultFragentSize;
+        if (fragmentSize <= 0) fragmentSize = DefaultFragmentSize;
 
         var fragments = new List<byte[]>();
         for (int offset = 0; offset < data.Length; offset += fragmentSize)
@@ -63,14 +63,14 @@ public static class Frags
         return fragments;
     }
 
-    public static void MergeFragents(List<byte[]> fragments, string outputPath)
+    public static void MergeFragments(List<byte[]> fragments, string outputPath)
     {
         using var stream = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
         foreach (var fragment in fragments)
             stream.Write(fragment, 0, fragment.Length);
     }
 
-    public static byte[] MergeFragents(List<byte[]> fragments)
+    public static byte[] MergeFragments(List<byte[]> fragments)
     {
         int totalSize = 0;
         foreach (var f in fragments) totalSize += f.Length;
@@ -84,12 +84,12 @@ public static class Frags
         return result;
     }
 
-    public static string FragentFilename(string filePrefix, int index)
-        => string.Format(Constants.FragentFilePattern, filePrefix, index);
+    public static string FragmentFilename(string filePrefix, int index)
+        => string.Format(Constants.FragmentFilePattern, filePrefix, index);
 
-    public static int GetFragentCount(long fileSize, int fragmentSize = 0)
+    public static int GetFragmentCount(long fileSize, int fragmentSize = 0)
     {
-        if (fragmentSize <= 0) fragmentSize = DefaultFragentSize;
+        if (fragmentSize <= 0) fragmentSize = DefaultFragmentSize;
         return (int)((fileSize + fragmentSize - 1) / fragmentSize);
     }
 

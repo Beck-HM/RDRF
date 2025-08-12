@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using RDRF.Core.Encryption;
@@ -170,7 +170,7 @@ public class BackupOrchestrator : IDisposable
         }
 
         int originalFragmentCount = originalFragments.Count;
-        var originalFragentSizes = originalFragments.Select(f => f.Length).ToList();
+        var originalFragmentSizes = originalFragments.Select(f => f.Length).ToList();
 
         Debug.WriteLine($"  Step 1: Split into {originalFragmentCount} fragments");
 
@@ -215,7 +215,7 @@ public class BackupOrchestrator : IDisposable
             fragmentNonces: nonces,
             originalHash: originalHash,
             fssStrategy: plan.EffectivePrimary,
-            originalFragentSizes: originalFragentSizes,
+            originalFragmentSizes: originalFragmentSizes,
             originalFragmentCount: originalFragmentCount,
             fssParams: new Dictionary<string, object>
             {
@@ -339,7 +339,7 @@ public class BackupOrchestrator : IDisposable
             byte[] fileData = FragmentFileHeader.EncryptWithEmbeddedIndex(
                 fragments[i], embeddedIndexBytes, _aesKey, _preDerived ? null : _salt);
 
-            string fname = Frags.FragentFilename(filePrefix, i);
+            string fname = Frags.FragmentFilename(filePrefix, i);
             int rawLen = fragments[i].Length;
             await _storage.WriteFragmentAsync(fname, fileData, cancellationToken).ConfigureAwait(false);
             fragments[i] = null!;

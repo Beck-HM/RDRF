@@ -108,7 +108,7 @@ public static class Program
             // Push fragments
             for (int i = 0; i < fragmentCount; i++)
             {
-                string fragName = Frags.FragentFilename(prefix, i);
+                string fragName = Frags.FragmentFilename(prefix, i);
                 string fragPath = Path.Combine(storageDir, fragName);
                 if (!File.Exists(fragPath))
                 {

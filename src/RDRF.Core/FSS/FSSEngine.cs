@@ -31,14 +31,14 @@ public class FSSEngine
         Dictionary<int, byte[]> available,
         List<int> missingIndices,
         string level,
-        int totalFragents,
+        int totalFragments,
         List<int>? originalSizes = null)
-        => GetStrategy(level).Decode(available, missingIndices, totalFragents, originalSizes);
+        => GetStrategy(level).Decode(available, missingIndices, totalFragments, originalSizes);
 
     public List<byte[]> Strip(
-        Dictionary<int, byte[]> encodedFragents,
+        Dictionary<int, byte[]> encodedFragments,
         string level,
-        int originalFragentCount,
+        int originalFragmentCount,
         List<int>? originalSizes = null)
-        => GetStrategy(level).Strip(encodedFragents, originalFragentCount, originalSizes);
+        => GetStrategy(level).Strip(encodedFragments, originalFragmentCount, originalSizes);
 }

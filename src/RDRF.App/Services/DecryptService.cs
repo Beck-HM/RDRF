@@ -167,7 +167,7 @@ public class DecryptService : IDisposable
 
     private static BackupLoadResult ToResult(RdrfIndex index)
     {
-        bool hasFss6 = index.Fss6FragentBlockMaps != null || index.Fss6RcBlockMap != null;
+        bool hasFss6 = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
         return new BackupLoadResult
         {
             Fingerprint = index.FileFingerprint,

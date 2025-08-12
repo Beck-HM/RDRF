@@ -69,7 +69,7 @@ public class Fss6Etn : IFssStrategy
             Version = 1,
             FileFingerprint = fileFingerprint,
             IndexBlockMap = HexListFromSecondFlat(indexBlockFlat, idxBlockCount),
-            FragentBlockMaps = fragmentBlockFlats.Select(f => HexListFromSecondFlat(f, EtnBlockMap.BlockCount(f))).ToList(),
+            FragmentBlockMaps = fragmentBlockFlats.Select(f => HexListFromSecondFlat(f, EtnBlockMap.BlockCount(f))).ToList(),
             CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         };
         byte[] rcBytes = rcFile.ToCborBytes();
@@ -105,11 +105,11 @@ public class Fss6Etn : IFssStrategy
         int rcBlockCount = EtnBlockMap.BlockCount(rcBlockFlat);
         index.Fss6RcBlockMap = HexListFromSecondFlat(rcBlockFlat, rcBlockCount);
 
-        index.Fss6FragentBlockMaps = new List<List<string>>();
+        index.Fss6FragmentBlockMaps = new List<List<string>>();
         for (int i = 0; i < fragmentBlockFlats.Length; i++)
         {
             int fc = EtnBlockMap.BlockCount(fragmentBlockFlats[i]);
-            index.Fss6FragentBlockMaps.Add(HexListFromSecondFlat(fragmentBlockFlats[i], fc));
+            index.Fss6FragmentBlockMaps.Add(HexListFromSecondFlat(fragmentBlockFlats[i], fc));
         }
 
         return IndexManager.SerializeIndex(index);
@@ -137,6 +137,7 @@ public class CrossValidationResult
     public List<int> CorruptedFragments { get; set; } = new();
     public bool IndexCorrupted { get; set; }
     public bool RcCorrupted { get; set; }
+    /// <summary>Error message when cross-validation fails.</summary>
     public string? ErrorMessage { get; set; }
     public List<int> IndexCorruptedBlocks { get; set; } = new();
     public List<int> RcCorruptedBlocks { get; set; } = new();

@@ -51,12 +51,12 @@ public class Fss5CrossRecovery : IFssStrategy
     public Dictionary<int, byte[]> Decode(
         Dictionary<int, byte[]> available,
         List<int> missingIndices,
-        int totalFragents,
+        int totalFragments,
         List<int>? originalSizes = null)
     {
         var result = new Dictionary<int, byte[]>();
         var known = new Dictionary<int, byte[]>(available);
-        var (step1, step2) = ChooseSteps(totalFragents);
+        var (step1, step2) = ChooseSteps(totalFragments);
 
         bool madeProgress;
         int iterations = 0;
@@ -72,7 +72,7 @@ public class Fss5CrossRecovery : IFssStrategy
                 byte[]? recovered = null;
 
                 // Try step1 backward neighbor
-                int src1Idx = (missingIdx - step1 + totalFragents) % totalFragents;
+                int src1Idx = (missingIdx - step1 + totalFragments) % totalFragments;
                 if (known.ContainsKey(src1Idx) && IsValidFss5Fragment(known[src1Idx], out _))
                 {
                     recovered = ExtractStep1Data(known[src1Idx]);
@@ -81,7 +81,7 @@ public class Fss5CrossRecovery : IFssStrategy
                 // Try step2 backward neighbor
                 if (recovered == null)
                 {
-                    int src2Idx = (missingIdx - step2 + totalFragents) % totalFragents;
+                    int src2Idx = (missingIdx - step2 + totalFragments) % totalFragments;
                     if (known.ContainsKey(src2Idx) && IsValidFss5Fragment(known[src2Idx], out _))
                     {
                         recovered = ExtractStep2Data(known[src2Idx]);
@@ -92,13 +92,13 @@ public class Fss5CrossRecovery : IFssStrategy
                 {
                     result[missingIdx] = recovered;
                     known[missingIdx] = recovered;
-                    TryReconstructEncoded(missingIdx, known, step1, step2, totalFragents);
+                    TryReconstructEncoded(missingIdx, known, step1, step2, totalFragments);
                     madeProgress = true;
                 }
             }
 
             iterations++;
-            if (iterations > totalFragents * 3) break;
+            if (iterations > totalFragments * 3) break;
 
         } while (madeProgress);
 
@@ -106,14 +106,14 @@ public class Fss5CrossRecovery : IFssStrategy
     }
 
     public List<byte[]> Strip(
-        Dictionary<int, byte[]> encodedFragents,
-        int originalFragentCount,
+        Dictionary<int, byte[]> encodedFragments,
+        int originalFragmentCount,
         List<int>? originalSizes = null)
     {
         var result = new List<byte[]>();
-        for (int i = 0; i < originalFragentCount; i++)
+        for (int i = 0; i < originalFragmentCount; i++)
         {
-            if (!encodedFragents.TryGetValue(i, out var data)) continue;
+            if (!encodedFragments.TryGetValue(i, out var data)) continue;
 
             // If original sizes available and data matches, it's already raw (e.g. recovered)
             if (originalSizes != null && i < originalSizes.Count && data.Length <= originalSizes[i])

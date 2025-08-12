@@ -60,7 +60,7 @@ public class InfoCommand : Command
             Console.WriteLine($"Strategy:    {index.FssStrategy}");
             Console.WriteLine($"Fragments:   {index.FragmentCount} (original: {index.OriginalFragmentCount})");
 
-            string? fss6 = (index.Fss6FragentBlockMaps != null || index.Fss6RcBlockMap != null)
+            string? fss6 = (index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null)
                 ? "with FSS6/ETN" : null;
             Console.WriteLine($"ETN:         {(fss6 ?? "no")}");
 

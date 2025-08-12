@@ -14,18 +14,18 @@ public class Fss2RRepair : IFssStrategy
     public Dictionary<int, byte[]> Decode(
         Dictionary<int, byte[]> available,
         List<int> missingIndices,
-        int totalFragents,
+        int totalFragments,
         List<int>? originalSizes = null)
-        => _fss2.Decode(available, missingIndices, totalFragents, originalSizes);
+        => _fss2.Decode(available, missingIndices, totalFragments, originalSizes);
 
     public List<byte[]> Strip(
-        Dictionary<int, byte[]> encodedFragents,
-        int originalFragentCount,
+        Dictionary<int, byte[]> encodedFragments,
+        int originalFragmentCount,
         List<int>? originalSizes = null)
     {
         // Remove checksums, diagnose and repair corrupted fragments
         var stripped = new Dictionary<int, byte[]>();
-        foreach (var kvp in encodedFragents)
+        foreach (var kvp in encodedFragments)
         {
             byte[] data = kvp.Value;
             int hashLen = 32;
@@ -35,7 +35,7 @@ public class Fss2RRepair : IFssStrategy
         }
 
         // Verify and repair
-        int count = encodedFragents.Count;
+        int count = encodedFragments.Count;
         for (int attempt = 0; attempt < 2; attempt++)
         {
             foreach (var kvp in new List<KeyValuePair<int, byte[]>>(stripped))
@@ -43,7 +43,7 @@ public class Fss2RRepair : IFssStrategy
                 byte[] expectedHash = System.Security.Cryptography.SHA256.HashData(kvp.Value);
                 int hashLen = 32;
                 byte[] storedHash = new byte[hashLen];
-                Buffer.BlockCopy(encodedFragents[kvp.Key], kvp.Value.Length, storedHash, 0, hashLen);
+                Buffer.BlockCopy(encodedFragments[kvp.Key], kvp.Value.Length, storedHash, 0, hashLen);
                 int idx = kvp.Key;
                 int leftIdx = (idx - 1 + count) % count;
                 int rightIdx = (idx + 1) % count;
@@ -58,7 +58,7 @@ public class Fss2RRepair : IFssStrategy
                     byte[] leftData = stripped[leftIdx];
                     byte[] leftExpectedHash = System.Security.Cryptography.SHA256.HashData(leftData);
                     byte[] leftStoredHash = new byte[hashLen];
-                    Buffer.BlockCopy(encodedFragents[leftIdx], leftData.Length, leftStoredHash, 0, hashLen);
+                    Buffer.BlockCopy(encodedFragments[leftIdx], leftData.Length, leftStoredHash, 0, hashLen);
 
                     if (Integrity.IntegrityChecker.BytesEqual(leftExpectedHash, leftStoredHash))
                     {
@@ -94,7 +94,7 @@ public class Fss2RRepair : IFssStrategy
             }
         }
 
-        return _fss1.Strip(stripped, originalFragentCount, originalSizes);
+        return _fss1.Strip(stripped, originalFragmentCount, originalSizes);
     }
 
     public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)

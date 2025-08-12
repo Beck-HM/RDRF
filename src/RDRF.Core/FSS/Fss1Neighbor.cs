@@ -25,7 +25,7 @@ public class Fss1Neighbor : IFssStrategy
     public Dictionary<int, byte[]> Decode(
         Dictionary<int, byte[]> available,
         List<int> missingIndices,
-        int totalFragents,
+        int totalFragments,
         List<int>? originalSizes = null)
     {
         var result = new Dictionary<int, byte[]>();
@@ -42,7 +42,7 @@ public class Fss1Neighbor : IFssStrategy
                 if (result.ContainsKey(missingIdx)) continue;
 
                 // Try left neighbor
-                int leftIdx = (missingIdx - 1 + totalFragents) % totalFragents;
+                int leftIdx = (missingIdx - 1 + totalFragments) % totalFragments;
                 if (work.ContainsKey(leftIdx))
                 {
                     byte[] neighborData = work[leftIdx];
@@ -72,7 +72,7 @@ public class Fss1Neighbor : IFssStrategy
                 }
 
                 // Try right neighbor
-                int rightIdx = (missingIdx + 1) % totalFragents;
+                int rightIdx = (missingIdx + 1) % totalFragments;
                 if (work.ContainsKey(rightIdx))
                 {
                     byte[] neighborData = work[rightIdx];
@@ -105,14 +105,14 @@ public class Fss1Neighbor : IFssStrategy
     }
 
     public List<byte[]> Strip(
-        Dictionary<int, byte[]> encodedFragents,
-        int originalFragentCount,
+        Dictionary<int, byte[]> encodedFragments,
+        int originalFragmentCount,
         List<int>? originalSizes = null)
     {
         var result = new List<byte[]>();
-        for (int i = 0; i < originalFragentCount; i++)
+        for (int i = 0; i < originalFragmentCount; i++)
         {
-            if (!encodedFragents.TryGetValue(i, out var data)) continue;
+            if (!encodedFragments.TryGetValue(i, out var data)) continue;
 
             if (originalSizes != null && i < originalSizes.Count)
             {
