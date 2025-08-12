@@ -36,7 +36,7 @@ public static class EtnPrecision
         int actualRcCount = EtnBlockMap.BlockCount(actualRcFlat);
 
         var rcStoredIndexBm = rcFile.IndexBlockMap.Select(EtnBlockMap.HexToHash).ToList();
-        var rcStoredFragmentBms = rcFile.FragentBlockMaps
+        var rcStoredFragmentBms = rcFile.FragmentBlockMaps
             .Select(list => list.Select(EtnBlockMap.HexToHash).ToList()).ToList();
 
         int n = fragmentsWithTrailers.Count;
@@ -64,7 +64,7 @@ public static class EtnPrecision
         });
 
         var indexStoredRcBm = index?.Fss6RcBlockMap?.Select(EtnBlockMap.HexToHash).ToList() ?? new List<byte[]>();
-        var indexStoredFragmentBms = index?.Fss6FragentBlockMaps
+        var indexStoredFragmentBms = index?.Fss6FragmentBlockMaps
             ?.Select(list => list.Select(EtnBlockMap.HexToHash).ToList()).ToList()
             ?? new List<List<byte[]>>();
 
@@ -258,7 +258,7 @@ public static class EtnPrecision
     {
         var index = IndexManager.DeserializeIndex(indexBytes);
         if (index == null) return indexBytes;
-        index.Fss6FragentBlockMaps = null;
+        index.Fss6FragmentBlockMaps = null;
         index.Fss6RcBlockMap = null;
         return IndexManager.SerializeIndex(index);
     }
@@ -285,5 +285,6 @@ public class PrecisionResult
     public Dictionary<int, List<int>> CorruptedFragmentBlocks { get; set; } = new();
     public Dictionary<int, List<int>> SuspiciousFragmentBlocks { get; set; } = new();
     public List<int> CorruptedFragmentTrailers { get; set; } = new();
+    /// <summary>Error message when validation fails.</summary>
     public string? ErrorMessage { get; set; }
 }

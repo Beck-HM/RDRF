@@ -54,9 +54,9 @@ public class VerifyCommand : Command
                     return 1;
                 }
 
-                if (index.Fss6FragentBlockMaps == null && index.Fss6RcBlockMap == null)
+                if (index.Fss6FragmentBlockMaps == null && index.Fss6RcBlockMap == null)
                 {
-                    Console.Error.WriteLine("Error: backup does not contain FSS6/ETN data éˆ¥?verification requires FSS6");
+                    Console.Error.WriteLine("Error: backup does not contain FSS6/ETN data éˆ?verification requires FSS6");
                     return 1;
                 }
 
@@ -72,7 +72,7 @@ public class VerifyCommand : Command
             var fragments = new List<byte[]>();
             for (int i = 0; i < index.FragmentCount; i++)
             {
-                string fname = RDRF.Core.FragmentEngine.Frags.FragentFilename(prefix, i);
+                string fname = RDRF.Core.FragmentEngine.Frags.FragmentFilename(prefix, i);
                 if (!storage.FragmentExists(fname)) continue;
 
                     byte[] encrypted = storage.ReadFragment(fname);

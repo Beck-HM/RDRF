@@ -26,7 +26,7 @@ public class Fss2Verify : IFssStrategy
     public Dictionary<int, byte[]> Decode(
         Dictionary<int, byte[]> available,
         List<int> missingIndices,
-        int totalFragents,
+        int totalFragments,
         List<int>? originalSizes = null)
     {
         // Strip FSS2 SHA256 hash from available fragments before FSS1 decode
@@ -39,7 +39,7 @@ public class Fss2Verify : IFssStrategy
             fss1Available[kvp.Key] = stripped;
         }
 
-        var recovered = _fss1.Decode(fss1Available, missingIndices, totalFragents, originalSizes);
+        var recovered = _fss1.Decode(fss1Available, missingIndices, totalFragments, originalSizes);
 
         // Re-append FSS2 SHA256 hash to recovered fragments
         var result = new Dictionary<int, byte[]>();
@@ -56,13 +56,13 @@ public class Fss2Verify : IFssStrategy
     }
 
     public List<byte[]> Strip(
-        Dictionary<int, byte[]> encodedFragents,
-        int originalFragentCount,
+        Dictionary<int, byte[]> encodedFragments,
+        int originalFragmentCount,
         List<int>? originalSizes = null)
     {
         // Strip checksums from available fragments
         var stripped = new Dictionary<int, byte[]>();
-        foreach (var kvp in encodedFragents)
+        foreach (var kvp in encodedFragments)
         {
             byte[] data = kvp.Value;
             int hashLen = 32;
@@ -78,7 +78,7 @@ public class Fss2Verify : IFssStrategy
             byte[] expectedHash = System.Security.Cryptography.SHA256.HashData(kvp.Value);
             int hashLen = 32;
             byte[] storedHash = new byte[hashLen];
-            Buffer.BlockCopy(encodedFragents[kvp.Key], kvp.Value.Length, storedHash, 0, hashLen);
+            Buffer.BlockCopy(encodedFragments[kvp.Key], kvp.Value.Length, storedHash, 0, hashLen);
 
             if (Integrity.IntegrityChecker.BytesEqual(expectedHash, storedHash))
             {
@@ -87,7 +87,7 @@ public class Fss2Verify : IFssStrategy
             else
             {
                 // Corrupted - try recovery from neighbor
-                int count = encodedFragents.Count;
+                int count = encodedFragments.Count;
                 int idx = kvp.Key;
                 int leftIdx = (idx - 1 + count) % count;
                 int rightIdx = (idx + 1) % count;
@@ -126,7 +126,7 @@ public class Fss2Verify : IFssStrategy
             }
         }
 
-        return _fss1.Strip(verifind, originalFragentCount, originalSizes);
+        return _fss1.Strip(verifind, originalFragmentCount, originalSizes);
     }
 
     public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)

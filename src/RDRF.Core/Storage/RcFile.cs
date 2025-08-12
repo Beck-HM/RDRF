@@ -8,7 +8,7 @@ public class RcFile
     public int Version { get; set; } = 1;
     public string FileFingerprint { get; set; } = string.Empty;
     public List<string> IndexBlockMap { get; set; } = new();
-    public List<List<string>> FragentBlockMaps { get; set; } = new();
+    public List<List<string>> FragmentBlockMaps { get; set; } = new();
     public long CreatedAt { get; set; }
 
     public Fss61RepairData? RepairA { get; set; }
@@ -22,7 +22,7 @@ public class RcFile
         writer.WriteTextString("version"); writer.WriteInt32(Version);
         writer.WriteTextString("file_fingerprint"); writer.WriteTextString(FileFingerprint);
         writer.WriteTextString("index_block_map"); WriteStringList(writer, IndexBlockMap);
-        writer.WriteTextString("fragment_block_maps"); WriteNestedStringList(writer, FragentBlockMaps);
+        writer.WriteTextString("fragment_block_maps"); WriteNestedStringList(writer, FragmentBlockMaps);
         writer.WriteTextString("created_at"); writer.WriteInt64(CreatedAt);
 
         WriteRepair(writer, "repair_a", RepairA);
@@ -45,7 +45,7 @@ public class RcFile
                 case "version":              rc.Version = reader.ReadInt32(); break;
                 case "file_fingerprint":     rc.FileFingerprint = reader.ReadTextString(); break;
                 case "index_block_map":      rc.IndexBlockMap = ReadStringList(reader); break;
-                case "fragment_block_maps":  rc.FragentBlockMaps = ReadNestedStringList(reader); break;
+                case "fragment_block_maps":  rc.FragmentBlockMaps = ReadNestedStringList(reader); break;
                 case "created_at":           rc.CreatedAt = reader.ReadInt64(); break;
                 case "repair_a":             rc.RepairA = ReadRepair(reader); break;
                 case "repair_b":             rc.RepairB = ReadRepair(reader); break;

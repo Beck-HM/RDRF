@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using RDRF.Core.Integrity;
@@ -61,8 +61,8 @@ public class RecoveryExecutor
         // to prevent RS decode from selecting corrupted shards.
         var verified = new Dictionary<int, byte[]>();
         var corrupted = new List<int>();
-        bool hasIndexHashes = index.Fragents != null && index.Fragents.Count > 0
-            && index.Fragents.Any(f => !string.IsNullOrEmpty(f.Hash));
+        bool hasIndexHashes = index.Fragments != null && index.Fragments.Count > 0
+            && index.Fragments.Any(f => !string.IsNullOrEmpty(f.Hash));
 
         foreach (var kvp in availableFragments)
         {
@@ -72,7 +72,7 @@ public class RecoveryExecutor
                 continue;
             }
 
-            var fragInfo = IndexManager.GetFragentInfo(index, kvp.Key);
+            var fragInfo = IndexManager.GetFragmentInfo(index, kvp.Key);
             if (fragInfo != null && !string.IsNullOrEmpty(fragInfo.Hash))
             {
                 if (IntegrityChecker.VerifyFragment(kvp.Value, fragInfo.Hash))
@@ -111,7 +111,7 @@ public class RecoveryExecutor
                 missingIndices,
                 index.FssStrategy,
                 index.FragmentCount,
-                index.OriginalFragentSizes);
+                index.OriginalFragmentSizes);
 
             foreach (var kvp in recovered)
             {

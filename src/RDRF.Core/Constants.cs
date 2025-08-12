@@ -5,8 +5,8 @@ namespace RDRF.Core;
 /// </summary>
 public static class Constants
 {
-    // Fragent Configuration
-    public const int DefaultFragentSize = 1024 * 1024; // 1MB
+    // Fragment Configuration
+    public const int DefaultFragmentSize = 1024 * 1024; // 1MB
 
     // AES Encryption Parameters
     public const int NonceLength = 12;
@@ -19,9 +19,9 @@ public static class Constants
     // Index File
     public const string IndexFileSuffix = ".indrdrf";
 
-    // Fragent File Naming
-    public const string FragentFilePattern = "{0}_{1}.rdrf";
-    public const string FragentFileSuffix = ".rdrf";
+    // Fragment File Naming
+    public const string FragmentFilePattern = "{0}_{1}.rdrf";
+    public const string FragmentFileSuffix = ".rdrf";
 
     // Salt Prefix for Index Files
     public const int SaltPrefixLength = 32;

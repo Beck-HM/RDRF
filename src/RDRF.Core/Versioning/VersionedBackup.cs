@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using RDRF.Core.Diff;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
@@ -124,7 +124,7 @@ public static class VersionedBackup
         var rawFragments = new List<byte[]>();
         for (int i = 0; i < index.FragmentCount; i++)
         {
-            string fragName = FragmentEngine.Frags.FragentFilename(prefix, i);
+            string fragName = FragmentEngine.Frags.FragmentFilename(prefix, i);
             byte[] encrypted = storage.ReadFragment(fragName);
             byte[] raw = EncryptionLayer.DecryptAndStripFragment(encrypted, aesKey);
             rawFragments.Add(raw);
@@ -135,8 +135,8 @@ public static class VersionedBackup
         for (int i = 0; i < index.OriginalFragmentCount && i < rawFragments.Count; i++)
             decoded[i] = rawFragments[i];
 
-        var stripped = fssEngine.Strip(decoded, index.FssStrategy, index.OriginalFragmentCount, index.OriginalFragentSizes);
-        return FragmentEngine.Frags.MergeFragents(stripped);
+        var stripped = fssEngine.Strip(decoded, index.FssStrategy, index.OriginalFragmentCount, index.OriginalFragmentSizes);
+        return FragmentEngine.Frags.MergeFragments(stripped);
     }
 
     private static void AppendVersionRecord(
