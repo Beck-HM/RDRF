@@ -1,7 +1,6 @@
 using System.Reflection;
-using RDRF.Storage;
 
-namespace RDRF.PluginLoader;
+namespace RDRF.Storage;
 
 public static class PluginLoader
 {

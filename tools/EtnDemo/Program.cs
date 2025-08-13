@@ -25,9 +25,9 @@ if (_stress)
 else
     RunStandardDemo();
 
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 //  Standard Demo
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 void RunStandardDemo()
 {
     string demoDir = CreateTempDir(_outDir);
@@ -65,11 +65,11 @@ void RunStandardDemo()
         byte[] rcPlain = DecryptRc(storage, fingerprint, aesKey);
         byte[] indexJson = IndexManager.SerializeIndex(index);
         var baselineCheck = Fss6Etn.CrossValidate(indexJson, baseline, rcPlain);
-        AssertOrDie(baselineCheck.IsValid, "Baseline backup is incomplete ¡ª cannot continue");
+        AssertOrDie(baselineCheck.IsValid, "Baseline backup is incomplete ï¿½ï¿½ cannot continue");
         int indexBmCount = EtnBlockMap.BlockCount(EtnBlockMap.Build(Fss6Etn.StripEtnFieldsFromIndexJson(indexJson), etnBlockSize));
         int rcBmCount = EtnBlockMap.BlockCount(EtnBlockMap.Build(rcPlain, etnBlockSize));
-        Print($"  Index BM: {indexBmCount} entries ¡ú stored in RC (8B each)");
-        Print($"  RC   BM: {rcBmCount} entries ¡ú stored in Index (8B each)");
+        Print($"  Index BM: {indexBmCount} entries ï¿½ï¿½ stored in RC (8B each)");
+        Print($"  RC   BM: {rcBmCount} entries ï¿½ï¿½ stored in Index (8B each)");
         Print($"  Block size: {etnBlockSize}B");
         for (int i = 0; i < baseline.Count; i++)
         {
@@ -140,7 +140,7 @@ void RunStandardDemo()
         Print($"  Detected: {detected}/{records.Count}");
         int totalSusp = result.SuspiciousFragmentBlocks.Values.Sum(l => l.Count);
         if (totalSusp > 0)
-            Print($"  False positives (2B collision ¡ú 8B cleared): {totalSusp} blocks");
+            Print($"  False positives (2B collision ï¿½ï¿½ 8B cleared): {totalSusp} blocks");
         foreach (var r2 in records)
         {
             bool hit = r2.Check(result);
@@ -155,9 +155,9 @@ void RunStandardDemo()
     }
 }
 
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 //  Stress Tests
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 void RunStressTests(int sizeMB)
 {
     int total = 0, passed = 0;
@@ -166,7 +166,7 @@ void RunStressTests(int sizeMB)
     csv.AppendLine("Scenario,Result,Details,Time");
     var swTotal = System.Diagnostics.Stopwatch.StartNew();
 
-    Step($"STRESS: 11 scenarios, {sizeMB}MB ¡ª interactive={_interactive}");
+    Step($"STRESS: 11 scenarios, {sizeMB}MB ï¿½ï¿½ interactive={_interactive}");
     Print($"  Results CSV: {resultsFile}");
     WaitRun();
 
@@ -238,7 +238,7 @@ void RunStressTests(int sizeMB)
 
 bool Scenario1_MultiFragmentCascade(string logFile, System.Text.StringBuilder csv)
 {
-    Step("S1  Multi-Fragment Cascade ¡ª corrupt every fragment");
+    Step("S1  Multi-Fragment Cascade ï¿½ï¿½ corrupt every fragment");
     string dir = CreateTempDir(_outDir);
     try
     {
@@ -282,7 +282,7 @@ bool Scenario1_MultiFragmentCascade(string logFile, System.Text.StringBuilder cs
 
 bool Scenario2_CrossBlockBoundary(string logFile, System.Text.StringBuilder csv)
 {
-    Step("S2  Cross-block boundary ¡ª corrupt bytes 255 & 256");
+    Step("S2  Cross-block boundary ï¿½ï¿½ corrupt bytes 255 & 256");
     string dir = CreateTempDir(_outDir);
     try
     {
@@ -314,7 +314,7 @@ bool Scenario2_CrossBlockBoundary(string logFile, System.Text.StringBuilder csv)
 
 bool Scenario3_ByzantineMetadata(string logFile, System.Text.StringBuilder csv)
 {
-    Step("S3  Byzantine metadata ¡ª three-way disagreement on Index hash");
+    Step("S3  Byzantine metadata ï¿½ï¿½ three-way disagreement on Index hash");
     string dir = CreateTempDir(_outDir);
     try
     {
@@ -327,7 +327,7 @@ bool Scenario3_ByzantineMetadata(string logFile, System.Text.StringBuilder csv)
         byte[] mutatedIndexJson = IndexManager.SerializeIndex(index);
         storage.WriteIndex(fingerprint, IndexManager.EncryptIndexWithKey(index, aesKey));
 
-        // Step B: keep RC unchanged ¡ª RC still has original index BM
+        // Step B: keep RC unchanged ï¿½ï¿½ RC still has original index BM
         // Step C: corrupt one fragment's trailer indexBM
         string f0 = $"{prefix}_0.rdrf";
         byte[] enc0 = storage.ReadFragment(f0);
@@ -362,7 +362,7 @@ bool Scenario3_ByzantineMetadata(string logFile, System.Text.StringBuilder csv)
 
 bool Scenario4_RecoveryResidual(string logFile, System.Text.StringBuilder csv)
 {
-    Step("S4  Recovery residual ¡ª corrupt raw data (simulating post-recovery residual error)");
+    Step("S4  Recovery residual ï¿½ï¿½ corrupt raw data (simulating post-recovery residual error)");
     string dir = CreateTempDir(_outDir);
     try
     {
@@ -394,7 +394,7 @@ bool Scenario4_RecoveryResidual(string logFile, System.Text.StringBuilder csv)
 
 bool Scenario5_BlockSaturation(string logFile, System.Text.StringBuilder csv)
 {
-    Step("S5  Block saturation ¡ª 40 non-consecutive blocks in one fragment");
+    Step("S5  Block saturation ï¿½ï¿½ 40 non-consecutive blocks in one fragment");
     string dir = CreateTempDir(_outDir);
     try
     {
@@ -436,7 +436,7 @@ bool Scenario5_BlockSaturation(string logFile, System.Text.StringBuilder csv)
 
 bool Scenario6_ReplayAttack(string logFile, System.Text.StringBuilder csv)
 {
-    Step("S6  Replay attack ¡ª mix nodes from two backup sessions");
+    Step("S6  Replay attack ï¿½ï¿½ mix nodes from two backup sessions");
     string dir1 = CreateTempDir(_outDir);
     string dir2 = CreateTempDir(_outDir);
     try
@@ -477,7 +477,7 @@ bool Scenario6_ReplayAttack(string logFile, System.Text.StringBuilder csv)
 
 bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv, int sizeMB)
 {
-    Step($"S7  Large file ¡ª {sizeMB} MB, {sizeMB * 2} random block corruptions");
+    Step($"S7  Large file ï¿½ï¿½ {sizeMB} MB, {sizeMB * 2} random block corruptions");
     string dir = CreateTempDir(_outDir);
     try
     {
@@ -545,13 +545,13 @@ bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv, int size
     finally { Cleanup(dir); }
 }
 
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 //  Extreme Stress Scenarios
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 
 bool Scenario8_ExtremeBitRot(string logFile, System.Text.StringBuilder csv, int sizeMB)
 {
-    Step("S8  Extreme bit rot ¡ª 0.01% scattered byte flips across ALL fragments");
+    Step("S8  Extreme bit rot ï¿½ï¿½ 0.01% scattered byte flips across ALL fragments");
     string dir = CreateTempDir(_outDir);
     try
     {
@@ -599,7 +599,7 @@ bool Scenario8_ExtremeBitRot(string logFile, System.Text.StringBuilder csv, int 
 
 bool Scenario9_ContiguousStripeKill(string logFile, System.Text.StringBuilder csv, int sizeMB)
 {
-    Step("S9  Contiguous stripe kill ¡ª zero large block ranges (simulating media failure)");
+    Step("S9  Contiguous stripe kill ï¿½ï¿½ zero large block ranges (simulating media failure)");
     string dir = CreateTempDir(_outDir);
     try
     {
@@ -651,7 +651,7 @@ bool Scenario9_ContiguousStripeKill(string logFile, System.Text.StringBuilder cs
 
 bool Scenario10_CombinedAttack(string logFile, System.Text.StringBuilder csv, int sizeMB)
 {
-    Step("S10  Combined multi-layer attack ¡ª data + Index + RC + trailer");
+    Step("S10  Combined multi-layer attack ï¿½ï¿½ data + Index + RC + trailer");
     string dir = CreateTempDir(_outDir);
     try
     {
@@ -735,7 +735,7 @@ bool Scenario10_CombinedAttack(string logFile, System.Text.StringBuilder csv, in
 
 bool Scenario11_TrailerFPStress(string logFile, System.Text.StringBuilder csv, int sizeMB)
 {
-    Step("S11  Trailer false positive stress ¡ª corrupt only 2B trailer hashes, data intact");
+    Step("S11  Trailer false positive stress ï¿½ï¿½ corrupt only 2B trailer hashes, data intact");
     string dir = CreateTempDir(_outDir);
     try
     {
@@ -788,9 +788,9 @@ bool Scenario11_TrailerFPStress(string logFile, System.Text.StringBuilder csv, i
     finally { Cleanup(dir); }
 }
 
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 //  Shared Helpers
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 (LocalFileAdapter storage, string fingerprint, byte[] aesKey, byte[] fragmentKey, RdrfIndex index, int blockSize) QuickBackup(string dir, int sizeMB = 0)
 {
     var storage = new LocalFileAdapter(dir);
@@ -843,9 +843,9 @@ static void Cleanup(string dir)
     catch { }
 }
 
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 //  Print Helpers
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 void WaitRun()
 {
     if (!_interactive) return;
@@ -870,17 +870,17 @@ static void PrintBanner()
 {
     Console.ForegroundColor = ConsoleColor.Cyan;
     Console.WriteLine();
-    Console.WriteLine("  ¨X¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨[");
-    Console.WriteLine("  ¨U      ETN 2B+8B Precision Cross-Validation                  ¨U");
-    Console.WriteLine("  ¨U  256B block ¡¤ 3 nodes ¡¤ 2-tier ¡¤ surgical precision         ¨U");
-    Console.WriteLine("  ¨^¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨a");
+    Console.WriteLine("  ï¿½Xï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½[");
+    Console.WriteLine("  ï¿½U      ETN 2B+8B Precision Cross-Validation                  ï¿½U");
+    Console.WriteLine("  ï¿½U  256B block ï¿½ï¿½ 3 nodes ï¿½ï¿½ 2-tier ï¿½ï¿½ surgical precision         ï¿½U");
+    Console.WriteLine("  ï¿½^ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½a");
     Console.ResetColor();
 }
 
 static void Step(string title)
 {
     Console.ForegroundColor = ConsoleColor.Yellow;
-    Console.WriteLine($"\n  ©¤©¤ [{title}] ©¤©¤");
+    Console.WriteLine($"\n  ï¿½ï¿½ï¿½ï¿½ [{title}] ï¿½ï¿½ï¿½ï¿½");
     Console.ResetColor();
 }
 
@@ -890,9 +890,9 @@ static void PrintResult(CrossValidationResult r, int fragmentCount, List<Corrupt
 {
     Console.WriteLine();
     Console.ForegroundColor = ConsoleColor.White;
-    Console.WriteLine("  ©°©¤©¤©¤©¤©¤©¤©¤©Ð©¤©¤©¤©¤©¤©¤©¤©¤©Ð©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©Ð©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´");
-    Console.WriteLine("  ©¦ Node  ©¦ Status ©¦ Corrupted 256B Blocks              ©¦ Suspicious (FP)  ©¦");
-    Console.WriteLine("  ©À©¤©¤©¤©¤©¤©¤©¤©à©¤©¤©¤©¤©¤©¤©¤©¤©à©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©à©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©È");
+    Console.WriteLine("  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð©ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð©ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð©ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
+    Console.WriteLine("  ï¿½ï¿½ Node  ï¿½ï¿½ Status ï¿½ï¿½ Corrupted 256B Blocks              ï¿½ï¿½ Suspicious (FP)  ï¿½ï¿½");
+    Console.WriteLine("  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½à©¤ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½à©¤ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½à©¤ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
     Console.ResetColor();
 
     PrintNodeRow("Index", r.IndexCorrupted, r.IndexCorruptedBlocks, null, r.IndexCorrupted, corruptions, null);
@@ -907,7 +907,7 @@ static void PrintResult(CrossValidationResult r, int fragmentCount, List<Corrupt
         PrintNodeRow($"Fragment[{i}]", isCorrupt, blocks, idx0Trailer ? "TRAILER" : null, isCorrupt, corruptions, susp);
     }
     Console.ForegroundColor = ConsoleColor.White;
-    Console.WriteLine("  ©¸©¤©¤©¤©¤©¤©¤©¤©Ø©¤©¤©¤©¤©¤©¤©¤©¤©Ø©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©Ø©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼");
+    Console.WriteLine("  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø©ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø©ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø©ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
     Console.ResetColor();
 }
 
@@ -927,18 +927,18 @@ static void PrintNodeRow(string name, bool isCorrupt, List<int>? blocks, string?
             : string.Join(",", suspicious.Take(3)) + $"+{suspicious.Count - 3}")
         : "";
     string tag = hasTag ? " [TAMPER]" : extraTag != null ? $" [{extraTag}]" : "";
-    Console.WriteLine($"  ©¦ {name,-14} ©¦ {status} ©¦ {blkStr,-28} ©¦ {suspStr,-16} ©¦{tag}");
+    Console.WriteLine($"  ï¿½ï¿½ {name,-14} ï¿½ï¿½ {status} ï¿½ï¿½ {blkStr,-28} ï¿½ï¿½ {suspStr,-16} ï¿½ï¿½{tag}");
     Console.ResetColor();
 }
 
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 //  Test File Generator
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 static string GenerateTestFile(string dir, int sizeMB = 0)
 {
     string path = Path.Combine(dir, "DemoCode.cs");
     var sb = new System.Text.StringBuilder();
-    sb.AppendLine("// ETN Demo ¡ª generated source file");
+    sb.AppendLine("// ETN Demo ï¿½ï¿½ generated source file");
     sb.AppendLine("using System;");
     sb.AppendLine("namespace EtnDemo {");
     for (int cls = 0; cls < 80; cls++)
@@ -954,7 +954,6 @@ static string GenerateTestFile(string dir, int sizeMB = 0)
         }
         sb.AppendLine("}");
     }
-    // padding
     int lines = sizeMB > 0 ? sizeMB * 12000 : 3000;
     sb.AppendLine("public static class P{");
     for (int i = 0; i < lines; i++)
@@ -964,9 +963,9 @@ static string GenerateTestFile(string dir, int sizeMB = 0)
     return path;
 }
 
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 //  Key/Fragment Helpers
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 static List<byte[]> DecryptFragments(RdrfIndex index, LocalFileAdapter storage, byte[] fragmentKey)
 {
     string prefix = index.CustomName ?? index.FileFingerprint;
@@ -981,9 +980,9 @@ static List<byte[]> DecryptFragments(RdrfIndex index, LocalFileAdapter storage, 
     return fragments;
 }
 
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 //  Corruption Records
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// ï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½Tï¿½T
 abstract record CorruptionRecord(string Desc)
 {
     public abstract bool Check(CrossValidationResult r);

@@ -7,7 +7,6 @@ using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using RDRF.Core.Storage;
 
-// Test file
 string testFile = args.Length > 0 && File.Exists(args[0])
     ? args[0]
     : Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "tests", "1.mp4"));
@@ -92,7 +91,7 @@ int[] cumBlocks = new int[totalFrags + 1];
 for (int i = 0; i < totalFrags; i++)
     cumBlocks[i + 1] = cumBlocks[i] + blocksPerFrag[i];
 
-Console.WriteLine($"\n══�?FSS6.1 Block Corruption Incremental Test ═══\n");
+Console.WriteLine($"\n══�?FSS6.1 Block Corruption Incremental Test ═══\n");
 
 // Parse args: -set <range>&<range>... -trials <N>
 (int[] pcts, int tcount) ParseArgs(string[] a)
@@ -228,7 +227,7 @@ foreach (int cpct in corruptPcts)
 }
 
 // ── Results ──
-Console.WriteLine($"\n══�?FSS6.1 Repair Strength (blockSize={blockSize}) ══�?);
+Console.WriteLine($"\n══�?FSS6.1 Repair Strength (blockSize={blockSize}) ══�?);
 Console.WriteLine($"Total blocks: {totalBlocks}");
 Console.WriteLine($"Max survived: {maxSurvived}%  |  Min failed: {(minFailed > 100 ? "none" : minFailed + "%")}");
 Console.WriteLine();
@@ -255,7 +254,7 @@ foreach (int cp in corruptPcts)
         var m = csv.FirstOrDefault(l => l.StartsWith(key));
         if (m != null) { var p = m.Split(','); if (p[4] == "True") pass++; }
     }
-    Console.Write(pass == trials ? "  ✓✓�? " : pass >= 2 ? "  ✓✓   " : pass >= 1 ? "  �?   " : "  ✗✗�? ");
+    Console.Write(pass == trials ? "  ✓✓�? " : pass >= 2 ? "  ✓✓   " : pass >= 1 ? "  �?   " : "  ✗✗�? ");
 }
 Console.WriteLine();
 Console.Write("SHA match   ");
@@ -270,11 +269,11 @@ foreach (int cp in corruptPcts)
         var m = csv.FirstOrDefault(l => l.StartsWith(key));
         if (m != null) { var p = m.Split(','); if (p[5] == "True") match++; }
     }
-    Console.Write(match == 3 ? "  ✓✓�? " : match >= 2 ? "  ✓✓   " : match >= 1 ? "  �?   " : "  ✗✗�? ");
+    Console.Write(match == 3 ? "  ✓✓�? " : match >= 2 ? "  ✓✓   " : match >= 1 ? "  �?   " : "  ✗✗�? ");
 }
 Console.WriteLine();
 Console.WriteLine(new string('─', 70));
-Console.WriteLine($"Legend: ✓✓�?= {trials}/{trials}  ✓✓ = 2/{trials}  �?= 1/{trials}  ✗✗�?= 0/{trials}");
+Console.WriteLine($"Legend: ✓✓�?= {trials}/{trials}  ✓✓ = 2/{trials}  �?= 1/{trials}  ✗✗�?= 0/{trials}");
 Console.WriteLine($"\nThreshold: repair succeeds at ≤{maxSurvived}% corruption, fails at ≥{minFailed}%");
 
 // ── Cleanup ──

@@ -59,7 +59,6 @@ public class StatusCommand : Command
                 string prefix = index.CustomName ?? index.FileFingerprint;
                 string lookupKey = index.CustomName ?? index.FileFingerprint;
 
-            // Check index and RC presence
             bool indexOk = true;
             bool rcOk = storage.RcExists(lookupKey);
             if (rcOk)
@@ -84,7 +83,6 @@ public class StatusCommand : Command
             Console.WriteLine($"  RC:          {(rcOk ? "OK" : (storage.RcExists(lookupKey) ? "CORRUPTED" : "MISSING"))}");
             Console.WriteLine();
 
-            // Scan fragments
             int ok = 0, corrupted = 0, missing = 0;
             var rows = new List<(int idx, string status, string size, string hash)>();
 
@@ -134,7 +132,6 @@ public class StatusCommand : Command
                 }
             }
 
-            // Print table
             Console.WriteLine($"Fragment Status ({index.FragmentCount} expected):");
             Console.WriteLine($"  #  Status      Size       Hash");
             Console.WriteLine($" -- ---------- ---------- ----------");

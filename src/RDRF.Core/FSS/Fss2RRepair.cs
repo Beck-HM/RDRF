@@ -23,7 +23,6 @@ public class Fss2RRepair : IFssStrategy
         int originalFragmentCount,
         List<int>? originalSizes = null)
     {
-        // Remove checksums, diagnose and repair corrupted fragments
         var stripped = new Dictionary<int, byte[]>();
         foreach (var kvp in encodedFragments)
         {
