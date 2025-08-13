@@ -13,7 +13,6 @@ class Program
     {
         Console.WriteLine("=== RDRF.Core Test Suite ===\n");
 
-        // Setup
         string testDir = Path.Combine(Path.GetTempPath(), "rdrf_test_" + Guid.NewGuid().ToString("N").Substring(0, 8));
         string backupDir = Path.Combine(testDir, "backup");
         string restoreDir = Path.Combine(testDir, "restore");
@@ -23,7 +22,6 @@ class Program
         Directory.CreateDirectory(backupDir);
         Directory.CreateDirectory(restoreDir);
 
-        // Create test file with known content
         string testContent = "Hello, RDRF! This is a test file for encryption and recovery testing. " +
                              "It contains multiple lines of text to make sure the fragmentation works correctly.\n" +
                              "Line 2: The quick brown fox jumps over the lazy dog.\n" +
@@ -40,7 +38,6 @@ class Program
 
         byte[] key = SHA256.HashData(Encoding.UTF8.GetBytes("testpassword123"));
 
-        // Test different strategies
         string[] strategies = { "FSS1", "FSS2", "FSS2R", "FSS3", "FSS5", "FSS5+" };
 
         foreach (string strategy in strategies)
@@ -48,19 +45,16 @@ class Program
             Console.WriteLine($">>> Testing {strategy} >>>");
             try
             {
-                // Clean backup dir
                 foreach (var f in Directory.GetFiles(backupDir))
                     File.Delete(f);
 
                 var storage = new LocalFileAdapter(backupDir);
                 var engine = new RDRFEngine(key, storage);
 
-                // Backup
                 Console.WriteLine("  Backing up...");
                 string fingerprint = engine.BackupFile(testFile, strategy);
                 Console.WriteLine($"  Fingerprint: {fingerprint}");
 
-                // List fragments
                 var fragments = storage.ListFragments();
                 Console.WriteLine($"  Fragments generated: {fragments.Count}");
                 foreach (var f in fragments)
@@ -68,13 +62,11 @@ class Program
                     Console.WriteLine($"    > {f}");
                 }
 
-                // Check index exists
                 if (storage.IndexExists(fingerprint))
                     Console.WriteLine("  Index file: OK");
                 else
                     Console.WriteLine("  Index file: MISSING!");
 
-                // Restore
                 Console.WriteLine("  Restoring...");
                 string restorePath = Path.Combine(restoreDir, $"restored_{strategy}.txt");
                 bool success = engine.RestoreFile(fingerprint, restorePath);
@@ -83,7 +75,6 @@ class Program
                 {
                     Console.WriteLine("  Restore: SUCCESS");
 
-                    // Verify content
                     if (File.Exists(restorePath))
                     {
                         byte[] restoredHash = SHA256.HashData(File.ReadAllBytes(restorePath));

@@ -33,7 +33,7 @@ var summaryRows = new List<SummaryRow>();
 
 Console.ForegroundColor = ConsoleColor.Cyan;
 Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
-Console.WriteLine("�?        FSS Recovery Test �? All Strategies                �?);
+Console.WriteLine("�?        FSS Recovery Test �? All Strategies                �?);
 Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
 Console.ResetColor();
 Console.WriteLine($"  Test file: {testFile} ({fileSize:N0} bytes)");
@@ -247,7 +247,7 @@ foreach (string strategy in strategies)
             for (int i = 0; i < totalFrags; i++)
                 if (!toDelete.Contains(i))
                     File.WriteAllBytes(Path.Combine(trialDir, $"{prefix}_{i}.rdrf"), allFragBytes[i]);
-            // NOTE: deleted fragments are NOT written at all �?file doesn't exist
+            // NOTE: deleted fragments are NOT written at all �?file doesn't exist
 
             // Also copy the .rdrc file if present (needed for ETN cross-validation)
             string rcSrcP = Path.Combine(testRoot, $"{prefix}.rdrc");
@@ -274,7 +274,7 @@ foreach (string strategy in strategies)
     }
     }
 
-    // ── Greedy test (流程一): from i=0..N-1, delete each, recover, keep if ok, skip if fail ──
+    // ── Greedy test (phase 1): from i=0..N-1, delete each, recover, keep if ok, skip if fail ──
     var greedyDir = Path.Combine(testRoot, "greedy");
     Directory.CreateDirectory(greedyDir);
     var greedyKept = new HashSet<int>();
@@ -309,7 +309,7 @@ foreach (string strategy in strategies)
     double greedyStrength = (double)greedyKept.Count / totalFrags * 100;
     Console.WriteLine($"  Greedy: max deleted {greedyKept.Count}/{totalFrags} = {greedyStrength:F1}%");
 
-    // ── Custom tests (流程�?: strategy-specific targeted patterns ──
+    // ── Custom tests (phase 2�?: strategy-specific targeted patterns ──
     var customResults = new List<(string name, double lossPct, bool ok)>();
 
     if (strategy is "FSS1" or "FSS2" or "FSS2R")
@@ -364,7 +364,7 @@ foreach (string strategy in strategies)
         customResults.Add(("keep_one", (double)sDel / totalFrags * 100, sR && sSha));
     }
 
-    // FSS6.1: block corruption test �?corrupt encrypted bytes directly
+    // FSS6.1: block corruption test �?corrupt encrypted bytes directly
     if (strategy == "FSS6.1")
     {
         var bcDir = Path.Combine(testRoot, "custom_block_corrupt");
@@ -534,7 +534,7 @@ foreach (string strategy in strategies)
             maxFailedPct = inc.lossPct;
     }
 
-    // FSS3 starts failing at 2 lost, which is 2/21 �?9.5%
+    // FSS3 starts failing at 2 lost, which is 2/21 �?9.5%
     double theoreticalMax = strategy switch
     {
         "FSS1" => 50.0,
@@ -569,10 +569,10 @@ foreach (string strategy in strategies)
 
 // ── Summary Table ──
 Console.ForegroundColor = ConsoleColor.White;
-Console.WriteLine("┌──────────┬──────┬──────────┬──────────────┬──────────────┬────────────┬──────────┬──────────────────────�?);
-Console.WriteLine("�?Strategy �?Frags�?Baseline �?Theoretical  �?Max Survived �?Min Failed �? Greedy  �?Notes                �?);
-Console.WriteLine("�?         �?     �?         �?Max Loss %   �?Loss %       �?Loss %     �?Strength �?                     �?);
-Console.WriteLine("├──────────┼──────┼──────────┼──────────────┼──────────────┼────────────┼──────────┼──────────────────────�?);
+Console.WriteLine("┌──────────┬──────┬──────────┬──────────────┬──────────────┬────────────┬──────────┬──────────────────────�?);
+Console.WriteLine("�?Strategy �?Frags�?Baseline �?Theoretical  �?Max Survived �?Min Failed �? Greedy  �?Notes                �?);
+Console.WriteLine("�?         �?     �?         �?Max Loss %   �?Loss %       �?Loss %     �?Strength �?                     �?);
+Console.WriteLine("├──────────┼──────┼──────────┼──────────────┼──────────────┼────────────┼──────────┼──────────────────────�?);
 Console.ResetColor();
 
 foreach (var row in summaryRows)
@@ -599,11 +599,11 @@ foreach (var row in summaryRows)
     };
 
     Console.WriteLine(
-        $"�?{row.Strategy,-7} �?{row.TotalFrags,4} �?{baselineStr,-8} �?{theoStr,-12} �?{row.MaxSurvived,11:F1}% �?{row.MinFailed,10:F1}% �?{greedyStr,8} �?{note,-20} �?);
+        $"�?{row.Strategy,-7} �?{row.TotalFrags,4} �?{baselineStr,-8} �?{theoStr,-12} �?{row.MaxSurvived,11:F1}% �?{row.MinFailed,10:F1}% �?{greedyStr,8} �?{note,-20} �?);
 }
 
 Console.ForegroundColor = ConsoleColor.White;
-Console.WriteLine("└──────────┴──────┴──────────┴──────────────┴──────────────┴────────────┴──────────┴──────────────────────�?);
+Console.WriteLine("└──────────┴──────┴──────────┴──────────────┴──────────────┴────────────┴──────────┴──────────────────────�?);
 Console.ResetColor();
 
 // ── Write CSV ──
@@ -618,14 +618,13 @@ Console.WriteLine("\n── Raw CSV Data ──");
 
 Console.WriteLine($"\n  Result dir: {resultDir}");
 
-// Cleanup test data
 try { Directory.Delete(resultDir, recursive: true); Console.WriteLine($"  Cleaned: {resultDir}"); }
 catch (Exception ex) { Console.Error.WriteLine($"  Cleanup failed: {ex.Message}"); }
 
 return 0;
 
-// ══════════════════════════════════════════════�?//  Helpers
-// ══════════════════════════════════════════════�?
+// ══════════════════════════════════════════════�?//  Helpers
+// ══════════════════════════════════════════════�?
 static bool VerifySha(string filePath, byte[] expectedHash)
 {
     try

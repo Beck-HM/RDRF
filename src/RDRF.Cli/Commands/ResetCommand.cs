@@ -42,7 +42,6 @@ public class ResetCommand : Command
                 return 1;
             }
 
-            // Find existing backend type from config
             var existing = ConfigManager.Load().FirstOrDefault(b =>
                 b.Name.Equals(currentName, StringComparison.OrdinalIgnoreCase));
             if (existing == null)
@@ -57,7 +56,6 @@ public class ResetCommand : Command
                 Type = existing.Type,
             };
 
-            // Merge: start with existing params, override with new ones
             foreach (var kv in existing.Parameters)
                 entry.Parameters[kv.Key] = kv.Value;
             foreach (var kv in dict)

@@ -56,7 +56,7 @@ public class VerifyCommand : Command
 
                 if (index.Fss6FragmentBlockMaps == null && index.Fss6RcBlockMap == null)
                 {
-                    Console.Error.WriteLine("Error: backup does not contain FSS6/ETN data éˆ?verification requires FSS6");
+                    Console.Error.WriteLine("Error: backup does not contain FSS6/ETN data ï¿½?verification requires FSS6");
                     return 1;
                 }
 
@@ -64,11 +64,9 @@ public class VerifyCommand : Command
                 var storage = new LocalFileAdapter(storageDir);
                 string prefix = index.CustomName ?? index.FileFingerprint;
 
-            // Read and decrypt RC file
             byte[] encryptedRc = storage.ReadRc(prefix);
             byte[] rcBytes = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, aesKey);
 
-            // Read and decrypt all fragments
             var fragments = new List<byte[]>();
             for (int i = 0; i < index.FragmentCount; i++)
             {
@@ -84,7 +82,6 @@ public class VerifyCommand : Command
             byte[] indexBytes = IndexManager.SerializeIndex(index);
             var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
 
-            // Print results
             Console.WriteLine($"Fingerprint: {index.FileFingerprint}");
             Console.WriteLine($"Strategy:    {index.FssStrategy} + FSS6");
             Console.WriteLine($"Fragments:   {fragments.Count}/{index.FragmentCount} available");

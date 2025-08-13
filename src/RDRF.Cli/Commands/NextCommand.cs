@@ -53,7 +53,6 @@ public class NextCommand : Command
             string storagePath = storageDir?.FullName ?? Path.Combine(AppContext.BaseDirectory, "backup");
             var storage = new LocalFileAdapter(storagePath);
 
-            // Find existing index
             var dir = new DirectoryInfo(storagePath);
             if (!dir.Exists)
             {
@@ -70,7 +69,6 @@ public class NextCommand : Command
             if (indexFiles.Length > 1)
                 AnsiConsole.MarkupLine("[yellow]Warning:[/] multiple backups found, using first: " + indexFile.Name);
 
-            // Read old index to get current status
             byte[] encIdx = File.ReadAllBytes(indexFile.FullName);
             (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encIdx, password);
             var oldIndex = IndexManager.DeserializeIndex(cbor);
@@ -83,17 +81,15 @@ public class NextCommand : Command
                 return 1;
             }
 
-            // Show diff summary
             var oldBytes = ReadDecryptedOriginal(storage, oldIndex, aesKey);
             var newBytes = await File.ReadAllBytesAsync(source.FullName);
             var diffResult = new RDRF.Core.Diff.DiffEngine().ComputeDiff(oldBytes, newBytes, oldIndex.OriginalName);
 
             if (diffResult.IsBinary)
-                AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} é”?{newBytes.Length} bytes");
+                AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} ï¿½?{newBytes.Length} bytes");
             else
                 AnsiConsole.MarkupLine($"[yellow]Changes:[/] +{diffResult.AddedLines} -{diffResult.RemovedLines} lines (+{diffResult.AddedBytes} bytes)");
 
-            // Run incremental backup
             string newFp = "";
             await ProgressReporter.Run($"Incrementing {oldIndex.OriginalName}", async progress =>
             {
@@ -102,7 +98,6 @@ public class NextCommand : Command
                     oldIndex.FssStrategy, progress: progress);
             });
 
-            // Show result
             byte[] newEncIdx = File.ReadAllBytes(Path.Combine(storagePath, newFp + ".indrdrf"));
             (_, byte[] newCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(newEncIdx, password);
             var newIndex = IndexManager.DeserializeIndex(newCbor);

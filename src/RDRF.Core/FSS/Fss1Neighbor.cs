@@ -41,7 +41,6 @@ public class Fss1Neighbor : IFssStrategy
             {
                 if (result.ContainsKey(missingIdx)) continue;
 
-                // Try left neighbor
                 int leftIdx = (missingIdx - 1 + totalFragments) % totalFragments;
                 if (work.ContainsKey(leftIdx))
                 {
@@ -71,7 +70,6 @@ public class Fss1Neighbor : IFssStrategy
                     }
                 }
 
-                // Try right neighbor
                 int rightIdx = (missingIdx + 1) % totalFragments;
                 if (work.ContainsKey(rightIdx))
                 {

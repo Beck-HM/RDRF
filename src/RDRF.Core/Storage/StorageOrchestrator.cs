@@ -159,7 +159,6 @@ public class StorageOrchestrator
                     throw new InvalidOperationException(
                         $"Backend '{name}' not registered. Call RegisterBackend first.");
 
-                // Record remote config if available
                 var existing = _management.GetRemote(name);
                 if (existing == null)
                 {

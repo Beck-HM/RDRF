@@ -32,7 +32,6 @@ public class RemoveBackendCommand : Command
             bool clean = parseResult.GetValue(cleanOpt);
             var pwd = parseResult.GetValue(passwordOpt);
 
-            // Backend remove mode
             if (node && !string.IsNullOrEmpty(name))
             {
                 ConfigManager.RemoveBackend(name);
@@ -40,7 +39,6 @@ public class RemoveBackendCommand : Command
                 return 0;
             }
 
-            // Clean mode
             if (clean)
             {
                 if (indexFile == null)
@@ -98,7 +96,6 @@ public class RemoveBackendCommand : Command
                 }
             }
 
-            // Purge mode
             if (indexFile == null || version <= 0)
             {
                 Console.Error.WriteLine("Usage:");
