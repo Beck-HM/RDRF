@@ -9,7 +9,9 @@ namespace RDRF.Storage;
 
 public static class PullService
 {
-    public static async Task<int> Run(string indexPath, byte[] password, string? versionArg)
+    public static async Task<int> Run(string indexPath, byte[] password, string? versionArg,
+        bool dryRun = false, int concurrency = 1,
+        IProgress<RdrfProgressReport>? progress = null)
     {
         if (password.Length == 0)
         {
@@ -81,7 +83,7 @@ public static class PullService
         var backends = new Dictionary<string, IStorageBackend>(StringComparer.OrdinalIgnoreCase);
 
         var factories = PluginLoader.Load(pluginsDir);
-        if (factories.Count == 0)
+        if (factories.Count == 0 && !dryRun)
             Console.Error.WriteLine("Warning: no plugins found in " + pluginsDir);
 
         foreach (var cfg in configs)
@@ -94,9 +96,12 @@ public static class PullService
                 continue;
             }
 
-            var backendConfig = cfg.Parameters
-                .ToDictionary(kv => kv.Key, kv => (object)kv.Value);
-            backends[cfg.Name] = factory.Create(backendConfig);
+            if (!dryRun)
+            {
+                var backendConfig = cfg.Parameters
+                    .ToDictionary(kv => kv.Key, kv => (object)kv.Value);
+                backends[cfg.Name] = factory.Create(backendConfig);
+            }
         }
 
         // Lookup fragment locations by version's own fingerprint
@@ -107,42 +112,106 @@ public static class PullService
             return 1;
         }
 
+        if (dryRun)
+        {
+            Console.WriteLine($"Project: {currentFingerprint} v{targetVersion}");
+            int rcCount = locations.Count(l => l.ContentType == "rc");
+            int fragCount = locations.Count - rcCount;
+            Console.WriteLine($"Would download {fragCount} fragment(s)" + (rcCount > 0 ? " + RC" : ""));
+            foreach (var loc in locations.OrderBy(l => l.FragmentIndex))
+            {
+                string label = loc.ContentType == "rc" ? "RC" : $"Fragment {loc.FragmentIndex}";
+                Console.WriteLine($"  {label} from {loc.BackendName} ({loc.FileSize:N0} bytes)");
+            }
+            return 0;
+        }
+
         // Download all files
         Directory.CreateDirectory(storageDir);
         int downloaded = 0, errors = 0;
+        int totalItems = locations.Count;
 
-        foreach (var loc in locations)
+        if (concurrency > 1)
         {
-            if (!backends.TryGetValue(loc.BackendName, out var backend))
+            var semaphore = new SemaphoreSlim(concurrency);
+            var downloadTasks = locations.Select(async loc =>
             {
-                Console.Error.WriteLine($"  Backend '{loc.BackendName}' not available");
-                errors++;
-                continue;
-            }
+                await semaphore.WaitAsync();
+                try
+                {
+                    if (!backends.TryGetValue(loc.BackendName, out var backend))
+                    {
+                        Console.Error.WriteLine($"  Backend '{loc.BackendName}' not available");
+                        Interlocked.Increment(ref errors);
+                        return;
+                    }
 
-            try
+                    await using var stream = await backend.OpenReadAsync(loc.RemotePath);
+                    using var ms = new MemoryStream();
+                    await stream.CopyToAsync(ms);
+                    byte[] data = ms.ToArray();
+
+                    string localName = loc.ContentType == "rc"
+                        ? lookupFingerprint + Constants.RcFileSuffix
+                        : Frags.FragmentFilename(lookupPrefix, loc.FragmentIndex);
+
+                    await File.WriteAllBytesAsync(Path.Combine(storageDir, localName), data);
+
+                    Interlocked.Increment(ref downloaded);
+                    progress?.Report(new RdrfProgressReport
+                    {
+                        Stage = "Pulling", CurrentItem = downloaded + errors, TotalItems = totalItems
+                    });
+                }
+                catch (Exception ex)
+                {
+                    string label = loc.ContentType == "rc" ? "RC" : $"Fragment {loc.FragmentIndex}";
+                    Console.Error.WriteLine($"  {label} error: {ex.Message}");
+                    Interlocked.Increment(ref errors);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            }).ToList();
+            await Task.WhenAll(downloadTasks);
+        }
+        else
+        {
+            foreach (var loc in locations)
             {
-                await using var stream = await backend.OpenReadAsync(loc.RemotePath);
-                using var ms = new MemoryStream();
-                await stream.CopyToAsync(ms);
-                byte[] data = ms.ToArray();
+                if (!backends.TryGetValue(loc.BackendName, out var backend))
+                {
+                    Console.Error.WriteLine($"  Backend '{loc.BackendName}' not available");
+                    errors++;
+                    continue;
+                }
 
-                string localName = loc.ContentType == "rc"
-                    ? lookupFingerprint + Constants.RcFileSuffix
-                    : Frags.FragmentFilename(lookupPrefix, loc.FragmentIndex);
+                try
+                {
+                    await using var stream = await backend.OpenReadAsync(loc.RemotePath);
+                    using var ms = new MemoryStream();
+                    await stream.CopyToAsync(ms);
+                    byte[] data = ms.ToArray();
 
-                string localPath = Path.Combine(storageDir, localName);
-                await File.WriteAllBytesAsync(localPath, data);
+                    string localName = loc.ContentType == "rc"
+                        ? lookupFingerprint + Constants.RcFileSuffix
+                        : Frags.FragmentFilename(lookupPrefix, loc.FragmentIndex);
 
-                string label = loc.ContentType == "rc" ? "RC" : $"Fragment {loc.FragmentIndex}";
-                Console.WriteLine($"  {label} downloaded ({data.Length:N0} bytes)");
-                downloaded++;
-            }
-            catch (Exception ex)
-            {
-                string label = loc.ContentType == "rc" ? "RC" : $"Fragment {loc.FragmentIndex}";
-                Console.Error.WriteLine($"  {label} error: {ex.Message}");
-                errors++;
+                    await File.WriteAllBytesAsync(Path.Combine(storageDir, localName), data);
+
+                    downloaded++;
+                    progress?.Report(new RdrfProgressReport
+                    {
+                        Stage = "Pulling", CurrentItem = downloaded + errors, TotalItems = totalItems
+                    });
+                }
+                catch (Exception ex)
+                {
+                    string label = loc.ContentType == "rc" ? "RC" : $"Fragment {loc.FragmentIndex}";
+                    Console.Error.WriteLine($"  {label} error: {ex.Message}");
+                    errors++;
+                }
             }
         }
 

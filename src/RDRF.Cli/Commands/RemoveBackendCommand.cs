@@ -129,9 +129,42 @@ public class RemoveBackendCommand : Command
                     return 0;
                 }
 
+                // Delete remote files
+                var pluginsDir = Path.Combine(AppContext.BaseDirectory, "plugins");
+                var factories = PluginLoader.Load(pluginsDir);
+                var configs = ConfigManager.Load();
+                var backends = new Dictionary<string, IStorageBackend>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var cfg in configs)
+                {
+                    var factory = factories.FirstOrDefault(f =>
+                        f.Type.Equals(cfg.Type, StringComparison.OrdinalIgnoreCase));
+                    if (factory == null) continue;
+
+                    var backendConfig = cfg.Parameters
+                        .ToDictionary(kv => kv.Key, kv => (object)kv.Value);
+                    backends[cfg.Name] = factory.Create(backendConfig);
+                }
+
+                int remoteDeleted = 0;
+                foreach (var rec in records)
+                {
+                    if (backends.TryGetValue(rec.BackendName, out var backend))
+                    {
+                        try
+                        {
+                            backend.DeleteAsync(rec.RemotePath).GetAwaiter().GetResult();
+                            remoteDeleted++;
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine($"  Failed to delete from '{rec.BackendName}': {ex.Message}");
+                        }
+                    }
+                }
+
                 mgmt.DeleteVersion(fingerprint, version);
-                Console.WriteLine($"Version {version} deleted from management file.");
-                Console.WriteLine("Note: remote fragments were NOT deleted. Backend plugins required.");
+                Console.WriteLine($"Version {version} deleted (SQLite + {remoteDeleted}/{records.Count} remote files).");
                 return 0;
             }
             catch (Exception ex)
