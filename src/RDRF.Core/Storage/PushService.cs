@@ -8,7 +8,9 @@ namespace RDRF.Storage;
 
 public static class PushService
 {
-    public static async Task<int> Run(string indexPath, byte[] password)
+    public static async Task<int> Run(string indexPath, byte[] password,
+        bool dryRun = false, int concurrency = 1,
+        IProgress<RdrfProgressReport>? progress = null)
     {
         if (password.Length == 0)
         {
@@ -35,7 +37,7 @@ public static class PushService
 
         var pluginsDir = Path.Combine(AppContext.BaseDirectory, "plugins");
         var orchestrator = new StorageOrchestrator(storageDir);
-        var registeredBackends = LoadPlugins(pluginsDir, configs, orchestrator);
+        var registeredBackends = LoadPlugins(pluginsDir, configs, orchestrator, dryRun);
 
         if (registeredBackends.Count == 0)
         {
@@ -54,9 +56,9 @@ public static class PushService
 
         int fragmentCount = index.FragmentCount;
         int versionNumber = index.VersionNumber ?? 1;
-        int pushed = 0, errors = 0;
 
-        // Push fragments
+        // Collect all push items
+        var items = new List<(int index, string path)>();
         for (int i = 0; i < fragmentCount; i++)
         {
             string fragName = Frags.FragmentFilename(prefix, i);
@@ -64,58 +66,141 @@ public static class PushService
             if (!File.Exists(fragPath))
             {
                 Console.Error.WriteLine($"  Fragment {i} not found: {fragName}");
-                errors++;
                 continue;
             }
+            items.Add((i, fragPath));
+        }
 
-            byte[] data = await File.ReadAllBytesAsync(fragPath);
-            var options = new StorageUploadOptions
+        string rcName = fingerprint + Constants.RcFileSuffix;
+        string rcPath = Path.Combine(storageDir, rcName);
+        bool hasRc = File.Exists(rcPath);
+
+        int totalItems = items.Count + (hasRc ? 1 : 0);
+        int done = 0, errors = 0;
+
+        if (dryRun)
+        {
+            Console.WriteLine($"Project: {fingerprint} v{versionNumber}");
+            Console.WriteLine($"Backends: {string.Join(", ", targetBackends)}");
+            Console.WriteLine($"Would push {items.Count} fragment(s)" + (hasRc ? " + RC" : ""));
+            foreach (var (idx, _) in items)
+                Console.WriteLine($"  Fragment {idx}/{fragmentCount}");
+            if (hasRc)
+                Console.WriteLine("  RC file");
+            return 0;
+        }
+
+        // Push fragments (with optional concurrency)
+        if (concurrency > 1)
+        {
+            var semaphore = new SemaphoreSlim(concurrency);
+            var pushTasks = items.Select(async item =>
             {
-                Fingerprint = fingerprint,
-                FragmentCount = fragmentCount,
-                FragmentIndex = i,
-                VersionNumber = versionNumber,
-                Backends = targetBackends,
-                FileSize = data.Length,
-                Note = "pushed via rdrf-push",
-            };
-
-            await orchestrator.WriteFragmentAsync(data, options);
-            Console.WriteLine($"  Fragment {i}/{fragmentCount} pushed");
-            pushed++;
+                await semaphore.WaitAsync();
+                try
+                {
+                    byte[] data = await File.ReadAllBytesAsync(item.path);
+                    var options = new StorageUploadOptions
+                    {
+                        Fingerprint = fingerprint,
+                        FragmentCount = fragmentCount,
+                        FragmentIndex = item.index,
+                        VersionNumber = versionNumber,
+                        Backends = targetBackends,
+                        FileSize = data.Length,
+                        Note = "pushed via rdrf-push",
+                    };
+                    await orchestrator.WriteFragmentAsync(data, options);
+                    Interlocked.Increment(ref done);
+                    progress?.Report(new RdrfProgressReport
+                    {
+                        Stage = "Pushing", CurrentItem = done, TotalItems = totalItems
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"  Fragment {item.index} error: {ex.Message}");
+                    Interlocked.Increment(ref errors);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            }).ToList();
+            await Task.WhenAll(pushTasks);
+        }
+        else
+        {
+            foreach (var item in items)
+            {
+                try
+                {
+                    byte[] data = await File.ReadAllBytesAsync(item.path);
+                    var options = new StorageUploadOptions
+                    {
+                        Fingerprint = fingerprint,
+                        FragmentCount = fragmentCount,
+                        FragmentIndex = item.index,
+                        VersionNumber = versionNumber,
+                        Backends = targetBackends,
+                        FileSize = data.Length,
+                        Note = "pushed via rdrf-push",
+                    };
+                    await orchestrator.WriteFragmentAsync(data, options);
+                    done++;
+                    progress?.Report(new RdrfProgressReport
+                    {
+                        Stage = "Pushing", CurrentItem = done, TotalItems = totalItems
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"  Fragment {item.index} error: {ex.Message}");
+                    errors++;
+                }
+            }
         }
 
         // Push RC file
-        string rcName = fingerprint + Constants.RcFileSuffix;
-        string rcPath = Path.Combine(storageDir, rcName);
-        if (File.Exists(rcPath))
+        if (hasRc)
         {
-            byte[] rcData = await File.ReadAllBytesAsync(rcPath);
-            var rcOptions = new StorageUploadOptions
+            try
             {
-                Fingerprint = fingerprint,
-                FragmentCount = fragmentCount,
-                FragmentIndex = -1,
-                VersionNumber = versionNumber,
-                Backends = targetBackends,
-                FileSize = rcData.Length,
-                Note = "pushed via rdrf-push",
-            };
-
-            await orchestrator.WriteRcAsync(rcData, rcOptions);
-            Console.WriteLine("  RC file pushed");
-            pushed++;
+                byte[] rcData = await File.ReadAllBytesAsync(rcPath);
+                var rcOptions = new StorageUploadOptions
+                {
+                    Fingerprint = fingerprint,
+                    FragmentCount = fragmentCount,
+                    FragmentIndex = -1,
+                    VersionNumber = versionNumber,
+                    Backends = targetBackends,
+                    FileSize = rcData.Length,
+                    Note = "pushed via rdrf-push",
+                };
+                await orchestrator.WriteRcAsync(rcData, rcOptions);
+                done++;
+                progress?.Report(new RdrfProgressReport
+                {
+                    Stage = "Pushing", CurrentItem = done, TotalItems = totalItems
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"  RC error: {ex.Message}");
+                errors++;
+            }
         }
 
-        Console.WriteLine($"Done: {pushed} file(s) pushed, {errors} error(s)");
+        Console.WriteLine($"Done: {done} file(s) pushed, {errors} error(s)");
         return errors > 0 ? 1 : 0;
     }
 
     internal static List<string> LoadPlugins(string pluginsDir,
-        List<BackendConfigEntry> configs, StorageOrchestrator orchestrator)
+        List<BackendConfigEntry> configs, StorageOrchestrator orchestrator,
+        bool dryRun = false)
     {
         var factories = PluginLoader.Load(pluginsDir);
-        if (factories.Count == 0)
+        if (factories.Count == 0 && !dryRun)
             Console.Error.WriteLine("Warning: no plugins found in " + pluginsDir);
 
         var registered = new List<string>();
@@ -129,10 +214,14 @@ public static class PushService
                 continue;
             }
 
-            var backendConfig = cfg.Parameters
-                .ToDictionary(kv => kv.Key, kv => (object)kv.Value);
-            var backend = factory.Create(backendConfig);
-            orchestrator.RegisterBackend(cfg.Name, backend);
+            if (!dryRun)
+            {
+                var backendConfig = cfg.Parameters
+                    .ToDictionary(kv => kv.Key, kv => (object)kv.Value);
+                var backend = factory.Create(backendConfig);
+                orchestrator.RegisterBackend(cfg.Name, backend);
+            }
+
             registered.Add(cfg.Name);
             Console.WriteLine($"  Backend '{cfg.Name}' ({cfg.Type}) registered");
         }
