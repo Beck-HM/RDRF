@@ -16,7 +16,8 @@ public class PullCommand : Command
         var versionOpt = new Option<string?>("-v") { Description = "Version number or 'list'" };
         var passwordOpt = new Option<string?>("-password") { Description = "Password (INSECURE: visible in process list; omit for secure prompt)" };
         var dryRunOpt = new Option<bool>("--dry-run") { Description = "Preview what would be pulled without downloading" };
-        var concurrencyOpt = new Option<int>("--concurrency", "Number of parallel downloads (default: 1)");
+        var concurrencyOpt = new Option<int>("--concurrency");
+        concurrencyOpt.Description = "Number of parallel downloads (default: 1)";
 
         Add(indexArg);
         Add(versionOpt);

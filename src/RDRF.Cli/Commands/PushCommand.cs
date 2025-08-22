@@ -15,7 +15,8 @@ public class PushCommand : Command
         var indexArg = new Argument<FileInfo>("indexFile") { Description = "Path to the .indrdrf index file" };
         var passwordOpt = new Option<string?>("-password") { Description = "Password (INSECURE: visible in process list; omit for secure prompt)" };
         var dryRunOpt = new Option<bool>("--dry-run") { Description = "Preview what would be pushed without uploading" };
-        var concurrencyOpt = new Option<int>("--concurrency", "Number of parallel uploads (default: 1)");
+        var concurrencyOpt = new Option<int>("--concurrency");
+        concurrencyOpt.Description = "Number of parallel uploads (default: 1)";
 
         Add(indexArg);
         Add(passwordOpt);
