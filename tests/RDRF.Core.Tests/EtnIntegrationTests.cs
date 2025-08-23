@@ -1,8 +1,8 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -28,7 +28,7 @@ public class EtnIntegrationTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var storage = new LocalFileAdapter(storageDir);
+            var storage = new LocalDssaAdapter(storageDir);
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
 
             string fingerprint;
@@ -63,7 +63,7 @@ public class EtnIntegrationTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var storage = new LocalFileAdapter(storageDir);
+            var storage = new LocalDssaAdapter(storageDir);
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
             byte[] rcCodeClone = (byte[])rcCode.Clone();
 
@@ -118,7 +118,7 @@ public class EtnIntegrationTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var storage = new LocalFileAdapter(storageDir);
+            var storage = new LocalDssaAdapter(storageDir);
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
 
             string fingerprint;
@@ -160,7 +160,7 @@ public class EtnIntegrationTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var storage = new LocalFileAdapter(storageDir);
+            var storage = new LocalDssaAdapter(storageDir);
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
             byte[] rcCodeClone = (byte[])rcCode.Clone();
 
@@ -194,7 +194,7 @@ public class EtnIntegrationTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var storage = new LocalFileAdapter(storageDir);
+            var storage = new LocalDssaAdapter(storageDir);
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
 
             string fingerprint;
@@ -229,7 +229,7 @@ public class EtnIntegrationTests
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
-            var storage = new LocalFileAdapter(storageDir);
+            var storage = new LocalDssaAdapter(storageDir);
             byte[] originalRc = EncryptionLayer.GenerateRcCode(32);
 
             string fingerprint;

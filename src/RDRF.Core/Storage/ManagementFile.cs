@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 
-namespace RDRF.Storage;
+namespace RDRF.Dssa;
 
 public class ManagementFile
 {

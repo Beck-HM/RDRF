@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace RDRF.Storage;
+namespace RDRF.Dssa;
 
 public static class PluginLoader
 {

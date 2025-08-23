@@ -1,6 +1,6 @@
 using RDRF.Core.Encryption;
 
-namespace RDRF.Core.Storage;
+namespace RDRF.Core.Dssa;
 
 public static class FragmentFileHeader
 {

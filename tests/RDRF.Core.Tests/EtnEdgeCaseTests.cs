@@ -1,10 +1,10 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using RDRF.Core.Encryption;
 using RDRF.Core.ETN;
 using RDRF.Core.FragmentEngine;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -32,7 +32,7 @@ public class EtnEdgeCaseTests
         {
             var (indexBytes, fragments, rcBytes, fingerprint, rcCode) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
-            var storage = new LocalFileAdapter(storageDir);
+            var storage = new LocalDssaAdapter(storageDir);
             string rcPath = Path.Combine(storageDir, fingerprint + Constants.RcFileSuffix);
 
             // Delete the RC file
@@ -57,7 +57,7 @@ public class EtnEdgeCaseTests
             }
 
             string tmpMergePath = Path.Combine(storageDir, $"merge_{Guid.NewGuid():N}.tmp");
-            FragmentEngine.Frags.MergeFragents(decrypted, tmpMergePath);
+            FragmentEngine.Frags.MergeFragments(decrypted, tmpMergePath);
             byte[] restored = File.ReadAllBytes(tmpMergePath);
             try { File.Delete(tmpMergePath); } catch { }
             byte[] originalHash = SHA256.HashData(File.ReadAllBytes(EtnTestHelpers.TestFile));
@@ -82,7 +82,7 @@ public class EtnEdgeCaseTests
 
             // Strip FSS6 fields from index (simulate index without ETN metadata)
             var index = IndexManager.DeserializeIndex(indexBytes);
-            index.Fss6FragentBlockMaps = null;
+            index.Fss6FragmentBlockMaps = null;
             index.Fss6RcBlockMap = null;
             byte[] strippedIndex = IndexManager.SerializeIndex(index);
 

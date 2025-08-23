@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Encryption;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 
 namespace RDRF.App.Services;
 
@@ -24,7 +24,7 @@ public class EncryptService : IDisposable
         string? customName = null,
         IProgress<RdrfProgressReport>? progress = null)
     {
-        var storage = new LocalFileAdapter(outputPath);
+        var storage = new LocalDssaAdapter(outputPath);
         using var engine = new RDRFEngine(_rcCode, storage);
         return engine.BackupFile(
             filePath,

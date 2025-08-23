@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 
 namespace RDRF.Core;
 
@@ -8,10 +8,10 @@ public class RDRFEngine : IDisposable
 {
     private readonly BackupOrchestrator _backup;
     private readonly RestoreOrchestrator _restore;
-    private readonly StorageAdapter _storage;
+    private readonly DssaAdapter _storage;
     private readonly byte[] _rcCode;
 
-    public RDRFEngine(byte[] key, StorageAdapter storage, FSS.FSSEngine? fssEngine = null)
+    public RDRFEngine(byte[] key, DssaAdapter storage, FSS.FSSEngine? fssEngine = null)
     {
         if (key == null || key.Length == 0)
             throw new ArgumentException("Key cannot be null or empty", nameof(key));
@@ -21,7 +21,7 @@ public class RDRFEngine : IDisposable
         _restore = new RestoreOrchestrator(_rcCode, storage, fssEngine);
     }
 
-    public RDRFEngine(byte[] key, StorageAdapter storage, bool preDerived, byte[]? recoveryCode, FSS.FSSEngine? fssEngine = null)
+    public RDRFEngine(byte[] key, DssaAdapter storage, bool preDerived, byte[]? recoveryCode, FSS.FSSEngine? fssEngine = null)
     {
         if ((key == null || key.Length == 0) && (recoveryCode == null || recoveryCode.Length == 0))
             throw new ArgumentException("Key cannot be null or empty", nameof(key));

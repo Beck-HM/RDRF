@@ -1,7 +1,7 @@
 using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 using RDRF.Cli.Services;
 using System.CommandLine;
 using System.Security.Cryptography;
@@ -52,7 +52,7 @@ public class RestoreCommand : Command
             byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
 
             int exitCode;
-            using (var engine = new RDRFEngine(password, new LocalFileAdapter(storageDir)))
+            using (var engine = new RDRFEngine(password, new LocalDssaAdapter(storageDir)))
             {
                 exitCode = await RunRestore(engine, password, encryptedIndex, output.FullName, targetVersion);
             }

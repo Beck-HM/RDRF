@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using RDRF.Core.Encryption;
@@ -9,7 +9,7 @@ using RDRF.Core.FSA;
 using RDRF.Core.Index;
 using RDRF.Core.Integrity;
 using RDRF.Core.Metadata;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 
 namespace RDRF.Core;
 
@@ -18,14 +18,14 @@ public class RestoreOrchestrator : IDisposable
     private readonly byte[] _rcCode;
     private byte[] _aesKey;
     private readonly bool _preDerived;
-    private readonly StorageAdapter _storage;
+    private readonly DssaAdapter _storage;
     private readonly FSSEngine _fss;
     private readonly MetadataManager _metadata;
     private readonly RecoveryExecutor _recoveryExecutor;
 
     public RestoreOrchestrator(
         byte[] key,
-        StorageAdapter storage,
+        DssaAdapter storage,
         FSSEngine? fssEngine = null,
         bool preDerived = false,
         byte[]? recoveryCode = null)
@@ -50,7 +50,7 @@ public class RestoreOrchestrator : IDisposable
         }
     }
 
-    // 鈹€鈹€ Public Restore Methods 鈹€鈹€
+    // ── Public Restore Methods ──
 
     public bool RestoreFile(
         string fileFingerprint,
@@ -72,7 +72,7 @@ public class RestoreOrchestrator : IDisposable
     public bool RestoreFile(string fileFingerprint, FileInfo outputPath, bool allowFssRecovery = true, string? filePrefix = null, IProgress<RdrfProgressReport>? progress = null)
         => RestoreFile(fileFingerprint, outputPath.FullName, allowFssRecovery, filePrefix, progress);
 
-    // 鈹€鈹€ Restore From Fragments 鈹€鈹€
+    // ── Restore From Fragments ──
 
     public bool RestoreFileFromFragments(
         string filePrefix,
@@ -111,7 +111,7 @@ public class RestoreOrchestrator : IDisposable
         return RestoreCore(idx, filePrefix, outputPath, allowFssRecovery, progress);
     }
 
-    // 鈹€鈹€ Async Restore 鈹€鈹€
+    // ── Async Restore ──
 
     public async Task<bool> RestoreFileAsync(
         string fileFingerprint,
@@ -173,7 +173,7 @@ public class RestoreOrchestrator : IDisposable
         return await RestoreCoreAsync(idx, filePrefix, outputPath, allowFssRecovery, progress, cancellationToken).ConfigureAwait(false);
     }
 
-    // 鈹€鈹€ Restore From Index Data (pre-loaded encrypted index) 鈹€鈹€
+    // ── Restore From Index Data (pre-loaded encrypted index) ──
 
     public bool RestoreFileFromIndexData(
         byte[] encryptedIndex,
@@ -187,7 +187,7 @@ public class RestoreOrchestrator : IDisposable
         return RestoreCore(index, filePrefix, outputPath, allowFssRecovery, progress);
     }
 
-    // 鈹€鈹€ Synchronous Core 鈹€鈹€
+    // ── Synchronous Core ──
 
     private bool RestoreCore(
         RdrfIndex index,
@@ -200,7 +200,7 @@ public class RestoreOrchestrator : IDisposable
             .GetAwaiter().GetResult();
     }
 
-    // 鈹€鈹€ Async Core 鈹€鈹€
+    // ── Async Core ──
 
     private async Task<bool> RestoreCoreAsync(
         RdrfIndex index,
@@ -311,7 +311,7 @@ public class RestoreOrchestrator : IDisposable
         return false;
     }
 
-    // 鈹€鈹€ Download and Decrypt Fragments 鈹€鈹€
+    // ── Download and Decrypt Fragments ──
     //
     // This is the fallback path (path B) used when fragments are missing or
     // corrupted. All fragments are loaded into memory simultaneously to allow
@@ -372,7 +372,7 @@ public class RestoreOrchestrator : IDisposable
         return decryptedFragments;
     }
 
-    // 鈹€鈹€ ETN Cross-Validate 鈹€鈹€
+    // ── ETN Cross-Validate ──
 
     private async Task<bool> RunEtnCrossValidateAsync(
         RdrfIndex index, Dictionary<int, byte[]> decryptedFragments,
@@ -604,7 +604,7 @@ public class RestoreOrchestrator : IDisposable
         return rawEtn;
     }
 
-    // 鈹€鈹€ Strip FSS Encoding 鈹€鈹€
+    // ── Strip FSS Encoding ──
 
     private List<byte[]> StripFssEncoding(
         Dictionary<int, byte[]> decryptedFragments,
@@ -632,7 +632,7 @@ public class RestoreOrchestrator : IDisposable
         }
     }
 
-    // 鈹€鈹€ Streaming Restore 鈹€鈹€
+    // ── Streaming Restore ──
 
     private async Task<bool> TryStreamingRestoreCoreAsync(
         RdrfIndex index, string filePrefix, string outputPath,
@@ -685,7 +685,7 @@ public class RestoreOrchestrator : IDisposable
         }
     }
 
-    // 鈹€鈹€ Dispose 鈹€鈹€
+    // ── Dispose ──
 
     public void Dispose()
     {

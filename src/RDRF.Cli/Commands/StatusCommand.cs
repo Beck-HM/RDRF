@@ -1,6 +1,6 @@
 using RDRF.Core;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 using RDRF.Core.Encryption;
 using RDRF.Core.Integrity;
 using RDRF.Cli.Services;
@@ -55,7 +55,7 @@ public class StatusCommand : Command
                 }
 
                 string storageDir = indexFile.DirectoryName!;
-                var storage = new LocalFileAdapter(storageDir);
+                var storage = new LocalDssaAdapter(storageDir);
                 string prefix = index.CustomName ?? index.FileFingerprint;
                 string lookupKey = index.CustomName ?? index.FileFingerprint;
 

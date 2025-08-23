@@ -4,7 +4,7 @@ using RDRF.Core.Encryption;
 using RDRF.Core.FragmentEngine;
 using RDRF.Core.Index;
 
-namespace RDRF.Storage;
+namespace RDRF.Dssa;
 
 public static class PushService
 {

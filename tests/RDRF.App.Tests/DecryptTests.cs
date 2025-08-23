@@ -1,8 +1,8 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 using Xunit;
 
 namespace RDRF.App.Tests;
@@ -18,7 +18,7 @@ public class DecryptTests
         string input = dir.CreateTextFile(originalName, "Load index test content.");
         string fp = Fixtures.BackupHelpers.Backup(password, input, dir.Path, "FSS1");
 
-        var storage = new LocalFileAdapter(dir.Path);
+        var storage = new LocalDssaAdapter(dir.Path);
         byte[] encIdx = storage.ReadIndex(fp);
         (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encIdx, password);
         var index = IndexManager.DeserializeIndex(cbor);
@@ -37,7 +37,7 @@ public class DecryptTests
         string input = dir.CreateFile("test.bin", 1_000_000);
         string fp = Fixtures.BackupHelpers.Backup(password, input, dir.Path, "FSS3");
 
-        var storage = new LocalFileAdapter(dir.Path);
+        var storage = new LocalDssaAdapter(dir.Path);
         byte[] encIdx = storage.ReadIndex(fp);
         (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encIdx, password);
         var index = IndexManager.DeserializeIndex(cbor);
@@ -61,7 +61,7 @@ public class DecryptTests
         using var dir = new Fixtures.TempDir();
         byte[] password = RandomNumberGenerator.GetBytes(32);
         string input = dir.CreateFile("test.bin", 500_000);
-        var storage = new LocalFileAdapter(dir.Path);
+        var storage = new LocalDssaAdapter(dir.Path);
 
         using var engine = new RDRFEngine(password, storage);
         string fp = engine.BackupFile(input, strategy);
@@ -89,7 +89,7 @@ public class DecryptTests
         string input = dir.CreateTextFile("test.txt", "Wrong password test.");
         string fp = Fixtures.BackupHelpers.Backup(password, input, dir.Path, "FSS1");
 
-        var storage = new LocalFileAdapter(dir.Path);
+        var storage = new LocalDssaAdapter(dir.Path);
         byte[] encIdx = storage.ReadIndex(fp);
         Assert.ThrowsAny<CryptographicException>(() =>
             EncryptionLayer.DecryptIndexWithAutoDetect(encIdx, wrongPwd));
@@ -104,7 +104,7 @@ public class DecryptTests
         string fp = Fixtures.BackupHelpers.Backup(password, input, dir.Path, "FSS3");
 
         // Delete one fragment
-        var storage = new LocalFileAdapter(dir.Path);
+        var storage = new LocalDssaAdapter(dir.Path);
         byte[] encIdx = storage.ReadIndex(fp);
         (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encIdx, password);
         var index = IndexManager.DeserializeIndex(cbor);
@@ -129,7 +129,7 @@ public class DecryptTests
         string input = dir.CreateTextFile("test.txt", "Corrupted index test.");
         string fp = Fixtures.BackupHelpers.Backup(password, input, dir.Path, "FSS1");
 
-        var storage = new LocalFileAdapter(dir.Path);
+        var storage = new LocalDssaAdapter(dir.Path);
         byte[] encIdx = storage.ReadIndex(fp);
         // Corrupt the salt prefix (first 32 bytes) so PBKDF2 key derivation changes
         encIdx[15] ^= 0xFF;

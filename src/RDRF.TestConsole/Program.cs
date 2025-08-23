@@ -3,7 +3,7 @@ using System.IO;
 using System.Text;
 using System.Security.Cryptography;
 using RDRF.Core;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 
 namespace RDRF.TestConsole;
 
@@ -48,7 +48,7 @@ class Program
                 foreach (var f in Directory.GetFiles(backupDir))
                     File.Delete(f);
 
-                var storage = new LocalFileAdapter(backupDir);
+                var storage = new LocalDssaAdapter(backupDir);
                 var engine = new RDRFEngine(key, storage);
 
                 Console.WriteLine("  Backing up...");

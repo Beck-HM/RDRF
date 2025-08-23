@@ -1,7 +1,7 @@
 using System.Formats.Cbor;
 using RDRF.Core.FSS;
 
-namespace RDRF.Core.Storage;
+namespace RDRF.Core.Dssa;
 
 public class RcFile
 {

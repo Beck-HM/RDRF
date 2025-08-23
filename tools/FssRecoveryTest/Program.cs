@@ -4,7 +4,7 @@ using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 
 string testFile = args.Length > 0 && File.Exists(args[0])
     ? args[0]
@@ -33,7 +33,7 @@ var summaryRows = new List<SummaryRow>();
 
 Console.ForegroundColor = ConsoleColor.Cyan;
 Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
-Console.WriteLine("�?        FSS Recovery Test �? All Strategies                �?);
+Console.WriteLine("�?        FSS Recovery Test �? All Strategies                �?);
 Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
 Console.ResetColor();
 Console.WriteLine($"  Test file: {testFile} ({fileSize:N0} bytes)");
@@ -49,7 +49,7 @@ foreach (string strategy in strategies)
 
     var testRoot = Path.Combine(resultDir, strategy);
     Directory.CreateDirectory(testRoot);
-    var storage = new LocalFileAdapter(testRoot);
+    var storage = new LocalDssaAdapter(testRoot);
     byte[] password = EncryptionLayer.GenerateRcCode(32);
     byte[] rcMaster = (byte[])password.Clone();
     byte[] rcClone() => (byte[])rcMaster.Clone();
@@ -199,7 +199,7 @@ foreach (string strategy in strategies)
                     }
                 }
 
-                var ts = new LocalFileAdapter(td);
+                var ts = new LocalDssaAdapter(td);
                 string outPath = Path.Combine(td, "restored.bin");
                 sw.Restart();
                 bool r = false;
@@ -247,14 +247,14 @@ foreach (string strategy in strategies)
             for (int i = 0; i < totalFrags; i++)
                 if (!toDelete.Contains(i))
                     File.WriteAllBytes(Path.Combine(trialDir, $"{prefix}_{i}.rdrf"), allFragBytes[i]);
-            // NOTE: deleted fragments are NOT written at all �?file doesn't exist
+            // NOTE: deleted fragments are NOT written at all �?file doesn't exist
 
             // Also copy the .rdrc file if present (needed for ETN cross-validation)
             string rcSrcP = Path.Combine(testRoot, $"{prefix}.rdrc");
             if (File.Exists(rcSrcP))
                 File.WriteAllBytes(Path.Combine(trialDir, $"{prefix}.rdrc"), File.ReadAllBytes(rcSrcP));
 
-            var trialStorage = new LocalFileAdapter(trialDir);
+            var trialStorage = new LocalDssaAdapter(trialDir);
             string trialOut = Path.Combine(trialDir, "restored.bin");
 
             sw.Restart();
@@ -287,7 +287,7 @@ foreach (string strategy in strategies)
         foreach (int d in toDel)
             File.Delete(Path.Combine(td, $"{prefix}_{d}.rdrf"));
 
-        var ts = new LocalFileAdapter(td);
+        var ts = new LocalDssaAdapter(td);
         string outPath = Path.Combine(td, "restored.bin");
         sw.Restart();
         bool r = false;
@@ -309,7 +309,7 @@ foreach (string strategy in strategies)
     double greedyStrength = (double)greedyKept.Count / totalFrags * 100;
     Console.WriteLine($"  Greedy: max deleted {greedyKept.Count}/{totalFrags} = {greedyStrength:F1}%");
 
-    // ── Custom tests (phase 2�?: strategy-specific targeted patterns ──
+    // ── Custom tests (phase 2�?: strategy-specific targeted patterns ──
     var customResults = new List<(string name, double lossPct, bool ok)>();
 
     if (strategy is "FSS1" or "FSS2" or "FSS2R")
@@ -321,7 +321,7 @@ foreach (string strategy in strategies)
         int eDel = 0;
         for (int i = 0; i < totalFrags; i += 2)
         { File.Delete(Path.Combine(eDir, $"{prefix}_{i}.rdrf")); eDel++; }
-        var eTs = new LocalFileAdapter(eDir);
+        var eTs = new LocalDssaAdapter(eDir);
         sw.Restart();
         bool eR;
         using (var ro = new RestoreOrchestrator(rcClone(), eTs))
@@ -337,7 +337,7 @@ foreach (string strategy in strategies)
         int oDel = 0;
         for (int i = 1; i < totalFrags; i += 2)
         { File.Delete(Path.Combine(oDir, $"{prefix}_{i}.rdrf")); oDel++; }
-        var oTs = new LocalFileAdapter(oDir);
+        var oTs = new LocalDssaAdapter(oDir);
         sw.Restart();
         bool oR;
         using (var ro = new RestoreOrchestrator(rcClone(), oTs))
@@ -353,7 +353,7 @@ foreach (string strategy in strategies)
         var sDir = Path.Combine(testRoot, "custom_one_survivor");
         Directory.CreateDirectory(sDir);
         WriteTrialDir(sDir, new HashSet<int>(Enumerable.Range(1, totalFrags - 1)));
-        var sTs = new LocalFileAdapter(sDir);
+        var sTs = new LocalDssaAdapter(sDir);
         sw.Restart();
         bool sR;
         using (var ro = new RestoreOrchestrator(rcClone(), sTs))
@@ -364,7 +364,7 @@ foreach (string strategy in strategies)
         customResults.Add(("keep_one", (double)sDel / totalFrags * 100, sR && sSha));
     }
 
-    // FSS6.1: block corruption test �?corrupt encrypted bytes directly
+    // FSS6.1: block corruption test �?corrupt encrypted bytes directly
     if (strategy == "FSS6.1")
     {
         var bcDir = Path.Combine(testRoot, "custom_block_corrupt");
@@ -391,7 +391,7 @@ foreach (string strategy in strategies)
         corrupt[rawOff + 1] ^= 0xFF;
         File.WriteAllBytes(Path.Combine(bcDir, $"{prefix}_0.rdrf"), corrupt);
 
-        var bcTs = new LocalFileAdapter(bcDir);
+        var bcTs = new LocalDssaAdapter(bcDir);
         sw.Restart();
         bool bcR;
         using (var r = new RestoreOrchestrator(rcClone(), bcTs))
@@ -412,7 +412,7 @@ foreach (string strategy in strategies)
         Directory.CreateDirectory(td1Dir);
         WriteTrialDir(td1Dir, null);
         File.Delete(Path.Combine(td1Dir, $"{prefix}_0.rdrf"));
-        var ts1 = new LocalFileAdapter(td1Dir);
+        var ts1 = new LocalDssaAdapter(td1Dir);
         sw.Restart();
         bool r1;
         using (var r = new RestoreOrchestrator(rcClone(), ts1))
@@ -427,7 +427,7 @@ foreach (string strategy in strategies)
         WriteTrialDir(td2Dir, null);
         File.Delete(Path.Combine(td2Dir, $"{prefix}_0.rdrf"));
         File.Delete(Path.Combine(td2Dir, $"{prefix}_1.rdrf"));
-        var ts2 = new LocalFileAdapter(td2Dir);
+        var ts2 = new LocalDssaAdapter(td2Dir);
         bool r2;
         using (var r = new RestoreOrchestrator(rcClone(), ts2))
             r2 = r.RestoreFileAsync(fingerprint, Path.Combine(td2Dir, "restored.bin")).GetAwaiter().GetResult();
@@ -443,7 +443,7 @@ foreach (string strategy in strategies)
         WriteTrialDir(tDir, null);
         File.Delete(Path.Combine(tDir, $"{prefix}_0.rdrf"));
         File.Delete(Path.Combine(tDir, $"{prefix}_1.rdrf"));
-        var ts = new LocalFileAdapter(tDir);
+        var ts = new LocalDssaAdapter(tDir);
         bool ro;
         using (var r = new RestoreOrchestrator(rcClone(), ts))
             ro = r.RestoreFileAsync(fingerprint, Path.Combine(tDir, "restored.bin")).GetAwaiter().GetResult();
@@ -464,7 +464,7 @@ foreach (string strategy in strategies)
             var f = Path.Combine(tDir, $"{prefix}_{i}.rdrf");
             if (File.Exists(f)) { File.Delete(f); deleted++; }
         }
-        var ts = new LocalFileAdapter(tDir);
+        var ts = new LocalDssaAdapter(tDir);
         bool ro;
         sw.Restart();
         using (var r = new RestoreOrchestrator(rcClone(), ts))
@@ -497,7 +497,7 @@ foreach (string strategy in strategies)
         toKill.Add(targetFrag);
         foreach (int fi in toKill)
             File.Delete(Path.Combine(tDir, $"{prefix}_{fi}.rdrf"));
-        var ts = new LocalFileAdapter(tDir);
+        var ts = new LocalDssaAdapter(tDir);
         bool ro;
         sw.Restart();
         using (var r = new RestoreOrchestrator(rcClone(), ts))
@@ -514,7 +514,7 @@ foreach (string strategy in strategies)
         Directory.CreateDirectory(tDir);
         WriteTrialDir(tDir, null);
         File.Delete(Path.Combine(tDir, $"{prefix}_0.rdrf"));
-        var ts = new LocalFileAdapter(tDir);
+        var ts = new LocalDssaAdapter(tDir);
         bool ro;
         sw.Restart();
         using (var r = new RestoreOrchestrator(rcClone(), ts))
@@ -534,7 +534,7 @@ foreach (string strategy in strategies)
             maxFailedPct = inc.lossPct;
     }
 
-    // FSS3 starts failing at 2 lost, which is 2/21 �?9.5%
+    // FSS3 starts failing at 2 lost, which is 2/21 �?9.5%
     double theoreticalMax = strategy switch
     {
         "FSS1" => 50.0,
@@ -569,10 +569,10 @@ foreach (string strategy in strategies)
 
 // ── Summary Table ──
 Console.ForegroundColor = ConsoleColor.White;
-Console.WriteLine("┌──────────┬──────┬──────────┬──────────────┬──────────────┬────────────┬──────────┬──────────────────────�?);
-Console.WriteLine("�?Strategy �?Frags�?Baseline �?Theoretical  �?Max Survived �?Min Failed �? Greedy  �?Notes                �?);
-Console.WriteLine("�?         �?     �?         �?Max Loss %   �?Loss %       �?Loss %     �?Strength �?                     �?);
-Console.WriteLine("├──────────┼──────┼──────────┼──────────────┼──────────────┼────────────┼──────────┼──────────────────────�?);
+Console.WriteLine("┌──────────┬──────┬──────────┬──────────────┬──────────────┬────────────┬──────────┬──────────────────────�?);
+Console.WriteLine("�?Strategy �?Frags�?Baseline �?Theoretical  �?Max Survived �?Min Failed �? Greedy  �?Notes                �?);
+Console.WriteLine("�?         �?     �?         �?Max Loss %   �?Loss %       �?Loss %     �?Strength �?                     �?);
+Console.WriteLine("├──────────┼──────┼──────────┼──────────────┼──────────────┼────────────┼──────────┼──────────────────────�?);
 Console.ResetColor();
 
 foreach (var row in summaryRows)
@@ -599,11 +599,11 @@ foreach (var row in summaryRows)
     };
 
     Console.WriteLine(
-        $"�?{row.Strategy,-7} �?{row.TotalFrags,4} �?{baselineStr,-8} �?{theoStr,-12} �?{row.MaxSurvived,11:F1}% �?{row.MinFailed,10:F1}% �?{greedyStr,8} �?{note,-20} �?);
+        $"�?{row.Strategy,-7} �?{row.TotalFrags,4} �?{baselineStr,-8} �?{theoStr,-12} �?{row.MaxSurvived,11:F1}% �?{row.MinFailed,10:F1}% �?{greedyStr,8} �?{note,-20} �?);
 }
 
 Console.ForegroundColor = ConsoleColor.White;
-Console.WriteLine("└──────────┴──────┴──────────┴──────────────┴──────────────┴────────────┴──────────┴──────────────────────�?);
+Console.WriteLine("└──────────┴──────┴──────────┴──────────────┴──────────────┴────────────┴──────────┴──────────────────────�?);
 Console.ResetColor();
 
 // ── Write CSV ──
@@ -623,8 +623,8 @@ catch (Exception ex) { Console.Error.WriteLine($"  Cleanup failed: {ex.Message}"
 
 return 0;
 
-// ══════════════════════════════════════════════�?//  Helpers
-// ══════════════════════════════════════════════�?
+// ══════════════════════════════════════════════�?//  Helpers
+// ══════════════════════════════════════════════�?
 static bool VerifySha(string filePath, byte[] expectedHash)
 {
     try

@@ -1,6 +1,6 @@
 using RDRF.Core;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
 using RDRF.Cli.Services;
@@ -56,12 +56,12 @@ public class VerifyCommand : Command
 
                 if (index.Fss6FragmentBlockMaps == null && index.Fss6RcBlockMap == null)
                 {
-                    Console.Error.WriteLine("Error: backup does not contain FSS6/ETN data ï¿½?verification requires FSS6");
+                    Console.Error.WriteLine("Error: backup does not contain FSS6/ETN data ï¿?verification requires FSS6");
                     return 1;
                 }
 
                 string storageDir = indexFile.DirectoryName!;
-                var storage = new LocalFileAdapter(storageDir);
+                var storage = new LocalDssaAdapter(storageDir);
                 string prefix = index.CustomName ?? index.FileFingerprint;
 
             byte[] encryptedRc = storage.ReadRc(prefix);

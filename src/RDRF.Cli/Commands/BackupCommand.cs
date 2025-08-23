@@ -1,5 +1,5 @@
 using RDRF.Core;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 using RDRF.Core.Versioning;
 using RDRF.Cli.Services;
 using Spectre.Console;
@@ -118,7 +118,7 @@ public class BackupCommand : Command
                 return 0;
             }
 
-            var storage = new LocalFileAdapter(storagePath);
+            var storage = new LocalDssaAdapter(storagePath);
             using (var engine = new RDRFEngine(password, storage))
             {
                 int count = 0;

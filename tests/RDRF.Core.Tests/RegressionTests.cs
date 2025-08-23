@@ -1,8 +1,8 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using RDRF.Core;
 using RDRF.Core.Encryption;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using RDRF.Core.FragmentEngine;
@@ -92,7 +92,7 @@ public class RegressionTests
         string tempDir = Path.Combine(Path.GetTempPath(), $"RDRF_StreamTest_{Guid.NewGuid():N}");
         try
         {
-            var adapter = new LocalFileAdapter(tempDir);
+            var adapter = new LocalDssaAdapter(tempDir);
             byte[] testData = Encoding.UTF8.GetBytes("Stream read/write test data for RDRF fragment storage.");
 
             // Write via stream
@@ -126,7 +126,7 @@ public class RegressionTests
     [Fact]
     public void StorageAdapter_StreamReadWrite_ShouldValidateFilename()
     {
-        var adapter = new LocalFileAdapter(Path.GetTempPath());
+        var adapter = new LocalDssaAdapter(Path.GetTempPath());
         Assert.Throws<ArgumentException>(() => adapter.OpenReadFragment("../evil.rdrf"));
         Assert.Throws<ArgumentException>(() => adapter.OpenWriteFragment("sub\\evil.rdrf"));
         Assert.Throws<ArgumentException>(() => adapter.OpenReadFragment("sub/evil.rdrf"));
@@ -145,7 +145,7 @@ public class RegressionTests
 
         try
         {
-            RDRF.Core.FragmentEngine.Frags.MergeFragents(fragments, outputPath);
+            RDRF.Core.FragmentEngine.Frags.MergeFragments(fragments, outputPath);
 
             byte[] expected = Encoding.UTF8.GetBytes("Fragment 0 data Fragment 1 data Fragment 2 data");
             byte[] actual = File.ReadAllBytes(outputPath);
@@ -175,7 +175,7 @@ public class RegressionTests
             File.WriteAllText(testFile, testContent);
 
             // Backup with preDerived=true
-        var storage = new LocalFileAdapter(storageDir);
+        var storage = new LocalDssaAdapter(storageDir);
             using var engine = new RDRFEngine(preDerivedKey, storage, preDerived: true, recoveryCode: rcCode);
             string fingerprint = engine.BackupFile(testFile, "FSS1");
             Assert.False(string.IsNullOrEmpty(fingerprint));
@@ -211,7 +211,7 @@ public class RegressionTests
         {
             File.WriteAllText(testFile, testContent);
 
-            var storage = new LocalFileAdapter(storageDir);
+            var storage = new LocalDssaAdapter(storageDir);
             using var enginePre = new RDRFEngine(preDerivedKey, storage, preDerived: true, recoveryCode: rcCode);
             string fingerprint = enginePre.BackupFile(testFile, "FSS1");
 
@@ -242,7 +242,7 @@ public class RegressionTests
             File.WriteAllText(testFile, testContent);
 
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
-            var storage = new LocalFileAdapter(storageDir);
+            var storage = new LocalDssaAdapter(storageDir);
             using var engine = new RDRFEngine(rcCode, storage);
             string fingerprint = engine.BackupFile(testFile, "FSS1");
 
@@ -279,7 +279,7 @@ public class RegressionTests
             File.WriteAllText(testFile, testContent);
 
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
-            var storage = new LocalFileAdapter(storageDir);
+            var storage = new LocalDssaAdapter(storageDir);
             using var engine = new RDRFEngine(rcCode, storage);
             string fingerprint = engine.BackupFile(testFile, "FSS1");
 
@@ -352,7 +352,7 @@ public class RegressionTests
         {
             File.WriteAllText(testFile, testContent);
 
-            var storage = new LocalFileAdapter(storageDir);
+            var storage = new LocalDssaAdapter(storageDir);
             using var engine = new RDRFEngine(rcCode, storage);
             string fingerprint = engine.BackupFile(testFile, "FSS1");
 
@@ -366,7 +366,7 @@ public class RegressionTests
 
             for (int i = 0; i < index.FragmentCount; i++)
             {
-                string fragName = RDRF.Core.FragmentEngine.Frags.FragentFilename(fingerprint, i);
+                string fragName = RDRF.Core.FragmentEngine.Frags.FragmentFilename(fingerprint, i);
                 if (storage.FragmentExists(fragName))
                 {
                     byte[] encrypted = storage.ReadFragment(fragName);
@@ -438,13 +438,13 @@ public class RegressionTests
             fragmentNonces: new List<string> { "" },
             originalHash: "orig_hash",
             fssStrategy: "FSS1",
-            originalFragentSizes: new List<int> { 100 },
+            originalFragmentSizes: new List<int> { 100 },
             originalFragmentCount: 1
         );
         // Do NOT set Salt - simulating old backup
 
         // Create orchestrator and call the internal salt derivation
-        var storage = new LocalFileAdapter(Path.GetTempPath());
+        var storage = new LocalDssaAdapter(Path.GetTempPath());
         using var orchestrator = new RestoreOrchestrator(rcCode, storage);
 
         // The salt field is null - ApplyFragmentKeyFromIndex should fall back to _aesKey
@@ -489,7 +489,7 @@ public class RegressionTests
         Assert.Equal(key1, key2);
     }
 
-    // 鈹€鈹€ CBOR round-trip tests 鈹€鈹€
+    // ── CBOR round-trip tests ──
 
     [Fact]
     public void RcFile_ToCborBytes_FromCbor_RoundTrip()
@@ -499,7 +499,7 @@ public class RegressionTests
             Version = 2,
             FileFingerprint = "test-fp-abc123",
             IndexBlockMap = ["block0", "block1", "block2"],
-            FragentBlockMaps =
+            FragmentBlockMaps =
             [
                 ["f0b0", "f0b1"],
                 ["f1b0", "f1b1", "f1b2"],
@@ -516,9 +516,9 @@ public class RegressionTests
         Assert.Equal(original.IndexBlockMap, restored.IndexBlockMap);
         Assert.Equal(original.CreatedAt, restored.CreatedAt);
 
-        Assert.Equal(original.FragentBlockMaps.Count, restored.FragentBlockMaps.Count);
-        for (int i = 0; i < original.FragentBlockMaps.Count; i++)
-            Assert.Equal(original.FragentBlockMaps[i], restored.FragentBlockMaps[i]);
+        Assert.Equal(original.FragmentBlockMaps.Count, restored.FragmentBlockMaps.Count);
+        for (int i = 0; i < original.FragmentBlockMaps.Count; i++)
+            Assert.Equal(original.FragmentBlockMaps[i], restored.FragmentBlockMaps[i]);
     }
 
     [Fact]
@@ -532,7 +532,7 @@ public class RegressionTests
             fragmentNonces: ["n0", "n1", "n2", "n3"],
             originalHash: "sha256-original-hash",
             fssStrategy: "FSS6",
-            originalFragentSizes: [250_000, 250_000, 250_000, 249_888],
+            originalFragmentSizes: [250_000, 250_000, 250_000, 249_888],
             originalFragmentCount: 4,
             fssParams: new Dictionary<string, object>
             {
@@ -543,13 +543,13 @@ public class RegressionTests
         original.Salt = "abcd1234ef567890";
         original.UpdatedAt = 1700000001;
         original.Fss6RcBlockMap = ["rc_b0", "rc_b1"];
-        original.Fss6FragentBlockMaps =
+        original.Fss6FragmentBlockMaps =
         [
             ["f0b0", "f0b1"],
             ["f1b0"],
         ];
-        original.Fragents![0].Filename = "special.bin";
-        original.Fragents![0].Size = 123;
+        original.Fragments![0].Filename = "special.bin";
+        original.Fragments![0].Size = 123;
 
         byte[] cbor = IndexManager.SerializeIndex(original);
         Assert.NotEmpty(cbor);
@@ -562,8 +562,8 @@ public class RegressionTests
         Assert.Equal(original.FileSize, restored.FileSize);
         Assert.Equal(original.FragmentCount, restored.FragmentCount);
         Assert.Equal(original.OriginalFragmentCount, restored.OriginalFragmentCount);
-        Assert.Equal(original.OriginalFragentSizes, restored.OriginalFragentSizes);
-        Assert.Equal(original.FragentHashes, restored.FragentHashes);
+        Assert.Equal(original.OriginalFragmentSizes, restored.OriginalFragmentSizes);
+        Assert.Equal(original.FragmentHashes, restored.FragmentHashes);
         Assert.Equal(original.OriginalHash, restored.OriginalHash);
         Assert.Equal(original.FssStrategy, restored.FssStrategy);
         Assert.Equal(original.Salt, restored.Salt);
@@ -571,19 +571,19 @@ public class RegressionTests
         Assert.Equal(original.UpdatedAt, restored.UpdatedAt);
         Assert.Equal(original.Fss6RcBlockMap, restored.Fss6RcBlockMap);
 
-        Assert.Equal(original.Fss6FragentBlockMaps!.Count, restored.Fss6FragentBlockMaps!.Count);
-        for (int i = 0; i < original.Fss6FragentBlockMaps.Count; i++)
-            Assert.Equal(original.Fss6FragentBlockMaps[i], restored.Fss6FragentBlockMaps[i]);
+        Assert.Equal(original.Fss6FragmentBlockMaps!.Count, restored.Fss6FragmentBlockMaps!.Count);
+        for (int i = 0; i < original.Fss6FragmentBlockMaps.Count; i++)
+            Assert.Equal(original.Fss6FragmentBlockMaps[i], restored.Fss6FragmentBlockMaps[i]);
 
-        Assert.NotNull(restored.Fragents);
-        Assert.Equal(original.Fragents!.Count, restored.Fragents.Count);
-        for (int i = 0; i < original.Fragents.Count; i++)
+        Assert.NotNull(restored.Fragments);
+        Assert.Equal(original.Fragments!.Count, restored.Fragments.Count);
+        for (int i = 0; i < original.Fragments.Count; i++)
         {
-            Assert.Equal(original.Fragents[i].Index, restored.Fragents[i].Index);
-            Assert.Equal(original.Fragents[i].Size, restored.Fragents[i].Size);
-            Assert.Equal(original.Fragents[i].Hash, restored.Fragents[i].Hash);
-            Assert.Equal(original.Fragents[i].Nonce, restored.Fragents[i].Nonce);
-            Assert.Equal(original.Fragents[i].Filename, restored.Fragents[i].Filename);
+            Assert.Equal(original.Fragments[i].Index, restored.Fragments[i].Index);
+            Assert.Equal(original.Fragments[i].Size, restored.Fragments[i].Size);
+            Assert.Equal(original.Fragments[i].Hash, restored.Fragments[i].Hash);
+            Assert.Equal(original.Fragments[i].Nonce, restored.Fragments[i].Nonce);
+            Assert.Equal(original.Fragments[i].Filename, restored.Fragments[i].Filename);
         }
 
         // FssParams round-trip

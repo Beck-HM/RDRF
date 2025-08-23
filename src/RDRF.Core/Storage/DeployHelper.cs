@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace RDRF.Storage;
+namespace RDRF.Dssa;
 
 public static class DeployHelper
 {
