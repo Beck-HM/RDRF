@@ -2,7 +2,7 @@ using RDRF.Core;
 using RDRF.Core.Diff;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 using RDRF.Core.Versioning;
 using RDRF.Cli.Services;
 using Spectre.Console;
@@ -51,7 +51,7 @@ public class NextCommand : Command
             }
 
             string storagePath = storageDir?.FullName ?? Path.Combine(AppContext.BaseDirectory, "backup");
-            var storage = new LocalFileAdapter(storagePath);
+            var storage = new LocalDssaAdapter(storagePath);
 
             var dir = new DirectoryInfo(storagePath);
             if (!dir.Exists)
@@ -86,7 +86,7 @@ public class NextCommand : Command
             var diffResult = new RDRF.Core.Diff.DiffEngine().ComputeDiff(oldBytes, newBytes, oldIndex.OriginalName);
 
             if (diffResult.IsBinary)
-                AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} ï¿½?{newBytes.Length} bytes");
+                AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} ï¿?{newBytes.Length} bytes");
             else
                 AnsiConsole.MarkupLine($"[yellow]Changes:[/] +{diffResult.AddedLines} -{diffResult.RemovedLines} lines (+{diffResult.AddedBytes} bytes)");
 
@@ -116,7 +116,7 @@ public class NextCommand : Command
         });
     }
 
-    private static byte[] ReadDecryptedOriginal(StorageAdapter storage, RdrfIndex index, byte[] aesKey)
+    private static byte[] ReadDecryptedOriginal(DssaAdapter storage, RdrfIndex index, byte[] aesKey)
     {
         string prefix = index.CustomName ?? index.FileFingerprint;
         var rawFragments = new List<byte[]>();

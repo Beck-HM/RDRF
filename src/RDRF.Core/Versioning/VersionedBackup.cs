@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using RDRF.Core.Diff;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 
 namespace RDRF.Core.Versioning;
 
@@ -20,7 +20,7 @@ public static class VersionedBackup
         IProgress<RdrfProgressReport>? progress = null,
         CancellationToken ct = default)
     {
-        var storage = new LocalFileAdapter(storageDir);
+        var storage = new LocalDssaAdapter(storageDir);
         string? existingFingerprint = FindExistingIndex(storage);
 
         if (existingFingerprint == null)
@@ -29,9 +29,9 @@ public static class VersionedBackup
         return await IncrementalBackupAsync(filePath, storage, existingFingerprint, password, userMessage, fssStrategy, progress, ct, fragmentSize, customName, auxiliaryStrategies).ConfigureAwait(false);
     }
 
-    private static string? FindExistingIndex(StorageAdapter storage)
+    private static string? FindExistingIndex(DssaAdapter storage)
     {
-        if (storage is LocalFileAdapter local)
+        if (storage is LocalDssaAdapter local)
         {
             string dir = local.GetBasePath();
             if (!Directory.Exists(dir)) return null;
@@ -45,7 +45,7 @@ public static class VersionedBackup
     }
 
     private static async Task<string> FreshBackupAsync(
-        string filePath, StorageAdapter storage,
+        string filePath, DssaAdapter storage,
         byte[] password, string userMessage, string fssStrategy,
         IProgress<RdrfProgressReport>? progress, CancellationToken ct,
         int fragmentSize = 0, string? customName = null,
@@ -62,7 +62,7 @@ public static class VersionedBackup
     }
 
     private static async Task<string> IncrementalBackupAsync(
-        string filePath, StorageAdapter storage, string prevFingerprint,
+        string filePath, DssaAdapter storage, string prevFingerprint,
         byte[] password, string userMessage, string fssStrategy,
         IProgress<RdrfProgressReport>? progress, CancellationToken ct,
         int fragmentSize = 0, string? customName = null,
@@ -114,7 +114,7 @@ public static class VersionedBackup
         return actualFingerprint;
     }
 
-    private static byte[] ReadDecryptedOriginal(StorageAdapter storage, string fingerprint, byte[] password)
+    private static byte[] ReadDecryptedOriginal(DssaAdapter storage, string fingerprint, byte[] password)
     {
         byte[] encryptedIndex = storage.ReadIndex(fingerprint);
         (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
@@ -140,7 +140,7 @@ public static class VersionedBackup
     }
 
     private static void AppendVersionRecord(
-        StorageAdapter storage, string fingerprint, byte[] password, byte[] salt,
+        DssaAdapter storage, string fingerprint, byte[] password, byte[] salt,
         int previousVersion, string userMessage, string systemDiff,
         List<VersionRecord>? inheritedVersions = null,
         List<FileEntry>? fileEntries = null)
@@ -174,7 +174,7 @@ public static class VersionedBackup
         storage.WriteIndex(fingerprint, saltedIndex);
     }
 
-    private static void CleanupOldFragments(StorageAdapter storage, string fingerprint)
+    private static void CleanupOldFragments(DssaAdapter storage, string fingerprint)
     {
         try
         {

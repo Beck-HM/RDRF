@@ -9,7 +9,7 @@ using RDRF.Core.FSA;
 using RDRF.Core.Index;
 using RDRF.Core.Integrity;
 using RDRF.Core.Metadata;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 
 namespace RDRF.Core;
 
@@ -27,7 +27,7 @@ public class BackupOrchestrator : IDisposable
     private readonly byte[] _rcCode;
     private readonly byte[] _aesKey;
     private readonly byte[] _salt;
-    private readonly StorageAdapter _storage;
+    private readonly DssaAdapter _storage;
     private readonly FSSEngine _fss;
     private readonly FsaEngine _fsa;
     private readonly MetadataManager _metadata;
@@ -35,7 +35,7 @@ public class BackupOrchestrator : IDisposable
 
     public BackupOrchestrator(
         byte[] key,
-        StorageAdapter storage,
+        DssaAdapter storage,
         FSSEngine? fssEngine = null,
         bool preDerived = false,
         byte[]? recoveryCode = null)
@@ -65,7 +65,7 @@ public class BackupOrchestrator : IDisposable
     public BackupOrchestrator(
         byte[] key,
         byte[] salt,
-        StorageAdapter storage,
+        DssaAdapter storage,
         FSSEngine? fssEngine = null)
     {
         _rcCode = key?.Clone() as byte[] ?? throw new ArgumentNullException(nameof(key));

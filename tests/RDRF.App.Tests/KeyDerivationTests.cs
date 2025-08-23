@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 using Xunit;
 
 namespace RDRF.App.Tests;
@@ -33,7 +33,7 @@ public class KeyDerivationTests
         using var dir = new Fixtures.TempDir();
         byte[] password = RandomNumberGenerator.GetBytes(32);
         byte[] salt = RandomNumberGenerator.GetBytes(32);
-        var storage = new LocalFileAdapter(dir.Path);
+        var storage = new LocalDssaAdapter(dir.Path);
 
         using var orchestrator = new BackupOrchestrator(password, salt, storage);
         string input = dir.CreateTextFile("test.txt", "Auto-detect new format test content.");
@@ -53,7 +53,7 @@ public class KeyDerivationTests
     {
         using var dir = new Fixtures.TempDir();
         byte[] password = RandomNumberGenerator.GetBytes(32);
-        var storage = new LocalFileAdapter(dir.Path);
+        var storage = new LocalDssaAdapter(dir.Path);
 
         using var engine = new RDRFEngine(password, storage);
         string input = dir.CreateTextFile("test.txt", "Auto-detect legacy format test.");
@@ -73,7 +73,7 @@ public class KeyDerivationTests
         using var dir = new Fixtures.TempDir();
         byte[] password = RandomNumberGenerator.GetBytes(32);
         byte[] wrongPwd = RandomNumberGenerator.GetBytes(32);
-        var storage = new LocalFileAdapter(dir.Path);
+        var storage = new LocalDssaAdapter(dir.Path);
 
         using var engine = new RDRFEngine(password, storage);
         string input = dir.CreateTextFile("test.txt", "Wrong password test.");
@@ -90,7 +90,7 @@ public class KeyDerivationTests
         using var dir = new Fixtures.TempDir();
         byte[] password = RandomNumberGenerator.GetBytes(32);
         byte[] salt = RandomNumberGenerator.GetBytes(32);
-        var storage = new LocalFileAdapter(dir.Path);
+        var storage = new LocalDssaAdapter(dir.Path);
 
         using var orchestrator = new BackupOrchestrator(password, salt, storage);
         string input = dir.CreateTextFile("test.txt", "Salt match test.");

@@ -1,6 +1,6 @@
-namespace RDRF.Core.Storage;
+namespace RDRF.Core.Dssa;
 
-public abstract class StorageAdapter
+public abstract class DssaAdapter
 {
     // ── Synchronous API ──
     public abstract byte[] ReadFragment(string filename);
@@ -42,11 +42,11 @@ public abstract class StorageAdapter
         => throw new NotSupportedException();
 }
 
-public class LocalFileAdapter : StorageAdapter
+public class LocalDssaAdapter : DssaAdapter
 {
     private readonly string _basePath;
 
-    public LocalFileAdapter(string basePath)
+    public LocalDssaAdapter(string basePath)
     {
         _basePath = basePath ?? throw new ArgumentNullException(nameof(basePath));
         Directory.CreateDirectory(_basePath);

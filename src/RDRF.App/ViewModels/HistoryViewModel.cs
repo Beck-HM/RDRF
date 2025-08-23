@@ -9,7 +9,7 @@ using RDRF.Core;
 using RDRF.Core.Versioning;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 
 namespace RDRF.App.ViewModels;
 

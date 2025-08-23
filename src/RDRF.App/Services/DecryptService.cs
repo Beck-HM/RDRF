@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Index;
 using RDRF.Core.Encryption;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 
 namespace RDRF.App.Services;
 
@@ -68,7 +68,7 @@ public class DecryptService : IDisposable
         IsFragmentMode = true;
         _encryptedIndex = null;
 
-        var storage = new LocalFileAdapter(storagePath);
+        var storage = new LocalDssaAdapter(storagePath);
 
         byte[]? fragData = null;
         for (int i = 0; ; i++)
@@ -124,7 +124,7 @@ public class DecryptService : IDisposable
         if (LoadResult == null || string.IsNullOrEmpty(_storagePath))
             return new List<FragmentStatusInfo>();
 
-        var storage = new LocalFileAdapter(_storagePath);
+        var storage = new LocalDssaAdapter(_storagePath);
         var result = new List<FragmentStatusInfo>();
 
         for (int i = 0; i < LoadResult.FragmentCount; i++)
@@ -150,7 +150,7 @@ public class DecryptService : IDisposable
         if (string.IsNullOrEmpty(_storagePath))
             throw new InvalidOperationException("Storage path not set.");
 
-        var storage = new LocalFileAdapter(_storagePath);
+        var storage = new LocalDssaAdapter(_storagePath);
         var engine = new RDRFEngine(_aesKey, storage, preDerived: true, recoveryCode: _rcCode);
 
         if (IsFragmentMode)

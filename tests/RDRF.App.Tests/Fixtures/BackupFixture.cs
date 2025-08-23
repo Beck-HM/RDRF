@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 
 namespace RDRF.App.Tests.Fixtures;
 
@@ -51,7 +51,7 @@ public static class BackupHelpers
     public static string Backup(byte[] password, string inputFile, string storageDir,
         string strategy = "FSS1", int? fragmentSize = null)
     {
-        var storage = new LocalFileAdapter(storageDir);
+        var storage = new LocalDssaAdapter(storageDir);
         using var engine = new RDRFEngine(password, storage);
         return engine.BackupFile(inputFile, strategy,
             fragmentSize: fragmentSize ?? 256 * 1024);
@@ -60,7 +60,7 @@ public static class BackupHelpers
     public static string BackupWithSalt(byte[] password, byte[] salt, string inputFile, string storageDir,
         string strategy = "FSS1", int? fragmentSize = null)
     {
-        var storage = new LocalFileAdapter(storageDir);
+        var storage = new LocalDssaAdapter(storageDir);
         using var engine = new BackupOrchestrator(password, salt, storage);
         return engine.BackupFile(inputFile, strategy,
             fragmentSize: fragmentSize ?? 256 * 1024);
@@ -68,7 +68,7 @@ public static class BackupHelpers
 
     public static BackupLoadResult LoadIndex(byte[] password, string storageDir, string fingerprint)
     {
-        var storage = new LocalFileAdapter(storageDir);
+        var storage = new LocalDssaAdapter(storageDir);
         byte[] encIdx = storage.ReadIndex(fingerprint);
         (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encIdx, password);
         var index = IndexManager.DeserializeIndex(cbor);
@@ -77,7 +77,7 @@ public static class BackupHelpers
 
     public static BackupLoadResult ToResult(RdrfIndex index)
     {
-        bool hasFss6 = index.Fss6FragentBlockMaps != null || index.Fss6RcBlockMap != null;
+        bool hasFss6 = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
         return new BackupLoadResult
         {
             Fingerprint = index.FileFingerprint,
@@ -95,7 +95,7 @@ public static class BackupHelpers
 
     public static bool Restore(byte[] password, string storageDir, string fingerprint, string outputPath)
     {
-        var storage = new LocalFileAdapter(storageDir);
+        var storage = new LocalDssaAdapter(storageDir);
         using var engine = new RDRFEngine(password, storage);
         return engine.RestoreFile(fingerprint, outputPath);
     }

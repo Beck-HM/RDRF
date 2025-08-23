@@ -5,7 +5,7 @@ using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 
 string testFile = args.Length > 0 && File.Exists(args[0])
     ? args[0]
@@ -25,7 +25,7 @@ Directory.CreateDirectory(resultDir);
 Console.WriteLine($"Result dir: {resultDir}");
 
 // ── Backup ──
-var storage = new LocalFileAdapter(resultDir);
+var storage = new LocalDssaAdapter(resultDir);
 string fingerprint;
 using (var engine = new RDRFEngine(rcMaster, storage))
     fingerprint = engine.BackupFile(testFile, strategy, fragmentSize: fragSize);
@@ -51,7 +51,7 @@ if (File.Exists(rcPath))
 {
     byte[] encRc = File.ReadAllBytes(rcPath);
     byte[] rcDec = EncryptionLayer.DecryptFragmentWithKey(encRc, aesKey);
-    var rcFile = RDRF.Core.Storage.RcFile.FromCbor(rcDec);
+    var rcFile = RDRF.Core.Dssa.RcFile.FromCbor(rcDec);
     if (rcFile.RepairB?.BlockSize > 0)
         blockSize = rcFile.RepairB.BlockSize;
 }
@@ -91,7 +91,7 @@ int[] cumBlocks = new int[totalFrags + 1];
 for (int i = 0; i < totalFrags; i++)
     cumBlocks[i + 1] = cumBlocks[i] + blocksPerFrag[i];
 
-Console.WriteLine($"\n══�?FSS6.1 Block Corruption Incremental Test ═══\n");
+Console.WriteLine($"\n══�?FSS6.1 Block Corruption Incremental Test ═══\n");
 
 // Parse args: -set <range>&<range>... -trials <N>
 (int[] pcts, int tcount) ParseArgs(string[] a)
@@ -186,7 +186,7 @@ foreach (int cpct in corruptPcts)
         }
 
         // Attempt restore
-        var trialStorage = new LocalFileAdapter(trialDir);
+        var trialStorage = new LocalDssaAdapter(trialDir);
         string outPath = Path.Combine(trialDir, "restored.bin");
 
         // Pre-check: verify Fss61RepairB and file existence
@@ -227,7 +227,7 @@ foreach (int cpct in corruptPcts)
 }
 
 // ── Results ──
-Console.WriteLine($"\n══�?FSS6.1 Repair Strength (blockSize={blockSize}) ══�?);
+Console.WriteLine($"\n══�?FSS6.1 Repair Strength (blockSize={blockSize}) ══�?);
 Console.WriteLine($"Total blocks: {totalBlocks}");
 Console.WriteLine($"Max survived: {maxSurvived}%  |  Min failed: {(minFailed > 100 ? "none" : minFailed + "%")}");
 Console.WriteLine();
@@ -254,7 +254,7 @@ foreach (int cp in corruptPcts)
         var m = csv.FirstOrDefault(l => l.StartsWith(key));
         if (m != null) { var p = m.Split(','); if (p[4] == "True") pass++; }
     }
-    Console.Write(pass == trials ? "  ✓✓�? " : pass >= 2 ? "  ✓✓   " : pass >= 1 ? "  �?   " : "  ✗✗�? ");
+    Console.Write(pass == trials ? "  ✓✓�? " : pass >= 2 ? "  ✓✓   " : pass >= 1 ? "  �?   " : "  ✗✗�? ");
 }
 Console.WriteLine();
 Console.Write("SHA match   ");
@@ -269,11 +269,11 @@ foreach (int cp in corruptPcts)
         var m = csv.FirstOrDefault(l => l.StartsWith(key));
         if (m != null) { var p = m.Split(','); if (p[5] == "True") match++; }
     }
-    Console.Write(match == 3 ? "  ✓✓�? " : match >= 2 ? "  ✓✓   " : match >= 1 ? "  �?   " : "  ✗✗�? ");
+    Console.Write(match == 3 ? "  ✓✓�? " : match >= 2 ? "  ✓✓   " : match >= 1 ? "  �?   " : "  ✗✗�? ");
 }
 Console.WriteLine();
 Console.WriteLine(new string('─', 70));
-Console.WriteLine($"Legend: ✓✓�?= {trials}/{trials}  ✓✓ = 2/{trials}  �?= 1/{trials}  ✗✗�?= 0/{trials}");
+Console.WriteLine($"Legend: ✓✓�?= {trials}/{trials}  ✓✓ = 2/{trials}  �?= 1/{trials}  ✗✗�?= 0/{trials}");
 Console.WriteLine($"\nThreshold: repair succeeds at ≤{maxSurvived}% corruption, fails at ≥{minFailed}%");
 
 // ── Cleanup ──

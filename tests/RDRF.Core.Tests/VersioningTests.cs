@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using RDRF.Core.Diff;
+using RDRF.Core.Dssa;
 using Xunit;
 
 namespace RDRF.Core.Tests;
@@ -17,7 +18,7 @@ public class VersioningTests
             File.WriteAllText(testFile, "Salt based orchestrator test.");
 
             byte[] salt = RandomNumberGenerator.GetBytes(32);
-            var storage = new Storage.LocalFileAdapter(storageDir);
+            var storage = new LocalDssaAdapter(storageDir);
 
             using var orchestrator = new BackupOrchestrator(password, salt, storage);
             string fingerprint = await orchestrator.BackupFileAsync(testFile, "FSS1");

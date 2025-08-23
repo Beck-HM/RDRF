@@ -4,7 +4,7 @@ using RDRF.Core.Encryption;
 using RDRF.Core.ETN;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
-using RDRF.Core.Storage;
+using RDRF.Core.Dssa;
 
 bool _interactive = args.Contains("-i");
 bool _stress = args.Contains("--stress");
@@ -45,7 +45,7 @@ void RunStandardDemo()
         Step("2/9  Run FSS6 backup");
         byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
         byte[] rcCodeSave = (byte[])rcCode.Clone();
-        var storage = new LocalFileAdapter(demoDir);
+        var storage = new LocalDssaAdapter(demoDir);
         string fingerprint;
         using (var engine = new RDRFEngine(rcCode, storage))
             fingerprint = engine.BackupFile(testFile, "FSS6");
@@ -441,7 +441,7 @@ bool Scenario6_ReplayAttack(string logFile, System.Text.StringBuilder csv)
     string dir2 = CreateTempDir(_outDir);
     try
     {
-        var storage1 = new LocalFileAdapter(dir1);
+        var storage1 = new LocalDssaAdapter(dir1);
         byte[] rcA = EncryptionLayer.GenerateRcCode(32);
         GenerateTestFile(dir1); // small file
         string fp1;
@@ -483,7 +483,7 @@ bool Scenario7_LargeFile(string logFile, System.Text.StringBuilder csv, int size
     {
         Step($"  Generating {sizeMB} MB test file...");
         string testFile = GenerateTestFile(dir, sizeMB);
-        var storage = new LocalFileAdapter(dir);
+        var storage = new LocalDssaAdapter(dir);
         byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
         byte[] rcCopy = (byte[])rcCode.Clone();
 
@@ -791,9 +791,9 @@ bool Scenario11_TrailerFPStress(string logFile, System.Text.StringBuilder csv, i
 // �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T
 //  Shared Helpers
 // �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T
-(LocalFileAdapter storage, string fingerprint, byte[] aesKey, byte[] fragmentKey, RdrfIndex index, int blockSize) QuickBackup(string dir, int sizeMB = 0)
+(LocalDssaAdapter storage, string fingerprint, byte[] aesKey, byte[] fragmentKey, RdrfIndex index, int blockSize) QuickBackup(string dir, int sizeMB = 0)
 {
-    var storage = new LocalFileAdapter(dir);
+    var storage = new LocalDssaAdapter(dir);
     byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
     byte[] rcCopy = (byte[])rcCode.Clone();
     string testFile = GenerateTestFile(dir, sizeMB);
@@ -806,7 +806,7 @@ bool Scenario11_TrailerFPStress(string logFile, System.Text.StringBuilder csv, i
     return (storage, fp, aesKey2, aesKey2, idx, bs);
 }
 
-CrossValidationResult RunEtn(LocalFileAdapter storage, string fingerprint, byte[] aesKey,
+CrossValidationResult RunEtn(LocalDssaAdapter storage, string fingerprint, byte[] aesKey,
     byte[] fragmentKey, RdrfIndex index)
 {
     byte[] indexJson = IndexManager.SerializeIndex(index);
@@ -815,7 +815,7 @@ CrossValidationResult RunEtn(LocalFileAdapter storage, string fingerprint, byte[
     return Fss6Etn.CrossValidate(indexJson, fragments, rcJson);
 }
 
-byte[] DecryptRc(LocalFileAdapter storage, string fingerprint, byte[] aesKey)
+byte[] DecryptRc(LocalDssaAdapter storage, string fingerprint, byte[] aesKey)
 {
     byte[] enc = storage.ReadRc(fingerprint);
     try { return EncryptionLayer.DecryptFragmentWithKey(enc, aesKey); }
@@ -966,7 +966,7 @@ static string GenerateTestFile(string dir, int sizeMB = 0)
 // �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T
 //  Key/Fragment Helpers
 // �T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T�T
-static List<byte[]> DecryptFragments(RdrfIndex index, LocalFileAdapter storage, byte[] fragmentKey)
+static List<byte[]> DecryptFragments(RdrfIndex index, LocalDssaAdapter storage, byte[] fragmentKey)
 {
     string prefix = index.CustomName ?? index.FileFingerprint;
     var fragments = new List<byte[]>();
