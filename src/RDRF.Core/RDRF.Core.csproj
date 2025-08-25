@@ -19,6 +19,7 @@
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.12" />
     <PackageReference Include="YamlDotNet" Version="15.1.2" />
+    <PackageReference Include="System.IO.Hashing" Version="8.0.0" />
   </ItemGroup>
 
   <!-- Zero third-party dependencies. All crypto uses .NET 8 built-in APIs. -->

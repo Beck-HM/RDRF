@@ -72,6 +72,7 @@ public static class IndexManager
         WriteFssParams(writer, index.FssParams);
         WriteField(writer, "fss6_fragment_block_maps", index.Fss6FragmentBlockMaps);
         WriteField(writer, "fss6_rc_block_map", index.Fss6RcBlockMap);
+        WriteField(writer, "fragment_block_hashes", index.FragmentBlockHashes);
         WriteField(writer, "salt", index.Salt);
         WriteField(writer, "created_at", index.CreatedAt);
         WriteField(writer, "updated_at", index.UpdatedAt);
@@ -108,6 +109,7 @@ public static class IndexManager
                 case "fss_params":                  index.FssParams = ReadFssParams(reader); break;
                 case "fss6_fragment_block_maps":    index.Fss6FragmentBlockMaps = ReadNestedStringList(reader); break;
                 case "fss6_rc_block_map":           index.Fss6RcBlockMap = ReadStringList(reader); break;
+                case "fragment_block_hashes":        index.FragmentBlockHashes = ReadNestedByteArrayList(reader); break;
                 case "salt":                        index.Salt = reader.ReadTextString(); break;
                 case "created_at":                  index.CreatedAt = reader.ReadInt64(); break;
                 case "updated_at":                  index.UpdatedAt = reader.ReadInt64(); break;
@@ -199,6 +201,13 @@ public static class IndexManager
         WriteNestedStringList(w, values);
     }
 
+    private static void WriteField(CborWriter w, string key, List<List<byte[]>>? values)
+    {
+        if (values == null) return;
+        w.WriteTextString(key);
+        WriteNestedByteArrayList(w, values);
+    }
+
     private static void WriteFssParams(CborWriter w, Dictionary<string, object>? fssParams)
     {
         if (fssParams == null || fssParams.Count == 0) return;
@@ -229,6 +238,7 @@ public static class IndexManager
             w.WriteTextString("hash");     w.WriteTextString(f.Hash);
             w.WriteTextString("nonce");    w.WriteTextString(f.Nonce);
             if (f.Filename != null) { w.WriteTextString("filename"); w.WriteTextString(f.Filename); }
+            if (f.SourceVersion != null) { w.WriteTextString("source_version"); w.WriteTextString(f.SourceVersion); }
             w.WriteEndMap();
         }
         w.WriteEndArray();
@@ -258,12 +268,48 @@ public static class IndexManager
         w.WriteEndArray();
     }
 
+    private static void WriteByteArrayList(CborWriter w, List<byte[]> list)
+    {
+        w.WriteStartArray(null);
+        foreach (var item in list)
+            w.WriteByteString(item);
+        w.WriteEndArray();
+    }
+
+    private static void WriteNestedByteArrayList(CborWriter w, List<List<byte[]>> list)
+    {
+        w.WriteStartArray(null);
+        foreach (var inner in list)
+            WriteByteArrayList(w, inner);
+        w.WriteEndArray();
+    }
+
     private static List<string> ReadStringList(CborReader r)
     {
         var list = new List<string>();
         r.ReadStartArray();
         while (r.PeekState() != CborReaderState.EndArray)
             list.Add(r.ReadTextString());
+        r.ReadEndArray();
+        return list;
+    }
+
+    private static List<byte[]> ReadByteArrayList(CborReader r)
+    {
+        var list = new List<byte[]>();
+        r.ReadStartArray();
+        while (r.PeekState() != CborReaderState.EndArray)
+            list.Add(r.ReadByteString());
+        r.ReadEndArray();
+        return list;
+    }
+
+    private static List<List<byte[]>> ReadNestedByteArrayList(CborReader r)
+    {
+        var list = new List<List<byte[]>>();
+        r.ReadStartArray();
+        while (r.PeekState() != CborReaderState.EndArray)
+            list.Add(ReadByteArrayList(r));
         r.ReadEndArray();
         return list;
     }
@@ -322,6 +368,7 @@ public static class IndexManager
                     case "hash":     f.Hash = r.ReadTextString(); break;
                     case "nonce":    f.Nonce = r.ReadTextString(); break;
                     case "filename": f.Filename = r.ReadTextString(); break;
+                    case "source_version": f.SourceVersion = r.ReadTextString(); break;
                     default:         r.SkipValue(); break;
                 }
             }
@@ -479,6 +526,7 @@ public class RdrfIndex
     public Dictionary<string, object>? FssParams { get; set; }
     public List<List<string>>? Fss6FragmentBlockMaps { get; set; }
     public List<string>? Fss6RcBlockMap { get; set; }
+    public List<List<byte[]>>? FragmentBlockHashes { get; set; }
     public string? Salt { get; set; }
     public long CreatedAt { get; set; }
     public long? UpdatedAt { get; set; }
@@ -498,4 +546,5 @@ public class FragmentInfo
     [Obsolete("Nonce is stored in the index for backward compatibility but never read during restore.")]
     public string Nonce { get; set; } = string.Empty;
     public string? Filename { get; set; }
+    public string? SourceVersion { get; set; }
 }
