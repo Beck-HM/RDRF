@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using RDRF.Core.Diff;
 using RDRF.Core.Encryption;
+using RDRF.Core.FragmentEngine;
 using RDRF.Core.Index;
 using RDRF.Core.Dssa;
 
@@ -74,12 +75,16 @@ public static class VersionedBackup
 
         int prevVersion = 0;
         List<VersionRecord>? oldVersions = null;
+        List<List<byte[]>>? prevBlockHashes = null;
+        string prevPrefix;
         try
         {
             (_, byte[] prevCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(prevIndexBytes, password);
             var prevIdx = IndexManager.DeserializeIndex(prevCbor);
             prevVersion = prevIdx.VersionNumber ?? 0;
             oldVersions = prevIdx.Versions;
+            prevBlockHashes = prevIdx.FragmentBlockHashes;
+            prevPrefix = prevIdx.CustomName ?? prevFingerprint;
         }
         catch { throw new CryptographicException("Failed to decrypt previous index. Wrong password or corrupted backup."); }
 
@@ -108,9 +113,45 @@ public static class VersionedBackup
                 progress: progress, cancellationToken: ct).ConfigureAwait(false);
         }
 
-        AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage, diffResult.HumanDiff, oldVersions, fileEntries);
+        // Dedup: compare block hashes, reference unchanged fragments from previous version
+        byte[] newEncryptedIndex = storage.ReadIndex(actualFingerprint);
+        (_, byte[] newCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(newEncryptedIndex, password);
+        var newIndex = IndexManager.DeserializeIndex(newCbor);
+        string newPrefix = newIndex.CustomName ?? actualFingerprint;
 
-        CleanupOldFragments(storage, prevFingerprint);
+        if (prevBlockHashes != null && newIndex.FragmentBlockHashes != null)
+        {
+            for (int i = 0; i < newIndex.FragmentBlockHashes.Count && i < prevBlockHashes.Count; i++)
+            {
+                var newHashes = newIndex.FragmentBlockHashes[i];
+                var prevHashes = prevBlockHashes[i];
+                if (newHashes.Count != prevHashes.Count) continue;
+
+                bool identical = true;
+                for (int j = 0; j < newHashes.Count; j++)
+                {
+                    if (!newHashes[j].AsSpan().SequenceEqual(prevHashes[j]))
+                    { identical = false; break; }
+                }
+
+                if (identical && i < newIndex.Fragments?.Count)
+                {
+                    // Reference previous version's fragment, delete the newly created one
+                    newIndex.Fragments[i].SourceVersion = prevFingerprint;
+                    string newFragName = Frags.FragmentFilename(newPrefix, i);
+                    try { storage.DeleteFragment(newFragName); } catch { }
+                }
+            }
+
+            // Re-serialize and save the updated index (same salt → same AES key)
+            byte[] updatedCbor = IndexManager.SerializeIndex(newIndex);
+            byte[] updatedIndex = EncryptionLayer.EncryptIndexWithSaltPrefix(updatedCbor, password, salt);
+            storage.WriteIndex(actualFingerprint, updatedIndex);
+        }
+
+        AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage,
+            diffResult.HumanDiff, oldVersions, fileEntries);
+
         return actualFingerprint;
     }
 

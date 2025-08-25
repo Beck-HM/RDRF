@@ -239,7 +239,7 @@ public class RestoreOrchestrator : IDisposable
         Debug.WriteLine("  Falling back to dictionary-based restore (recovery or missing fragments)");
 
         var decryptedFragments = await DownloadAndDecryptFragmentsAsync(
-            filePrefix, fragmentCount, fileFingerprint, progress, ct).ConfigureAwait(false);
+            filePrefix, fragmentCount, fileFingerprint, progress, ct, index).ConfigureAwait(false);
 
         // ETN cross-validation (only if BM data available in the Index)
         // Must run BEFORE stripping trailers, as cross-validation needs them
@@ -323,13 +323,14 @@ public class RestoreOrchestrator : IDisposable
         string filePrefix, int fragmentCount, string fileFingerprint,
         IProgress<RdrfProgressReport>? progress)
     {
-        return DownloadAndDecryptFragmentsAsync(filePrefix, fragmentCount, fileFingerprint, progress, CancellationToken.None)
+        return DownloadAndDecryptFragmentsAsync(filePrefix, fragmentCount, fileFingerprint, progress, CancellationToken.None, null)
             .GetAwaiter().GetResult();
     }
 
     private async Task<Dictionary<int, byte[]>> DownloadAndDecryptFragmentsAsync(
         string filePrefix, int fragmentCount, string fileFingerprint,
-        IProgress<RdrfProgressReport>? progress, CancellationToken ct)
+        IProgress<RdrfProgressReport>? progress, CancellationToken ct,
+        RdrfIndex? index = null)
     {
         var decryptedFragments = new Dictionary<int, byte[]>();
         long totalReadBytes = 0;
@@ -341,10 +342,26 @@ public class RestoreOrchestrator : IDisposable
             ct.ThrowIfCancellationRequested();
             try
             {
-                string fname = Frags.FragmentFilename(filePrefix, i);
-                byte[] encrypted = await _storage.ReadFragmentAsync(fname, ct).ConfigureAwait(false);
+                string sourceFp = fileFingerprint;
+                string sourcePrefix = filePrefix;
+                byte[] key = _aesKey;
 
-                byte[] raw = EncryptionLayer.DecryptAndStripFragment(encrypted, _aesKey);
+                // Check for cross-version fragment reference
+                if (index?.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
+                {
+                    sourceFp = index.Fragments[i].SourceVersion;
+                    sourcePrefix = sourceFp;
+
+                    // Derive AES key from source version's salt (first 20 bytes of encrypted index)
+                    byte[] sourceIndexBytes = await _storage.ReadIndexAsync(sourceFp, ct).ConfigureAwait(false);
+                    byte[] sourceSalt = new byte[Constants.SaltPrefixLength];
+                    Buffer.BlockCopy(sourceIndexBytes, 0, sourceSalt, 0, Constants.SaltPrefixLength);
+                    key = EncryptionLayer.DeriveKey(_rcCode, sourceSalt);
+                }
+
+                string fname = Frags.FragmentFilename(sourcePrefix, i);
+                byte[] encrypted = await _storage.ReadFragmentAsync(fname, ct).ConfigureAwait(false);
+                byte[] raw = EncryptionLayer.DecryptAndStripFragment(encrypted, key);
 
                 decryptedFragments[i] = raw;
                 totalReadBytes += raw.Length;

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Hashing;
 using System.Security.Cryptography;
 using System.Text.Json;
 using RDRF.Core.Encryption;
@@ -226,6 +227,21 @@ public class BackupOrchestrator : IDisposable
             embeddedIndex.CustomName = customName;
         if (_salt.Length > 0)
             embeddedIndex.Salt = Convert.ToHexString(_salt).ToLowerInvariant();
+
+        // Compute per-block XxHash128 for incremental comparison
+        int blockSize = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
+        var blockHashes = new List<List<byte[]>>(fragments.Count);
+        foreach (var frag in fragments)
+        {
+            var fragHashes = new List<byte[]>((frag.Length + blockSize - 1) / blockSize);
+            for (int off = 0; off < frag.Length; off += blockSize)
+            {
+                int len = Math.Min(blockSize, frag.Length - off);
+                fragHashes.Add(System.IO.Hashing.XxHash128.Hash(frag.AsSpan(off, len)));
+            }
+            blockHashes.Add(fragHashes);
+        }
+        embeddedIndex.FragmentBlockHashes = blockHashes;
 
         byte[] serializedIndex = IndexManager.SerializeIndex(embeddedIndex);
         byte[] rcBytes = [];
