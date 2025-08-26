@@ -228,20 +228,11 @@ public class BackupOrchestrator : IDisposable
         if (_salt.Length > 0)
             embeddedIndex.Salt = Convert.ToHexString(_salt).ToLowerInvariant();
 
-        // Compute per-block XxHash128 for incremental comparison
-        int blockSize = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
-        var blockHashes = new List<List<byte[]>>(fragments.Count);
-        foreach (var frag in fragments)
-        {
-            var fragHashes = new List<byte[]>((frag.Length + blockSize - 1) / blockSize);
-            for (int off = 0; off < frag.Length; off += blockSize)
-            {
-                int len = Math.Min(blockSize, frag.Length - off);
-                fragHashes.Add(System.IO.Hashing.XxHash128.Hash(frag.AsSpan(off, len)));
-            }
-            blockHashes.Add(fragHashes);
-        }
-        embeddedIndex.FragmentBlockHashes = blockHashes;
+        // Compute raw fragment XxHash128 for incremental comparison (before FSS encoding)
+        var rawHashes = new List<byte[]>(originalFragments.Count);
+        foreach (var frag in originalFragments)
+            rawHashes.Add(XxHash128.Hash(frag.AsSpan()));
+        embeddedIndex.RawFragmentHashes = rawHashes;
 
         byte[] serializedIndex = IndexManager.SerializeIndex(embeddedIndex);
         byte[] rcBytes = [];
@@ -406,6 +397,238 @@ public class BackupOrchestrator : IDisposable
 
         Debug.WriteLine($"Backup complete!");
         return fileFingerprint;
+    }
+
+    public async Task<RdrfIndex> BuildChangedFragmentsIndex(
+        List<byte[]> allRawFragments,
+        List<byte[]> changedRawFragments,
+        List<int> changedIndices,
+        bool[] changedFlags,
+        string fileFingerprint,
+        string originalHash,
+        string originalFilename,
+        long fileSize,
+        string fssStrategy,
+        int fragmentSize,
+        string? customName,
+        string? prevFingerprint,
+        List<byte[]>? prevRawHashes,
+        IProgress<RdrfProgressReport>? progress,
+        CancellationToken ct)
+    {
+        int fragSize = fragmentSize > 0 ? fragmentSize : 1024 * 1024;
+        string filePrefix = customName ?? fileFingerprint;
+        var plan = _fsa.Compute(fssStrategy, null);
+
+        var fragments = new List<byte[]>(allRawFragments);
+        foreach (var step in plan.EncodeSteps)
+        {
+            if (step.Step == "encode")
+                fragments = _fss.Encode(fragments, step.Strategy);
+            else if (step.Step == "etn_inject")
+                fragments = _fss.Encode(fragments, Constants.FssLevel6);
+        }
+
+        var fragmentHashes = new List<string>(fragments.Count);
+        foreach (var f in fragments)
+            fragmentHashes.Add(IntegrityChecker.HashBytes(f));
+
+        int originalFragmentCount = allRawFragments.Count;
+        var originalFragmentSizes = allRawFragments.Select(f => f.Length).ToList();
+
+        var index = IndexManager.BuildIndex(
+            fileFingerprint: fileFingerprint,
+            originalFilename: originalFilename,
+            originalSize: fileSize,
+            fragmentHashes: fragmentHashes,
+            fragmentNonces: Enumerable.Range(0, fragments.Count)
+                .Select(_ => Convert.ToBase64String(RandomNumberGenerator.GetBytes(Constants.NonceLength)))
+                .ToList(),
+            originalHash: originalHash,
+            fssStrategy: plan.EffectivePrimary,
+            originalFragmentSizes: originalFragmentSizes,
+            originalFragmentCount: originalFragmentCount,
+            fssParams: new Dictionary<string, object>
+            {
+                ["plan"] = JsonSerializer.SerializeToElement(plan)
+            });
+
+        if (!string.IsNullOrEmpty(customName))
+            index.CustomName = customName;
+        if (_salt.Length > 0)
+            index.Salt = Convert.ToHexString(_salt).ToLowerInvariant();
+
+        index.RawFragmentHashes = allRawFragments
+            .Select(f => System.IO.Hashing.XxHash128.Hash(f.AsSpan()))
+            .ToList();
+
+        byte[] serializedIndex = IndexManager.SerializeIndex(index);
+        byte[] rcBytes = [];
+
+        bool hasFss6 = plan.ActiveStrategies.Contains(Constants.FssLevel6)
+                     || plan.ActiveStrategies.Contains(Constants.FssLevel61);
+        bool hasFss61 = plan.ActiveStrategies.Contains(Constants.FssLevel61);
+        if (hasFss6)
+        {
+            var (etnFragments, etnIndexJson, etnRcJson) = Fss6Etn.InjectCrossValidation(
+                fragments, serializedIndex, filePrefix, fileSize, plan.EffectivePrimary);
+            fragments = etnFragments;
+            serializedIndex = etnIndexJson;
+            rcBytes = etnRcJson;
+        }
+
+        if (hasFss61 && rcBytes.Length > 0)
+        {
+            try
+            {
+                var rcFile = RcFile.FromCbor(rcBytes);
+                var indexObj = IndexManager.DeserializeIndex(serializedIndex);
+                int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
+
+                var indexBlocks = SplitToBlocks(serializedIndex, bs);
+                if (indexBlocks.Length > 0)
+                {
+                    var (sym, seed) = LtCode.Encode(indexBlocks, indexBlocks.Length, bs);
+                    rcFile.RepairA = new Fss61RepairData
+                    {
+                        Seed = seed, BlockCount = indexBlocks.Length, BlockSize = bs,
+                        Data = FlattenSymbols(sym, bs),
+                    };
+                }
+
+                var fragBlocks = new List<byte[]>();
+                foreach (var frag in fragments)
+                {
+                    var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
+                    for (int off = 0; off < rawData.Length; off += bs)
+                    {
+                        int len = Math.Min(bs, rawData.Length - off);
+                        byte[] block = new byte[bs];
+                        Buffer.BlockCopy(rawData, off, block, 0, len);
+                        fragBlocks.Add(block);
+                    }
+                }
+                if (fragBlocks.Count > 0)
+                {
+                    var allFrags = fragBlocks.ToArray();
+                    var (sym, seed) = LtCode.Encode(allFrags, allFrags.Length, bs);
+                    rcFile.RepairB = new Fss61RepairData
+                    {
+                        Seed = seed, BlockCount = allFrags.Length, BlockSize = bs,
+                        Data = FlattenSymbols(sym, bs),
+                    };
+                    indexObj.Fss61RepairB = rcFile.RepairB;
+                }
+
+                var rcBlocks = SplitToBlocks(rcBytes, bs);
+                if (rcBlocks.Length > 0)
+                {
+                    var (sym, seed) = LtCode.Encode(rcBlocks, rcBlocks.Length, bs);
+                    indexObj.Fss61RepairC = new Fss61RepairData
+                    {
+                        Seed = seed, BlockCount = rcBlocks.Length, BlockSize = bs,
+                        Data = FlattenSymbols(sym, bs),
+                    };
+                }
+
+                if (rcFile.RepairA != null && indexObj.Fss61RepairC != null)
+                {
+                    for (int i = 0; i < fragments.Count; i++)
+                    {
+                        var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(fragments[i]);
+                        fragments[i] = Fss61RepairTrailer.Build(rawData, filePrefix, filePrefix,
+                            rcFile.RepairA, indexObj.Fss61RepairC);
+                    }
+                }
+
+                rcBytes = rcFile.ToCborBytes();
+                serializedIndex = IndexManager.SerializeIndex(indexObj);
+            }
+            catch (Exception ex) { Debug.WriteLine($"FSS6.1 repair generation failed: {ex.Message}"); }
+        }
+
+        byte[] embeddedIndexBytes = Fss6Etn.StripEtnFieldsFromIndexJson(serializedIndex);
+        long totalBytes = fragments.Sum(f => f.Length);
+        long processedBytes = 0;
+
+        // Initialize all fragments with SourceVersion references
+        if (index.Fragments != null)
+        {
+            for (int i = 0; i < index.Fragments.Count; i++)
+            {
+                if (i < changedFlags.Length && !changedFlags[i] && prevFingerprint != null)
+                    index.Fragments[i].SourceVersion = prevFingerprint;
+            }
+        }
+
+        for (int i = 0; i < fragments.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            // Skip write for unchanged fragments (they reference prev version)
+            if (index.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
+            {
+                processedBytes += fragments[i].Length;
+                continue;
+            }
+
+            byte[] fileData = FragmentFileHeader.EncryptWithEmbeddedIndex(
+                fragments[i], embeddedIndexBytes, _aesKey, _salt);
+            string fname = Frags.FragmentFilename(filePrefix, i);
+            int rawLen = fragments[i].Length;
+            await _storage.WriteFragmentAsync(fname, fileData, ct).ConfigureAwait(false);
+            fragments[i] = null!;
+            processedBytes += rawLen;
+
+            progress?.Report(new RdrfProgressReport
+            {
+                Stage = "Encrypting",
+                CurrentItem = i + 1,
+                TotalItems = fragments.Count,
+                CurrentBytes = processedBytes,
+                TotalBytes = totalBytes
+            });
+        }
+
+        var standaloneIndex = IndexManager.DeserializeIndex(serializedIndex);
+        standaloneIndex.FssParams = new Dictionary<string, object>
+        {
+            ["plan"] = JsonSerializer.SerializeToElement(plan)
+        };
+        // Apply SourceVersion to the standalone index too
+        if (standaloneIndex.Fragments != null && index.Fragments != null)
+        {
+            for (int i = 0; i < Math.Min(standaloneIndex.Fragments.Count, index.Fragments.Count); i++)
+                standaloneIndex.Fragments[i].SourceVersion = index.Fragments[i].SourceVersion;
+        }
+
+        byte[] indexBytes = IndexManager.SerializeIndex(standaloneIndex);
+        if (_salt.Length > 0)
+        {
+            byte[] salted = EncryptionLayer.EncryptIndexWithSaltPrefix(indexBytes, _rcCode, _salt);
+            await _storage.WriteIndexAsync(filePrefix, salted, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            byte[] encryptedIndex = EncryptionLayer.EncryptIndexWithKey(indexBytes, _aesKey);
+            await _storage.WriteIndexAsync(filePrefix, encryptedIndex, ct).ConfigureAwait(false);
+        }
+
+        if (rcBytes.Length > 0)
+        {
+            byte[] encryptedRc = EncryptionLayer.EncryptFragmentWithKey(rcBytes, _aesKey);
+            await _storage.WriteRcAsync(filePrefix, encryptedRc, ct).ConfigureAwait(false);
+        }
+
+        _metadata.SaveBackup(
+            fileFingerprint: fileFingerprint,
+            originalFilename: originalFilename,
+            originalSize: fileSize,
+            originalHash: originalHash,
+            fssStrategy: fssStrategy,
+            fragmentHashes: fragmentHashes);
+
+        return index;
     }
 
     public void Dispose()

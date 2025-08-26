@@ -189,16 +189,34 @@ public static class PullService
 
                 try
                 {
+                    string localName = loc.ContentType == "rc"
+                        ? lookupFingerprint + Constants.RcFileSuffix
+                        : Frags.FragmentFilename(lookupPrefix, loc.FragmentIndex);
+                    string localPath = Path.Combine(storageDir, localName);
+
+                    // Skip if local file already exists with matching hash
+                    if (File.Exists(localPath) && !string.IsNullOrEmpty(loc.FileHash))
+                    {
+                        var localHash = Convert.ToHexString(
+                            System.Security.Cryptography.SHA256.HashData(
+                                File.ReadAllBytes(localPath))).ToLowerInvariant();
+                        if (localHash == loc.FileHash)
+                        {
+                            downloaded++;
+                            progress?.Report(new RdrfProgressReport
+                            {
+                                Stage = "Pulling", CurrentItem = downloaded + errors, TotalItems = totalItems
+                            });
+                            continue;
+                        }
+                    }
+
                     await using var stream = await backend.OpenReadAsync(loc.RemotePath);
                     using var ms = new MemoryStream();
                     await stream.CopyToAsync(ms);
                     byte[] data = ms.ToArray();
 
-                    string localName = loc.ContentType == "rc"
-                        ? lookupFingerprint + Constants.RcFileSuffix
-                        : Frags.FragmentFilename(lookupPrefix, loc.FragmentIndex);
-
-                    await File.WriteAllBytesAsync(Path.Combine(storageDir, localName), data);
+                    await File.WriteAllBytesAsync(localPath, data);
 
                     downloaded++;
                     progress?.Report(new RdrfProgressReport
