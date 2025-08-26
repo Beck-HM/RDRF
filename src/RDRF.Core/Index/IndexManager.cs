@@ -72,7 +72,7 @@ public static class IndexManager
         WriteFssParams(writer, index.FssParams);
         WriteField(writer, "fss6_fragment_block_maps", index.Fss6FragmentBlockMaps);
         WriteField(writer, "fss6_rc_block_map", index.Fss6RcBlockMap);
-        WriteField(writer, "fragment_block_hashes", index.FragmentBlockHashes);
+        WriteField(writer, "raw_fragment_hashes", index.RawFragmentHashes);
         WriteField(writer, "salt", index.Salt);
         WriteField(writer, "created_at", index.CreatedAt);
         WriteField(writer, "updated_at", index.UpdatedAt);
@@ -109,7 +109,7 @@ public static class IndexManager
                 case "fss_params":                  index.FssParams = ReadFssParams(reader); break;
                 case "fss6_fragment_block_maps":    index.Fss6FragmentBlockMaps = ReadNestedStringList(reader); break;
                 case "fss6_rc_block_map":           index.Fss6RcBlockMap = ReadStringList(reader); break;
-                case "fragment_block_hashes":        index.FragmentBlockHashes = ReadNestedByteArrayList(reader); break;
+                case "raw_fragment_hashes":          index.RawFragmentHashes = ReadByteArrayList(reader); break;
                 case "salt":                        index.Salt = reader.ReadTextString(); break;
                 case "created_at":                  index.CreatedAt = reader.ReadInt64(); break;
                 case "updated_at":                  index.UpdatedAt = reader.ReadInt64(); break;
@@ -206,6 +206,13 @@ public static class IndexManager
         if (values == null) return;
         w.WriteTextString(key);
         WriteNestedByteArrayList(w, values);
+    }
+
+    private static void WriteField(CborWriter w, string key, List<byte[]>? values)
+    {
+        if (values == null) return;
+        w.WriteTextString(key);
+        WriteByteArrayList(w, values);
     }
 
     private static void WriteFssParams(CborWriter w, Dictionary<string, object>? fssParams)
@@ -526,7 +533,7 @@ public class RdrfIndex
     public Dictionary<string, object>? FssParams { get; set; }
     public List<List<string>>? Fss6FragmentBlockMaps { get; set; }
     public List<string>? Fss6RcBlockMap { get; set; }
-    public List<List<byte[]>>? FragmentBlockHashes { get; set; }
+    public List<byte[]>? RawFragmentHashes { get; set; }
     public string? Salt { get; set; }
     public long CreatedAt { get; set; }
     public long? UpdatedAt { get; set; }

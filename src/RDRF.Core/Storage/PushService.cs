@@ -57,10 +57,24 @@ public static class PushService
         int fragmentCount = index.FragmentCount;
         int versionNumber = index.VersionNumber ?? 1;
 
+        // Check which fragments already exist on backends
+        var existingOnBackends = new HashSet<int>();
+        if (remotes.Count > 0)
+        {
+            var existingRecords = mgmt.Lookup(fingerprint, versionNumber);
+            foreach (var rec in existingRecords.Where(r => r.ContentType == "fragment"))
+                existingOnBackends.Add(rec.FragmentIndex);
+        }
+
         // Collect all push items
         var items = new List<(int index, string path)>();
         for (int i = 0; i < fragmentCount; i++)
         {
+            if (existingOnBackends.Contains(i))
+            {
+                Console.WriteLine($"  Fragment {i}/{fragmentCount} already on backend, skipped");
+                continue;
+            }
             string fragName = Frags.FragmentFilename(prefix, i);
             string fragPath = Path.Combine(storageDir, fragName);
             if (!File.Exists(fragPath))
