@@ -55,36 +55,7 @@ public static class EncryptionLayer
 
     private static byte[] CtrCryptWithKey(byte[] data, byte[] aesKey, byte[] nonce)
     {
-        byte[] output = new byte[data.Length];
-        using var aes = Aes.Create();
-        aes.Key = aesKey;
-        aes.Mode = CipherMode.ECB;
-        aes.Padding = PaddingMode.None;
-
-        byte[] counter = new byte[16];
-        Buffer.BlockCopy(nonce, 0, counter, 0, Math.Min(nonce.Length, 12));
-        counter[15] = 1;
-
-        byte[] keystreamBlock = new byte[16];
-        using var encryptor = aes.CreateEncryptor();
-
-        for (int i = 0; i < data.Length; i += 16)
-        {
-            encryptor.TransformBlock(counter, 0, 16, keystreamBlock, 0);
-            int blockLen = Math.Min(16, data.Length - i);
-            for (int j = 0; j < blockLen; j++)
-                output[i + j] = (byte)(data[i + j] ^ keystreamBlock[j]);
-            IncrementCounter(counter);
-        }
-        return output;
-    }
-
-    private static void IncrementCounter(byte[] counter)
-    {
-        for (int i = counter.Length - 1; i >= 0; i--)
-        {
-            if (++counter[i] != 0) break;
-        }
+        return AesNiCtr.CtrCrypt(data, aesKey, nonce);
     }
 
     private static byte[] CtrCrypt(byte[] data, byte[] rcCode, byte[] nonce)
@@ -92,32 +63,7 @@ public static class EncryptionLayer
 
     public static void CtrTransformStream(Stream input, Stream output, byte[] aesKey, byte[] nonce)
     {
-        byte[] counter = new byte[16];
-        Buffer.BlockCopy(nonce, 0, counter, 0, Math.Min(nonce.Length, 12));
-        counter[15] = 1;
-
-        using var aes = Aes.Create();
-        aes.Key = aesKey;
-        aes.Mode = CipherMode.ECB;
-        aes.Padding = PaddingMode.None;
-
-        using var encryptor = aes.CreateEncryptor();
-        byte[] keystreamBlock = new byte[16];
-        byte[] buffer = new byte[81920];
-        int bytesRead;
-
-        while ((bytesRead = input.Read(buffer, 0, buffer.Length)) > 0)
-        {
-            for (int offset = 0; offset < bytesRead; offset += 16)
-            {
-                encryptor.TransformBlock(counter, 0, 16, keystreamBlock, 0);
-                int blockLen = Math.Min(16, bytesRead - offset);
-                for (int j = 0; j < blockLen; j++)
-                    buffer[offset + j] ^= keystreamBlock[j];
-                IncrementCounter(counter);
-            }
-            output.Write(buffer, 0, bytesRead);
-        }
+        AesNiCtr.CtrCryptStream(input, output, aesKey, nonce);
     }
 
     public static byte[] EncryptFragmentCtrWithKey(byte[] plaintext, byte[] aesKey)
