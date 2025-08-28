@@ -11,7 +11,6 @@ public static class Constants
     // AES Encryption Parameters
     public const int NonceLength = 12;
     public const int KeyLength = 32;
-    public const int TagLength = 16;
 
     // RC Code
     public const int RcCodeLength = 32;
