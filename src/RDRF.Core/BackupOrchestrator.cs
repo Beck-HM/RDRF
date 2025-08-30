@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Hashing;
 using System.Security.Cryptography;
 using System.Text.Json;
+using RDRF.Core.Compression;
 using RDRF.Core.Encryption;
 using RDRF.Core.ETN;
 using RDRF.Core.FragmentEngine;
@@ -144,36 +145,34 @@ public class BackupOrchestrator : IDisposable
         string originalHash;
         string fileFingerprint;
 
-        using (var fs = new FileStream(fileInfo.FullName, FileMode.Open, FileAccess.Read,
-            FileShare.Read, 65536, FileOptions.SequentialScan))
+        // Read entire file, compute SHA256 on original data
+        byte[] rawFileData = await File.ReadAllBytesAsync(filePath, cancellationToken).ConfigureAwait(false);
         using (var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
         {
-            byte[] buf = new byte[fragSize];
-            int read;
-            while ((read = fs.Read(buf, 0, fragSize)) > 0)
-            {
-                hasher.AppendData(buf.AsSpan(0, read));
-                if (read == fragSize)
-                {
-                    originalFragments.Add(buf);
-                    buf = new byte[fragSize];
-                }
-                else
-                {
-                    var last = new byte[read];
-                    Buffer.BlockCopy(buf, 0, last, 0, read);
-                    originalFragments.Add(last);
-                }
-            }
+            hasher.AppendData(rawFileData);
             byte[] hashBytes = hasher.GetHashAndReset();
             fileFingerprint = Convert.ToHexString(hashBytes).ToLowerInvariant();
             originalHash = fileFingerprint;
         }
 
+        // LZ4 compress the original data before splitting
+        byte[] compressedData = RDRF.Core.Compression.Compressor.Compress(rawFileData, Constants.CompressionLz4);
+        bool isCompressed = compressedData.Length < rawFileData.Length;
+        string? compressionMethod = isCompressed ? Constants.CompressionLz4 : null;
+
+        // Split compressed (or original) data into fragments
+        for (int off = 0; off < compressedData.Length; off += fragSize)
+        {
+            int len = Math.Min(fragSize, compressedData.Length - off);
+            byte[] frag = new byte[len];
+            Buffer.BlockCopy(compressedData, off, frag, 0, len);
+            originalFragments.Add(frag);
+        }
+
         int originalFragmentCount = originalFragments.Count;
         var originalFragmentSizes = originalFragments.Select(f => f.Length).ToList();
 
-        Debug.WriteLine($"  Step 1: Split into {originalFragmentCount} fragments");
+        Debug.WriteLine($"  Step 1: Compressed {fileSize:N0} -> {compressedData.Length:N0} bytes, {originalFragmentCount} fragments");
 
         var plan = _fsa.Compute(fssStrategy, auxiliaryStrategies);
         var fragments = new List<byte[]>(originalFragments);
@@ -227,6 +226,7 @@ public class BackupOrchestrator : IDisposable
             embeddedIndex.CustomName = customName;
         if (_salt.Length > 0)
             embeddedIndex.Salt = Convert.ToHexString(_salt).ToLowerInvariant();
+        embeddedIndex.Compression = compressionMethod;
 
         // Compute raw fragment XxHash128 for incremental comparison (before FSS encoding)
         var rawHashes = new List<byte[]>(originalFragments.Count);

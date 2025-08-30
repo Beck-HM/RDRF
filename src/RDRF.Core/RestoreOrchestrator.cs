@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
+using RDRF.Core.Compression;
 using RDRF.Core.Encryption;
 using RDRF.Core.ETN;
 using RDRF.Core.FragmentEngine;
@@ -230,74 +231,91 @@ public class RestoreOrchestrator : IDisposable
         bool hasFss6 = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
 
         // Try streaming restore when all fragments are on disk (no recovery needed)
+        bool streamingPath = false;
         if (await TryStreamingRestoreCoreAsync(index, filePrefix, outputPath,
                 progress, ct).ConfigureAwait(false))
         {
-            Debug.WriteLine("  Restore complete!");
-            return true;
-        }
-        Debug.WriteLine("  Falling back to dictionary-based restore (recovery or missing fragments)");
-
-        var decryptedFragments = await DownloadAndDecryptFragmentsAsync(
-            filePrefix, fragmentCount, fileFingerprint, progress, ct, index).ConfigureAwait(false);
-
-        // ETN cross-validation (only if BM data available in the Index)
-        // Must run BEFORE stripping trailers, as cross-validation needs them
-        var etnActual = false;
-        if (hasFss6)
-        {
-            ct.ThrowIfCancellationRequested();
-            etnActual = await RunEtnCrossValidateAsync(index, decryptedFragments,
-                fileFingerprint, ct).ConfigureAwait(false);
+            streamingPath = true;
         }
 
-        // Strip ETN/FSS6.1 trailers
-        bool isFss61 = fssStrategy == Constants.FssLevel61;
-        if (isFss61)
+        if (!streamingPath)
         {
-            foreach (int idx in decryptedFragments.Keys.ToList())
-                decryptedFragments[idx] = StripAnyTrailer(decryptedFragments[idx]);
-        }
-        else
-        {
-            var etn = (Fss6Etn)_fss.GetStrategy(Constants.FssLevel6);
-            foreach (int idx in decryptedFragments.Keys.ToList())
-                decryptedFragments[idx] = etn.Strip(decryptedFragments[idx]);
-        }
+            Debug.WriteLine("  Falling back to dictionary-based restore (recovery or missing fragments)");
 
-        if (allowFssRecovery)
-        {
-            var recoveryResult = await _recoveryExecutor.ExecuteRecoveryAsync(
-                index, decryptedFragments, _metadata, skipVerification: etnActual).ConfigureAwait(false);
+            var decryptedFragments = await DownloadAndDecryptFragmentsAsync(
+                filePrefix, fragmentCount, fileFingerprint, progress, ct, index).ConfigureAwait(false);
 
-            foreach (var kvp in recoveryResult.RecoveredFragments)
-                decryptedFragments[kvp.Key] = kvp.Value;
-
-            var stillMissing = new List<int>();
-            for (int i = 0; i < fragmentCount; i++)
-                if (!decryptedFragments.ContainsKey(i)) stillMissing.Add(i);
-
-            if (stillMissing.Count > 0)
+            // ETN cross-validation (only if BM data available in the Index)
+            // Must run BEFORE stripping trailers, as cross-validation needs them
+            var etnActual = false;
+            if (hasFss6)
             {
-                Debug.WriteLine($"  Restore failed: {stillMissing.Count} fragments still missing");
-                return false;
+                ct.ThrowIfCancellationRequested();
+                etnActual = await RunEtnCrossValidateAsync(index, decryptedFragments,
+                    fileFingerprint, ct).ConfigureAwait(false);
+            }
+
+            // Strip ETN/FSS6.1 trailers
+            bool isFss61 = fssStrategy == Constants.FssLevel61;
+            if (isFss61)
+            {
+                foreach (int idx in decryptedFragments.Keys.ToList())
+                    decryptedFragments[idx] = StripAnyTrailer(decryptedFragments[idx]);
+            }
+            else
+            {
+                var etn = (Fss6Etn)_fss.GetStrategy(Constants.FssLevel6);
+                foreach (int idx in decryptedFragments.Keys.ToList())
+                    decryptedFragments[idx] = etn.Strip(decryptedFragments[idx]);
+            }
+
+            if (allowFssRecovery)
+            {
+                var recoveryResult = await _recoveryExecutor.ExecuteRecoveryAsync(
+                    index, decryptedFragments, _metadata, skipVerification: etnActual).ConfigureAwait(false);
+                foreach (var kvp in recoveryResult.RecoveredFragments)
+                    decryptedFragments[kvp.Key] = kvp.Value;
+                var stillMissing = new List<int>();
+                for (int i = 0; i < fragmentCount; i++)
+                    if (!decryptedFragments.ContainsKey(i)) stillMissing.Add(i);
+                if (stillMissing.Count > 0)
+                {
+                    Debug.WriteLine($"  Restore failed: {stillMissing.Count} fragments still missing");
+                    return false;
+                }
+            }
+            else
+            {
+                var missing = new List<int>();
+                for (int i = 0; i < fragmentCount; i++)
+                    if (!decryptedFragments.ContainsKey(i)) missing.Add(i);
+                if (missing.Count > 0)
+                {
+                    Debug.WriteLine($"  Restore failed: {missing.Count} fragments missing (recovery disabled)");
+                    return false;
+                }
+            }
+
+            int origCount2 = originalCount ?? fragmentCount;
+            StripFssEncodingToStream(decryptedFragments, fssStrategy, originalSizes, origCount2, outputPath);
+        }
+
+        // Decompress if the backup was compressed
+        try
+        {
+            if (index.Compression == Constants.CompressionLz4)
+            {
+                byte[] onDisk = File.ReadAllBytes(outputPath);
+                byte[] decompressed = RDRF.Core.Compression.Compressor.Decompress(onDisk, index.Compression);
+                File.WriteAllBytes(outputPath, decompressed);
             }
         }
-        else
+        catch (Exception ex)
         {
-            var missing = new List<int>();
-            for (int i = 0; i < fragmentCount; i++)
-                if (!decryptedFragments.ContainsKey(i)) missing.Add(i);
-
-            if (missing.Count > 0)
-            {
-                Debug.WriteLine($"  Restore failed: {missing.Count} fragments missing (recovery disabled)");
-                return false;
-            }
+            Debug.WriteLine($"  Decompression failed: {ex.Message}");
+            if (File.Exists(outputPath)) File.Delete(outputPath);
+            return false;
         }
-
-        int origCount = originalCount ?? fragmentCount;
-        StripFssEncodingToStream(decryptedFragments, fssStrategy, originalSizes, origCount, outputPath);
 
         string restoredHash = IntegrityChecker.HashFile(outputPath);
         bool valid = IntegrityChecker.VerifyHash(restoredHash, index.OriginalHash);

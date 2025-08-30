@@ -47,6 +47,9 @@ public static class Constants
     public const string FssLevel6 = "FSS6";
     public const string FssLevel61 = "FSS6.1";
 
+    // Compression
+    public const string CompressionLz4 = "lz4";
+
     public static readonly HashSet<string> FssLevels = new()
     {
         FssLevel1, FssLevel2, FssLevel2R, FssLevel3,
