@@ -69,6 +69,7 @@ public static class IndexManager
         WriteField(writer, "fragment_hashes", index.FragmentHashes);
         WriteField(writer, "original_hash", index.OriginalHash);
         WriteField(writer, "fss_strategy", index.FssStrategy);
+        WriteField(writer, "compression", index.Compression);
         WriteFssParams(writer, index.FssParams);
         WriteField(writer, "fss6_fragment_block_maps", index.Fss6FragmentBlockMaps);
         WriteField(writer, "fss6_rc_block_map", index.Fss6RcBlockMap);
@@ -106,6 +107,7 @@ public static class IndexManager
                 case "fragment_hashes":             index.FragmentHashes = ReadStringList(reader); break;
                 case "original_hash":               index.OriginalHash = reader.ReadTextString(); break;
                 case "fss_strategy":                index.FssStrategy = reader.ReadTextString(); break;
+                case "compression":                  index.Compression = reader.ReadTextString(); break;
                 case "fss_params":                  index.FssParams = ReadFssParams(reader); break;
                 case "fss6_fragment_block_maps":    index.Fss6FragmentBlockMaps = ReadNestedStringList(reader); break;
                 case "fss6_rc_block_map":           index.Fss6RcBlockMap = ReadStringList(reader); break;
@@ -530,6 +532,7 @@ public class RdrfIndex
     public List<string> FragmentHashes { get; set; } = new();
     public string OriginalHash { get; set; } = string.Empty;
     public string FssStrategy { get; set; } = "FSS1";
+    public string? Compression { get; set; }
     public Dictionary<string, object>? FssParams { get; set; }
     public List<List<string>>? Fss6FragmentBlockMaps { get; set; }
     public List<string>? Fss6RcBlockMap { get; set; }

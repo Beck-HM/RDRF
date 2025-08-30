@@ -110,7 +110,7 @@ private static async Task<string> IncrementalBackupAsync(
         return prevFingerprint;
     }
 
-    // Compute diff for display
+    // Compute diff for display (on uncompressed data)
     byte[] oldData = ReadDecryptedOriginal(storage, prevFingerprint, password);
     var diffResult = new DiffEngine().ComputeDiff(oldData, newData);
 
@@ -124,17 +124,21 @@ private static async Task<string> IncrementalBackupAsync(
         }
     };
 
-    // Split new file into raw fragments
+    // Compress data before splitting into fragments
+    byte[] compressedData = RDRF.Core.Compression.Compressor.Compress(newData, Constants.CompressionLz4);
+    bool dataCompressed = compressedData.Length < newData.Length;
+
+    // Split compressed data into raw fragments
     var rawFragments = new List<byte[]>();
-    for (int off = 0; off < newData.Length; off += fragSize)
+    for (int off = 0; off < compressedData.Length; off += fragSize)
     {
-        int len = Math.Min(fragSize, newData.Length - off);
+        int len = Math.Min(fragSize, compressedData.Length - off);
         byte[] frag = new byte[len];
-        Buffer.BlockCopy(newData, off, frag, 0, len);
+        Buffer.BlockCopy(compressedData, off, frag, 0, len);
         rawFragments.Add(frag);
     }
 
-    // Compute raw fragment hashes
+    // Compute raw fragment hashes (on compressed data)
     var newRawHashes = new List<byte[]>(rawFragments.Count);
     foreach (var frag in rawFragments)
         newRawHashes.Add(System.IO.Hashing.XxHash128.Hash(frag.AsSpan()));
