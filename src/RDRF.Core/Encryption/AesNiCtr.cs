@@ -168,35 +168,108 @@ public static class AesNiCtr
         return state;
     }
 
-    // ── Core AES-NI CTR Loop (4-way interleaved) ──
+    // ── Core AES-NI CTR Loop (8-block batched, round-by-round interleaving) ──
 
     private static void CtrCryptCoreAesNi(ReadOnlySpan<byte> src, Span<byte> dst,
         Vector128<byte>[] rk, ref Vector128<byte> counter)
     {
         int i = 0;
+        const int B = 8;
 
-        for (; i + 64 <= src.Length; i += 64)
+        // 8-block batched: process 128 bytes per iteration with round-by-round interleaving
+        for (; i + B * 16 <= src.Length; i += B * 16)
         {
+            // Phase 1: generate B counters
             var c0 = counter; counter = IncrementCounter(counter);
             var c1 = counter; counter = IncrementCounter(counter);
             var c2 = counter; counter = IncrementCounter(counter);
             var c3 = counter; counter = IncrementCounter(counter);
+            var c4 = counter; counter = IncrementCounter(counter);
+            var c5 = counter; counter = IncrementCounter(counter);
+            var c6 = counter; counter = IncrementCounter(counter);
+            var c7 = counter; counter = IncrementCounter(counter);
 
-            var k0 = AesEncryptBlock(c0, rk);
-            var k1 = AesEncryptBlock(c1, rk);
-            var k2 = AesEncryptBlock(c2, rk);
-            var k3 = AesEncryptBlock(c3, rk);
+            // Phase 2: AES encrypt all B blocks, round by round (interleaved)
+            var s0 = Vector128.Xor(c0, rk[0]);
+            var s1 = Vector128.Xor(c1, rk[0]);
+            var s2 = Vector128.Xor(c2, rk[0]);
+            var s3 = Vector128.Xor(c3, rk[0]);
+            var s4 = Vector128.Xor(c4, rk[0]);
+            var s5 = Vector128.Xor(c5, rk[0]);
+            var s6 = Vector128.Xor(c6, rk[0]);
+            var s7 = Vector128.Xor(c7, rk[0]);
 
-            ref var s0 = ref MemoryMarshal.GetReference(src.Slice(i));
-            Vector128.Xor(k0, Vector128.LoadUnsafe(ref s0)).CopyTo(dst.Slice(i));
-            ref var s1 = ref MemoryMarshal.GetReference(src.Slice(i + 16));
-            Vector128.Xor(k1, Vector128.LoadUnsafe(ref s1)).CopyTo(dst.Slice(i + 16));
-            ref var s2 = ref MemoryMarshal.GetReference(src.Slice(i + 32));
-            Vector128.Xor(k2, Vector128.LoadUnsafe(ref s2)).CopyTo(dst.Slice(i + 32));
-            ref var s3 = ref MemoryMarshal.GetReference(src.Slice(i + 48));
-            Vector128.Xor(k3, Vector128.LoadUnsafe(ref s3)).CopyTo(dst.Slice(i + 48));
+            // Rounds 1-13 with Aes.Encrypt
+            for (int r = 1; r <= 13; r++)
+            {
+                var rk_r = rk[r];
+                s0 = Aes.Encrypt(s0, rk_r);
+                s1 = Aes.Encrypt(s1, rk_r);
+                s2 = Aes.Encrypt(s2, rk_r);
+                s3 = Aes.Encrypt(s3, rk_r);
+                s4 = Aes.Encrypt(s4, rk_r);
+                s5 = Aes.Encrypt(s5, rk_r);
+                s6 = Aes.Encrypt(s6, rk_r);
+                s7 = Aes.Encrypt(s7, rk_r);
+            }
+
+            // Round 14 (Aes.EncryptLast)
+            s0 = Aes.EncryptLast(s0, rk[14]);
+            s1 = Aes.EncryptLast(s1, rk[14]);
+            s2 = Aes.EncryptLast(s2, rk[14]);
+            s3 = Aes.EncryptLast(s3, rk[14]);
+            s4 = Aes.EncryptLast(s4, rk[14]);
+            s5 = Aes.EncryptLast(s5, rk[14]);
+            s6 = Aes.EncryptLast(s6, rk[14]);
+            s7 = Aes.EncryptLast(s7, rk[14]);
+
+            // Phase 3: XOR with data
+            if (Avx2.IsSupported)
+            {
+                // 256-bit XOR: process 32 bytes at a time
+                ref var d0 = ref MemoryMarshal.GetReference(src.Slice(i));
+                var k01 = Vector256.Create(s0, s1);
+                var d01 = Vector256.LoadUnsafe(ref d0);
+                Avx2.Xor(k01, d01).CopyTo(dst.Slice(i));
+
+                ref var d2 = ref MemoryMarshal.GetReference(src.Slice(i + 32));
+                var k23 = Vector256.Create(s2, s3);
+                var d23 = Vector256.LoadUnsafe(ref d2);
+                Avx2.Xor(k23, d23).CopyTo(dst.Slice(i + 32));
+
+                ref var d4 = ref MemoryMarshal.GetReference(src.Slice(i + 64));
+                var k45 = Vector256.Create(s4, s5);
+                var d45 = Vector256.LoadUnsafe(ref d4);
+                Avx2.Xor(k45, d45).CopyTo(dst.Slice(i + 64));
+
+                ref var d6 = ref MemoryMarshal.GetReference(src.Slice(i + 96));
+                var k67 = Vector256.Create(s6, s7);
+                var d67 = Vector256.LoadUnsafe(ref d6);
+                Avx2.Xor(k67, d67).CopyTo(dst.Slice(i + 96));
+            }
+            else
+            {
+                // 128-bit XOR fallback
+                ref var d0 = ref MemoryMarshal.GetReference(src.Slice(i));
+                Vector128.Xor(s0, Vector128.LoadUnsafe(ref d0)).CopyTo(dst.Slice(i));
+                ref var d1 = ref MemoryMarshal.GetReference(src.Slice(i + 16));
+                Vector128.Xor(s1, Vector128.LoadUnsafe(ref d1)).CopyTo(dst.Slice(i + 16));
+                ref var d2 = ref MemoryMarshal.GetReference(src.Slice(i + 32));
+                Vector128.Xor(s2, Vector128.LoadUnsafe(ref d2)).CopyTo(dst.Slice(i + 32));
+                ref var d3 = ref MemoryMarshal.GetReference(src.Slice(i + 48));
+                Vector128.Xor(s3, Vector128.LoadUnsafe(ref d3)).CopyTo(dst.Slice(i + 48));
+                ref var d4 = ref MemoryMarshal.GetReference(src.Slice(i + 64));
+                Vector128.Xor(s4, Vector128.LoadUnsafe(ref d4)).CopyTo(dst.Slice(i + 64));
+                ref var d5 = ref MemoryMarshal.GetReference(src.Slice(i + 80));
+                Vector128.Xor(s5, Vector128.LoadUnsafe(ref d5)).CopyTo(dst.Slice(i + 80));
+                ref var d6 = ref MemoryMarshal.GetReference(src.Slice(i + 96));
+                Vector128.Xor(s6, Vector128.LoadUnsafe(ref d6)).CopyTo(dst.Slice(i + 96));
+                ref var d7 = ref MemoryMarshal.GetReference(src.Slice(i + 112));
+                Vector128.Xor(s7, Vector128.LoadUnsafe(ref d7)).CopyTo(dst.Slice(i + 112));
+            }
         }
 
+        // Remaining full blocks (< 8 blocks)
         for (; i + 16 <= src.Length; i += 16)
         {
             var keystream = AesEncryptBlock(counter, rk);
@@ -205,6 +278,7 @@ public static class AesNiCtr
             Vector128.Xor(keystream, Vector128.LoadUnsafe(ref s)).CopyTo(dst.Slice(i));
         }
 
+        // Tail (< 16 bytes)
         if (i < src.Length)
         {
             var keystream = AesEncryptBlock(counter, rk);
