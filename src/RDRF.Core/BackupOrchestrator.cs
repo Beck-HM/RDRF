@@ -193,26 +193,21 @@ public class BackupOrchestrator : IDisposable
 
         string filePrefix = customName ?? fileFingerprint;
 
-        var fragmentHashes = new List<string>(fragments.Count);
-        for (int i = 0; i < fragments.Count; i++)
+        var fragmentHashes = new string[fragments.Count];
+        var nonces = new string[fragments.Count];
+        Parallel.For(0, fragments.Count, i =>
         {
-            if ((i & 3) == 0) cancellationToken.ThrowIfCancellationRequested();
-            fragmentHashes.Add(IntegrityChecker.HashBytes(fragments[i]));
-        }
-
-        var nonces = new List<string>(fragments.Count);
-        for (int i = 0; i < fragments.Count; i++)
-        {
-            byte[] n = RandomNumberGenerator.GetBytes(Constants.NonceLength);
-            nonces.Add(Convert.ToBase64String(n));
-        }
+            cancellationToken.ThrowIfCancellationRequested();
+            fragmentHashes[i] = IntegrityChecker.HashBytes(fragments[i]);
+            nonces[i] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(Constants.NonceLength));
+        });
 
         var embeddedIndex = IndexManager.BuildIndex(
             fileFingerprint: fileFingerprint,
             originalFilename: filename,
             originalSize: fileSize,
-            fragmentHashes: fragmentHashes,
-            fragmentNonces: nonces,
+            fragmentHashes: fragmentHashes.ToList(),
+            fragmentNonces: nonces.ToList(),
             originalHash: originalHash,
             fssStrategy: plan.EffectivePrimary,
             originalFragmentSizes: originalFragmentSizes,
@@ -258,71 +253,80 @@ public class BackupOrchestrator : IDisposable
                 var indexObj = IndexManager.DeserializeIndex(serializedIndex);
                 int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
 
-                // A: Index blocks
-                var indexBlocks = SplitToBlocks(serializedIndex, bs);
-                if (indexBlocks.Length > 0)
+                // A/B/C: parallel FSS6.1 three-node repair generation
+                var taskA = Task.Run(() =>
                 {
-                    var (sym, seed) = LtCode.Encode(indexBlocks, indexBlocks.Length, bs);
-                    rcFile.RepairA = new Fss61RepairData
+                    var ib = SplitToBlocks(serializedIndex, bs);
+                    if (ib.Length > 0)
                     {
-                        Seed = seed,
-                        BlockCount = indexBlocks.Length,
-                        BlockSize = bs,
-                        Data = FlattenSymbols(sym, bs),
-                    };
-                }
-
-                // B: Fragment blocks (all fragments combined, trailers stripped)
-                var fragBlocks = new List<byte[]>();
-                foreach (var frag in fragments)
-                {
-                    var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
-                    for (int off = 0; off < rawData.Length; off += bs)
-                    {
-                        int len = Math.Min(bs, rawData.Length - off);
-                        byte[] block = new byte[bs];
-                        Buffer.BlockCopy(rawData, off, block, 0, len);
-                        fragBlocks.Add(block);
+                        var (sym, seed) = LtCode.Encode(ib, ib.Length, bs);
+                        return new Fss61RepairData
+                        {
+                            Seed = seed, BlockCount = ib.Length, BlockSize = bs,
+                            Data = FlattenSymbols(sym, bs),
+                        };
                     }
-                }
-                if (fragBlocks.Count > 0)
-                {
-                    var allFrags = fragBlocks.ToArray();
-                    var (sym, seed) = LtCode.Encode(allFrags, allFrags.Length, bs);
-                    var repairB = new Fss61RepairData
-                    {
-                        Seed = seed,
-                        BlockCount = allFrags.Length,
-                        BlockSize = bs,
-                        Data = FlattenSymbols(sym, bs),
-                    };
-                    rcFile.RepairB = repairB;
-                    indexObj.Fss61RepairB = repairB;
-                }
+                    return null;
+                });
 
-                // C: RC blocks
-                var rcBlocks = SplitToBlocks(rcBytes, bs);
-                if (rcBlocks.Length > 0)
+                var taskB = Task.Run(() =>
                 {
-                    var (sym, seed) = LtCode.Encode(rcBlocks, rcBlocks.Length, bs);
-                    indexObj.Fss61RepairC = new Fss61RepairData
+                    var fb = new List<byte[]>();
+                    foreach (var frag in fragments)
                     {
-                        Seed = seed,
-                        BlockCount = rcBlocks.Length,
-                        BlockSize = bs,
-                        Data = FlattenSymbols(sym, bs),
-                    };
-                }
+                        var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
+                        for (int off = 0; off < rawData.Length; off += bs)
+                        {
+                            int len = Math.Min(bs, rawData.Length - off);
+                            byte[] blk = new byte[bs];
+                            Buffer.BlockCopy(rawData, off, blk, 0, len);
+                            fb.Add(blk);
+                        }
+                    }
+                    if (fb.Count > 0)
+                    {
+                        var allFrags = fb.ToArray();
+                        var (sym, seed) = LtCode.Encode(allFrags, allFrags.Length, bs);
+                        return new Fss61RepairData
+                        {
+                            Seed = seed, BlockCount = allFrags.Length, BlockSize = bs,
+                            Data = FlattenSymbols(sym, bs),
+                        };
+                    }
+                    return null;
+                });
 
-                if (rcFile.RepairA != null && indexObj.Fss61RepairC != null)
+                var taskC = Task.Run(() =>
                 {
-                    // Replace ETN trailer on each fragment with FSS6.1 repair trailer
+                    var rb = SplitToBlocks(rcBytes, bs);
+                    if (rb.Length > 0)
+                    {
+                        var (sym, seed) = LtCode.Encode(rb, rb.Length, bs);
+                        return new Fss61RepairData
+                        {
+                            Seed = seed, BlockCount = rb.Length, BlockSize = bs,
+                            Data = FlattenSymbols(sym, bs),
+                        };
+                    }
+                    return null;
+                });
+
+                var repairA = await taskA.ConfigureAwait(false);
+                var repairB = await taskB.ConfigureAwait(false);
+                var repairC = await taskC.ConfigureAwait(false);
+
+                if (repairA != null) rcFile.RepairA = repairA;
+                if (repairB != null) { rcFile.RepairB = repairB; indexObj.Fss61RepairB = repairB; }
+                if (repairC != null) indexObj.Fss61RepairC = repairC;
+
+                // D: replace trailers (depends on A + C)
+                if (repairA != null && repairC != null)
+                {
                     string fp = filePrefix ?? fileFingerprint;
                     for (int i = 0; i < fragments.Count; i++)
                     {
                         var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(fragments[i]);
-                        fragments[i] = Fss61RepairTrailer.Build(rawData, fp, fp,
-                            rcFile.RepairA, indexObj.Fss61RepairC);
+                        fragments[i] = Fss61RepairTrailer.Build(rawData, fp, fp, repairA, repairC);
                     }
                 }
 
@@ -337,30 +341,20 @@ public class BackupOrchestrator : IDisposable
         byte[] embeddedIndexBytes = Fss6Etn.StripEtnFieldsFromIndexJson(serializedIndex);
 
         long totalBytes = fragments.Sum(f => f.Length);
-        long processedBytes = 0;
 
-        for (int i = 0; i < fragments.Count; i++)
-        {
-            if ((i & 3) == 0) cancellationToken.ThrowIfCancellationRequested();
-
-            byte[] fileData = FragmentFileHeader.EncryptWithEmbeddedIndex(
-                fragments[i], embeddedIndexBytes, _aesKey, _preDerived ? null : _salt);
-
-            string fname = Frags.FragmentFilename(filePrefix, i);
-            int rawLen = fragments[i].Length;
-            await _storage.WriteFragmentAsync(fname, fileData, cancellationToken).ConfigureAwait(false);
-            fragments[i] = null!;
-            processedBytes += rawLen;
-
-            progress?.Report(new RdrfProgressReport
+        // Parallel encrypt + write
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, fragments.Count),
+            new ParallelOptions { MaxDegreeOfParallelism = Constants.DefaultParallelism },
+            async (i, ct) =>
             {
-                Stage = "Encrypting",
-                CurrentItem = i + 1,
-                TotalItems = fragments.Count,
-                CurrentBytes = processedBytes,
-                TotalBytes = totalBytes
+                ct.ThrowIfCancellationRequested();
+                byte[] fileData = FragmentFileHeader.EncryptWithEmbeddedIndex(
+                    fragments[i], embeddedIndexBytes, _aesKey, _preDerived ? null : _salt);
+                string fname = Frags.FragmentFilename(filePrefix, i);
+                await _storage.WriteFragmentAsync(fname, fileData, ct).ConfigureAwait(false);
+                fragments[i] = null!;
             });
-        }
 
         // Reuse the serialized index as the standalone index (avoids a second BuildIndex)
         var standaloneIndex = IndexManager.DeserializeIndex(serializedIndex);
@@ -393,7 +387,7 @@ public class BackupOrchestrator : IDisposable
             originalSize: fileSize,
             originalHash: originalHash,
             fssStrategy: fssStrategy,
-            fragmentHashes: fragmentHashes);
+            fragmentHashes: fragmentHashes.ToList());
 
         Debug.WriteLine($"Backup complete!");
         return fileFingerprint;

@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Threading.Channels;
 using System.Security.Cryptography;
 using System.Text.Json;
 using RDRF.Core.Compression;
@@ -255,19 +257,15 @@ public class RestoreOrchestrator : IDisposable
                     fileFingerprint, ct).ConfigureAwait(false);
             }
 
-            // Strip ETN/FSS6.1 trailers
+            // Strip ETN/FSS6.1 trailers (parallel)
             bool isFss61 = fssStrategy == Constants.FssLevel61;
-            if (isFss61)
+            var keys = decryptedFragments.Keys.ToList();
+            Parallel.ForEach(keys, idx =>
             {
-                foreach (int idx in decryptedFragments.Keys.ToList())
-                    decryptedFragments[idx] = StripAnyTrailer(decryptedFragments[idx]);
-            }
-            else
-            {
-                var etn = (Fss6Etn)_fss.GetStrategy(Constants.FssLevel6);
-                foreach (int idx in decryptedFragments.Keys.ToList())
-                    decryptedFragments[idx] = etn.Strip(decryptedFragments[idx]);
-            }
+                decryptedFragments[idx] = isFss61
+                    ? StripAnyTrailer(decryptedFragments[idx])
+                    : ((Fss6Etn)_fss.GetStrategy(Constants.FssLevel6)).Strip(decryptedFragments[idx]);
+            });
 
             if (allowFssRecovery)
             {
@@ -350,61 +348,52 @@ public class RestoreOrchestrator : IDisposable
         IProgress<RdrfProgressReport>? progress, CancellationToken ct,
         RdrfIndex? index = null)
     {
-        var decryptedFragments = new Dictionary<int, byte[]>();
-        long totalReadBytes = 0;
-        long totalSize = fragmentCount * 1024L * 1024L;
-
+        var result = new ConcurrentDictionary<int, byte[]>();
         int decryptErrors = 0;
-        for (int i = 0; i < fragmentCount; i++)
-        {
-            ct.ThrowIfCancellationRequested();
-            try
-            {
-                string sourceFp = fileFingerprint;
-                string sourcePrefix = filePrefix;
-                byte[] key = _aesKey;
 
-                // Check for cross-version fragment reference
-                if (index?.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, fragmentCount),
+            new ParallelOptions { MaxDegreeOfParallelism = Constants.DefaultParallelism },
+            async (i, ct2) =>
+            {
+                ct2.ThrowIfCancellationRequested();
+                try
                 {
-                    sourceFp = index.Fragments[i].SourceVersion;
-                    sourcePrefix = sourceFp;
+                    string sourceFp = fileFingerprint;
+                    string sourcePrefix = filePrefix;
+                    byte[] key = _aesKey;
 
-                    // Derive AES key from source version's salt (first 20 bytes of encrypted index)
-                    byte[] sourceIndexBytes = await _storage.ReadIndexAsync(sourceFp, ct).ConfigureAwait(false);
-                    byte[] sourceSalt = new byte[Constants.SaltPrefixLength];
-                    Buffer.BlockCopy(sourceIndexBytes, 0, sourceSalt, 0, Constants.SaltPrefixLength);
-                    key = EncryptionLayer.DeriveKey(_rcCode, sourceSalt);
+                    if (index?.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
+                    {
+                        sourceFp = index.Fragments[i].SourceVersion;
+                        sourcePrefix = sourceFp;
+                        byte[] sourceIndexBytes = await _storage.ReadIndexAsync(sourceFp, ct2)
+                            .ConfigureAwait(false);
+                        byte[] sourceSalt = new byte[Constants.SaltPrefixLength];
+                        Buffer.BlockCopy(sourceIndexBytes, 0, sourceSalt, 0, Constants.SaltPrefixLength);
+                        key = EncryptionLayer.DeriveKey(_rcCode, sourceSalt);
+                    }
+
+                    string fname = Frags.FragmentFilename(sourcePrefix, i);
+                    byte[] encrypted = await _storage.ReadFragmentAsync(fname, ct2)
+                        .ConfigureAwait(false);
+                    byte[] raw = EncryptionLayer.DecryptAndStripFragment(encrypted, key);
+                    result[i] = raw;
                 }
-
-                string fname = Frags.FragmentFilename(sourcePrefix, i);
-                byte[] encrypted = await _storage.ReadFragmentAsync(fname, ct).ConfigureAwait(false);
-                byte[] raw = EncryptionLayer.DecryptAndStripFragment(encrypted, key);
-
-                decryptedFragments[i] = raw;
-                totalReadBytes += raw.Length;
-            }
-            catch (CryptographicException ex)
-            {
-                Debug.WriteLine($"Fragment {i} decryption failed: {ex.Message}");
-                decryptErrors++;
-            }
-            catch { decryptErrors++; }
-
-            progress?.Report(new RdrfProgressReport
-            {
-                Stage = "Decrypting",
-                CurrentItem = i + 1,
-                TotalItems = fragmentCount,
-                CurrentBytes = totalReadBytes,
-                TotalBytes = totalSize
+                catch (CryptographicException)
+                {
+                    Interlocked.Increment(ref decryptErrors);
+                }
+                catch
+                {
+                    Interlocked.Increment(ref decryptErrors);
+                }
             });
-        }
 
-        if (decryptErrors > 0 && decryptedFragments.Count == 0)
+        if (decryptErrors > 0 && result.Count == 0)
             throw new CryptographicException("All fragments failed to decrypt.");
 
-        return decryptedFragments;
+        return new Dictionary<int, byte[]>(result);
     }
 
     // ── ETN Cross-Validate ──
@@ -688,24 +677,36 @@ public class RestoreOrchestrator : IDisposable
             using var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
             using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
-            for (int i = 0; i < fragmentCount; i++)
+            // Two-stage pipeline: Producer (read+decrypt) → Consumer (strip+decode+write+hash)
+            var channel = Channel.CreateBounded<(int idx, byte[] data)>(4);
+
+            var producer = Task.Run(async () =>
             {
-                ct.ThrowIfCancellationRequested();
+                for (int i = 0; i < fragmentCount; i++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    byte[] encrypted = await _storage.ReadFragmentAsync(
+                        Frags.FragmentFilename(filePrefix, i), ct).ConfigureAwait(false);
+                    byte[] decrypted = EncryptionLayer.DecryptAndStripFragment(encrypted, _aesKey);
+                    if (etn != null)
+                        decrypted = etn.Strip(decrypted);
+                    await channel.Writer.WriteAsync((i, decrypted), ct).ConfigureAwait(false);
+                }
+                channel.Writer.Complete();
+            });
 
-                byte[] encrypted = await _storage.ReadFragmentAsync(
-                    Frags.FragmentFilename(filePrefix, i), ct).ConfigureAwait(false);
+            var consumer = Task.Run(async () =>
+            {
+                await foreach (var (idx, decrypted) in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+                {
+                    if (idx >= origCount) continue;
+                    byte[] original = strategy.StripSingle(decrypted, idx, index.OriginalFragmentSizes);
+                    output.Write(original, 0, original.Length);
+                    hasher.AppendData(original.AsSpan(0, original.Length));
+                }
+            });
 
-                byte[] decrypted = EncryptionLayer.DecryptAndStripFragment(encrypted, _aesKey);
-
-                if (etn != null)
-                    decrypted = etn.Strip(decrypted);
-
-                if (i >= origCount) continue;
-
-                byte[] original = strategy.StripSingle(decrypted, i, index.OriginalFragmentSizes);
-                output.Write(original, 0, original.Length);
-                hasher.AppendData(original.AsSpan(0, original.Length));
-            }
+            await Task.WhenAll(producer, consumer).ConfigureAwait(false);
 
             byte[] hashBytes = hasher.GetHashAndReset();
             string restoredHash = Convert.ToHexString(hashBytes).ToLowerInvariant();

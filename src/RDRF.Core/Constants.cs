@@ -50,6 +50,9 @@ public static class Constants
     // Compression
     public const string CompressionLz4 = "lz4";
 
+    // Parallelism
+    public const int DefaultParallelism = 4;
+
     public static readonly HashSet<string> FssLevels = new()
     {
         FssLevel1, FssLevel2, FssLevel2R, FssLevel3,
