@@ -1,3 +1,6 @@
+using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using System.Security.Cryptography;
 
 namespace RDRF.Core.FSS;
@@ -7,6 +10,47 @@ public static class LtCode
     public const int DefaultBlockSize = 256;
 
     private static readonly double[] DegreeProbs = { 0.10, 0.20, 0.20, 0.20, 0.15, 0.10, 0.04, 0.01 };
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void XorBlock(byte[] dest, byte[] src, int blockSize)
+    {
+        if (Avx2.IsSupported)
+        {
+            int i = 0;
+            for (; i + 32 <= blockSize; i += 32)
+            {
+                ref var d = ref dest[i];
+                ref var s = ref src[i];
+                var vd = Vector256.LoadUnsafe(ref d);
+                var vs = Vector256.LoadUnsafe(ref s);
+                Avx2.Xor(vd, vs).CopyTo(dest.AsSpan(i));
+            }
+            for (; i + 16 <= blockSize; i += 16)
+            {
+                ref var d = ref dest[i];
+                ref var s = ref src[i];
+                var vd = Vector128.LoadUnsafe(ref d);
+                var vs = Vector128.LoadUnsafe(ref s);
+                Vector128.Xor(vd, vs).CopyTo(dest.AsSpan(i));
+            }
+            for (; i < blockSize; i++)
+                dest[i] ^= src[i];
+        }
+        else
+        {
+            int i = 0;
+            for (; i + 16 <= blockSize; i += 16)
+            {
+                ref var d = ref dest[i];
+                ref var s = ref src[i];
+                var vd = Vector128.LoadUnsafe(ref d);
+                var vs = Vector128.LoadUnsafe(ref s);
+                Vector128.Xor(vd, vs).CopyTo(dest.AsSpan(i));
+            }
+            for (; i < blockSize; i++)
+                dest[i] ^= src[i];
+        }
+    }
 
     public static (List<byte[]> symbols, int seed) Encode(
         byte[][] allBlocks, int symbolCount, int blockSize)
@@ -31,10 +75,7 @@ public static class LtCode
 
             byte[] data = new byte[blockSize];
             foreach (int idx in idxSet)
-            {
-                for (int b = 0; b < blockSize; b++)
-                    data[b] ^= inter[idx][b];
-            }
+                XorBlock(data, inter[idx], blockSize);
             result.Add(data);
         }
 
@@ -99,8 +140,7 @@ public static class LtCode
             {
                 if (known[bi])
                 {
-                    for (int b = 0; b < blockSize; b++)
-                        sd[b] ^= inter[bi][b];
+                    XorBlock(sd, inter[bi], blockSize);
                     deg--;
                 }
             }
@@ -149,8 +189,7 @@ public static class LtCode
                 foreach (int si2 in symToBlock[target])
                 {
                     if (remainingDeg[si2] <= 1) continue;
-                    for (int b = 0; b < blockSize; b++)
-                        symData[si2][b] ^= inter[target][b];
+                    XorBlock(symData[si2], inter[target], blockSize);
                     remainingDeg[si2]--;
                     if (remainingDeg[si2] == 1)
                         queue.Enqueue(si2);
@@ -185,8 +224,7 @@ public static class LtCode
                     foreach (int si in symToBlock[nk])
                     {
                         if (remainingDeg[si] <= 1) continue;
-                        for (int b = 0; b < blockSize; b++)
-                            symData[si][b] ^= inter[nk][b];
+                        XorBlock(symData[si], inter[nk], blockSize);
                         remainingDeg[si]--;
                         if (remainingDeg[si] == 1)
                             queue.Enqueue(si);
