@@ -1,3 +1,5 @@
+using System.Threading.Tasks;
+
 namespace RDRF.Core.FSS;
 
 public class ReedSolomon
@@ -109,9 +111,9 @@ public class ReedSolomon
         byte[][] invA = InvertMatrix(A);
         if (invA == null) return false;
 
-        // Recover original data: data[c] = sum(invA[c][r] * shard[decodeIndices[r]])
+        // Recover original data in parallel: data[c] = sum(invA[c][r] * shard[decodeIndices[r]])
         byte[][] data = new byte[_dataShards][];
-        for (int c = 0; c < _dataShards; c++)
+        Parallel.For(0, _dataShards, c =>
         {
             data[c] = new byte[shardSize];
             for (int byteIdx = 0; byteIdx < shardSize; byteIdx++)
@@ -121,10 +123,10 @@ public class ReedSolomon
                     val ^= GfMul(invA[c][r], shards[decodeIndices[r]][byteIdx]);
                 data[c][byteIdx] = val;
             }
-        }
+        });
 
-        // Re-encode all erasures
-        foreach (int missingIdx in erasures)
+        // Re-encode all erasures in parallel
+        Parallel.ForEach(erasures, missingIdx =>
         {
             if (missingIdx < _dataShards)
             {
@@ -133,30 +135,28 @@ public class ReedSolomon
             else
             {
                 int p = missingIdx - _dataShards;
+                byte[] recovered = new byte[shardSize];
                 for (int byteIdx = 0; byteIdx < shardSize; byteIdx++)
                 {
                     byte val = 0;
                     int k = 0;
                     for (; k + 4 <= _dataShards; k += 4)
                     {
-                        byte c0 = _encodeMatrix[p, k];
-                        if (c0 != 0) val ^= GfMul(c0, data[k][byteIdx]);
-                        byte c1 = _encodeMatrix[p, k + 1];
-                        if (c1 != 0) val ^= GfMul(c1, data[k + 1][byteIdx]);
-                        byte c2 = _encodeMatrix[p, k + 2];
-                        if (c2 != 0) val ^= GfMul(c2, data[k + 2][byteIdx]);
-                        byte c3 = _encodeMatrix[p, k + 3];
-                        if (c3 != 0) val ^= GfMul(c3, data[k + 3][byteIdx]);
+                        byte c0 = _encodeMatrix[p, k]; if (c0 != 0) val ^= GfMul(c0, data[k][byteIdx]);
+                        byte c1 = _encodeMatrix[p, k + 1]; if (c1 != 0) val ^= GfMul(c1, data[k + 1][byteIdx]);
+                        byte c2 = _encodeMatrix[p, k + 2]; if (c2 != 0) val ^= GfMul(c2, data[k + 2][byteIdx]);
+                        byte c3 = _encodeMatrix[p, k + 3]; if (c3 != 0) val ^= GfMul(c3, data[k + 3][byteIdx]);
                     }
                     for (; k < _dataShards; k++)
                     {
                         byte c = _encodeMatrix[p, k];
                         if (c != 0) val ^= GfMul(c, data[k][byteIdx]);
                     }
-                    shards[missingIdx][byteIdx] = val;
+                    recovered[byteIdx] = val;
                 }
+                shards[missingIdx] = recovered;
             }
-        }
+        });
 
         return true;
     }

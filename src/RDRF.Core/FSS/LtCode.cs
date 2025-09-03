@@ -10,7 +10,20 @@ public static class LtCode
 {
     public const int DefaultBlockSize = 256;
 
-    private static readonly double[] DegreeProbs = { 0.10, 0.20, 0.20, 0.20, 0.15, 0.10, 0.04, 0.01 };
+    private static readonly sbyte[] DegreeMap = BuildDegreeMap();
+
+    private static sbyte[] BuildDegreeMap()
+    {
+        int[] thresholds = { 10, 30, 50, 70, 85, 95, 99, 100 };
+        var map = new sbyte[100];
+        int idx = 0;
+        for (int d = 0; d < thresholds.Length; d++)
+        {
+            int end = thresholds[d];
+            while (idx < end) map[idx++] = (sbyte)(d + 1);
+        }
+        return map;
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void XorBlock(byte[] dest, byte[] src, int blockSize)
@@ -258,16 +271,10 @@ public static class LtCode
         return (int)((XorShift64(ref state) >> 32) & 0x7FFFFFFF);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int SelectDegree(ref ulong state)
     {
         int v = NextPseudo(ref state);
-        double val = (v & 0x7FFFFFFF) / (double)0x7FFFFFFF;
-        double cum = 0;
-        for (int i = 0; i < DegreeProbs.Length; i++)
-        {
-            cum += DegreeProbs[i];
-            if (val < cum) return i + 1;
-        }
-        return DegreeProbs.Length;
+        return DegreeMap[(int)((v & 0x7FFFFFFF) % 100)];
     }
 }
