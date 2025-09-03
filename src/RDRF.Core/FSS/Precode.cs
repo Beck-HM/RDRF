@@ -1,3 +1,7 @@
+using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
+
 namespace RDRF.Core.FSS;
 
 public static class Precode
@@ -130,13 +134,47 @@ public static class Precode
         return (recovered, newSources);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void XorAssign(byte[] target, byte[] a, byte[] b, int len)
     {
-        for (int i = 0; i < len; i++) target[i] = (byte)(a[i] ^ b[i]);
+        int i = 0;
+        if (Avx2.IsSupported)
+        {
+            for (; i + 32 <= len; i += 32)
+            {
+                var va = Vector256.LoadUnsafe(ref a[i]);
+                var vb = Vector256.LoadUnsafe(ref b[i]);
+                Avx2.Xor(va, vb).CopyTo(target.AsSpan(i));
+            }
+        }
+        for (; i + 16 <= len; i += 16)
+        {
+            var va = Vector128.LoadUnsafe(ref a[i]);
+            var vb = Vector128.LoadUnsafe(ref b[i]);
+            Vector128.Xor(va, vb).CopyTo(target.AsSpan(i));
+        }
+        for (; i < len; i++) target[i] = (byte)(a[i] ^ b[i]);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void XorInto(byte[] target, byte[] src, int len)
     {
-        for (int i = 0; i < len; i++) target[i] ^= src[i];
+        int i = 0;
+        if (Avx2.IsSupported)
+        {
+            for (; i + 32 <= len; i += 32)
+            {
+                var vt = Vector256.LoadUnsafe(ref target[i]);
+                var vs = Vector256.LoadUnsafe(ref src[i]);
+                Avx2.Xor(vt, vs).CopyTo(target.AsSpan(i));
+            }
+        }
+        for (; i + 16 <= len; i += 16)
+        {
+            var vt = Vector128.LoadUnsafe(ref target[i]);
+            var vs = Vector128.LoadUnsafe(ref src[i]);
+            Vector128.Xor(vt, vs).CopyTo(target.AsSpan(i));
+        }
+        for (; i < len; i++) target[i] ^= src[i];
     }
 }

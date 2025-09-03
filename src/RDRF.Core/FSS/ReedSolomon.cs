@@ -5,6 +5,7 @@ public class ReedSolomon
     private readonly int _dataShards;
     private readonly int _parityShards;
     private readonly int _totalShards;
+    private readonly byte[,] _encodeMatrix;
 
     private static readonly byte[] ExpTable = new byte[512];
     private static readonly byte[] LogTable = new byte[256];
@@ -27,6 +28,12 @@ public class ReedSolomon
         _dataShards = dataShards;
         _parityShards = parityShards;
         _totalShards = dataShards + parityShards;
+
+        // Precompute encoding matrix: _encodeMatrix[p, k] = coefficient for data[k] in parity shard p
+        _encodeMatrix = new byte[parityShards, dataShards];
+        for (int p = 0; p < parityShards; p++)
+            for (int k = 0; k < dataShards; k++)
+                _encodeMatrix[p, k] = ExpTable[((p + 1) * k) % 255];
     }
 
     // ── Encode ──
@@ -34,14 +41,30 @@ public class ReedSolomon
     public byte[][] Encode(byte[][] shards)
     {
         int shardSize = shards[0].Length;
-        for (int i = _dataShards; i < _totalShards; i++)
+        for (int p = 0; p < _parityShards; p++)
         {
+            int i = _dataShards + p;
             shards[i] = new byte[shardSize];
             for (int j = 0; j < shardSize; j++)
             {
                 byte val = 0;
-                for (int k = 0; k < _dataShards; k++)
-                    val ^= GfMul(ExpTable[((i - _dataShards + 1) * k) % 255], shards[k][j]);
+                int k = 0;
+                for (; k + 4 <= _dataShards; k += 4)
+                {
+                    byte c0 = _encodeMatrix[p, k];
+                    if (c0 != 0) val ^= GfMul(c0, shards[k][j]);
+                    byte c1 = _encodeMatrix[p, k + 1];
+                    if (c1 != 0) val ^= GfMul(c1, shards[k + 1][j]);
+                    byte c2 = _encodeMatrix[p, k + 2];
+                    if (c2 != 0) val ^= GfMul(c2, shards[k + 2][j]);
+                    byte c3 = _encodeMatrix[p, k + 3];
+                    if (c3 != 0) val ^= GfMul(c3, shards[k + 3][j]);
+                }
+                for (; k < _dataShards; k++)
+                {
+                    byte c = _encodeMatrix[p, k];
+                    if (c != 0) val ^= GfMul(c, shards[k][j]);
+                }
                 shards[i][j] = val;
             }
         }
@@ -109,12 +132,27 @@ public class ReedSolomon
             }
             else
             {
-                int p = missingIdx - _dataShards + 1;
+                int p = missingIdx - _dataShards;
                 for (int byteIdx = 0; byteIdx < shardSize; byteIdx++)
                 {
                     byte val = 0;
-                    for (int k = 0; k < _dataShards; k++)
-                        val ^= GfMul(ExpTable[(p * k) % 255], data[k][byteIdx]);
+                    int k = 0;
+                    for (; k + 4 <= _dataShards; k += 4)
+                    {
+                        byte c0 = _encodeMatrix[p, k];
+                        if (c0 != 0) val ^= GfMul(c0, data[k][byteIdx]);
+                        byte c1 = _encodeMatrix[p, k + 1];
+                        if (c1 != 0) val ^= GfMul(c1, data[k + 1][byteIdx]);
+                        byte c2 = _encodeMatrix[p, k + 2];
+                        if (c2 != 0) val ^= GfMul(c2, data[k + 2][byteIdx]);
+                        byte c3 = _encodeMatrix[p, k + 3];
+                        if (c3 != 0) val ^= GfMul(c3, data[k + 3][byteIdx]);
+                    }
+                    for (; k < _dataShards; k++)
+                    {
+                        byte c = _encodeMatrix[p, k];
+                        if (c != 0) val ^= GfMul(c, data[k][byteIdx]);
+                    }
                     shards[missingIdx][byteIdx] = val;
                 }
             }
