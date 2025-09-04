@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.IO.Hashing;
 using System.Security.Cryptography;
@@ -145,34 +146,41 @@ public class BackupOrchestrator : IDisposable
         string originalHash;
         string fileFingerprint;
 
-        // Read entire file, compute SHA256 on original data
-        byte[] rawFileData = await File.ReadAllBytesAsync(filePath, cancellationToken).ConfigureAwait(false);
+        // Phase 1: Stream read + hash + compress into fragments
+        using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
+            FileShare.Read, 65536, FileOptions.SequentialScan))
         using (var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
         {
-            hasher.AppendData(rawFileData);
+            byte[] readBuf = ArrayPool<byte>.Shared.Rent(fragSize);
+            try
+            {
+                int read;
+                while ((read = await fs.ReadAsync(readBuf, 0, fragSize, cancellationToken).ConfigureAwait(false)) > 0)
+                {
+                    hasher.AppendData(readBuf.AsSpan(0, read));
+
+                    // Compress this fragment
+                    var fragData = readBuf.AsSpan(0, read).ToArray();
+                    byte[] compressed = RDRF.Core.Compression.Compressor.Compress(fragData, Constants.CompressionLz4);
+
+                    byte[] frag = new byte[compressed.Length];
+                    Buffer.BlockCopy(compressed, 0, frag, 0, compressed.Length);
+                    originalFragments.Add(frag);
+                }
+            }
+            finally { ArrayPool<byte>.Shared.Return(readBuf); }
+
             byte[] hashBytes = hasher.GetHashAndReset();
             fileFingerprint = Convert.ToHexString(hashBytes).ToLowerInvariant();
             originalHash = fileFingerprint;
         }
 
-        // LZ4 compress the original data before splitting
-        byte[] compressedData = RDRF.Core.Compression.Compressor.Compress(rawFileData, Constants.CompressionLz4);
-        bool isCompressed = compressedData.Length < rawFileData.Length;
-        string? compressionMethod = isCompressed ? Constants.CompressionLz4 : null;
-
-        // Split compressed (or original) data into fragments
-        for (int off = 0; off < compressedData.Length; off += fragSize)
-        {
-            int len = Math.Min(fragSize, compressedData.Length - off);
-            byte[] frag = new byte[len];
-            Buffer.BlockCopy(compressedData, off, frag, 0, len);
-            originalFragments.Add(frag);
-        }
-
+        bool isCompressed = originalFragments.Sum(f => f.Length) < fileSize;
+        string? compressionMethod = Constants.CompressionLz4;
         int originalFragmentCount = originalFragments.Count;
         var originalFragmentSizes = originalFragments.Select(f => f.Length).ToList();
 
-        Debug.WriteLine($"  Step 1: Compressed {fileSize:N0} -> {compressedData.Length:N0} bytes, {originalFragmentCount} fragments");
+        Debug.WriteLine($"  Step 1: Streamed {fileSize:N0} bytes -> {originalFragmentCount} fragments");
 
         var plan = _fsa.Compute(fssStrategy, auxiliaryStrategies);
         var fragments = new List<byte[]>(originalFragments);
@@ -342,19 +350,46 @@ public class BackupOrchestrator : IDisposable
 
         long totalBytes = fragments.Sum(f => f.Length);
 
-        // Parallel encrypt + write
-        await Parallel.ForEachAsync(
-            Enumerable.Range(0, fragments.Count),
-            new ParallelOptions { MaxDegreeOfParallelism = Constants.DefaultParallelism },
-            async (i, ct) =>
+        // Phase 3: Batch encrypt + write (8 fragments per batch)
+        const int BatchSize = 8;
+        var writeBatch = new List<(string path, byte[] data)>(BatchSize);
+
+        for (int i = 0; i < fragments.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            byte[] fileData = FragmentFileHeader.EncryptWithEmbeddedIndex(
+                fragments[i], embeddedIndexBytes, _aesKey, _preDerived ? null : _salt);
+            string fname = Frags.FragmentFilename(filePrefix, i);
+            writeBatch.Add((fname, fileData));
+            fragments[i] = null!;
+
+            if (writeBatch.Count >= BatchSize)
             {
-                ct.ThrowIfCancellationRequested();
-                byte[] fileData = FragmentFileHeader.EncryptWithEmbeddedIndex(
-                    fragments[i], embeddedIndexBytes, _aesKey, _preDerived ? null : _salt);
-                string fname = Frags.FragmentFilename(filePrefix, i);
-                await _storage.WriteFragmentAsync(fname, fileData, ct).ConfigureAwait(false);
-                fragments[i] = null!;
-            });
+                await Parallel.ForEachAsync(writeBatch, new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = Constants.DefaultParallelism,
+                    CancellationToken = cancellationToken
+                }, async (item, ct) =>
+                {
+                    await _storage.WriteFragmentAsync(item.path, item.data, ct).ConfigureAwait(false);
+                }).ConfigureAwait(false);
+                writeBatch.Clear();
+            }
+        }
+
+        // Flush remaining
+        if (writeBatch.Count > 0)
+        {
+            await Parallel.ForEachAsync(writeBatch, new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Constants.DefaultParallelism,
+                CancellationToken = cancellationToken
+            }, async (item, ct) =>
+            {
+                await _storage.WriteFragmentAsync(item.path, item.data, ct).ConfigureAwait(false);
+            }).ConfigureAwait(false);
+            writeBatch.Clear();
+        }
 
         // Reuse the serialized index as the standalone index (avoids a second BuildIndex)
         var standaloneIndex = IndexManager.DeserializeIndex(serializedIndex);
