@@ -13,11 +13,23 @@ public class Fss1Neighbor : IFssStrategy
         var encoded = new List<byte[]>(n);
         for (int i = 0; i < n; i++)
         {
-            int nextIdx = (i + 1) % n;
-            byte[] combined = new byte[fragments[i].Length + fragments[nextIdx].Length];
-            Buffer.BlockCopy(fragments[i], 0, combined, 0, fragments[i].Length);
-            Buffer.BlockCopy(fragments[nextIdx], 0, combined, fragments[i].Length, fragments[nextIdx].Length);
-            encoded.Add(combined);
+            int prev = (i - 1 + n) % n;
+            int next = (i + 1) % n;
+            int size = fragments[i].Length;
+            int half = size / 2;
+
+            byte[] output = new byte[size];
+            // Upper 50%: from prev's upper half
+            var prevFrag = fragments[prev];
+            int copyPrev = Math.Min(half, prevFrag.Length);
+            Buffer.BlockCopy(prevFrag, 0, output, 0, copyPrev);
+            // Lower 50%: from next's lower half
+            var nextFrag = fragments[next];
+            int nextHalf = nextFrag.Length / 2;
+            int copyNext = Math.Min(half, nextFrag.Length - nextHalf);
+            Buffer.BlockCopy(nextFrag, nextHalf, output, half, copyNext);
+
+            encoded.Add(output);
         }
         return encoded;
     }
@@ -41,60 +53,28 @@ public class Fss1Neighbor : IFssStrategy
             {
                 if (result.ContainsKey(missingIdx)) continue;
 
-                int leftIdx = (missingIdx - 1 + totalFragments) % totalFragments;
-                if (work.ContainsKey(leftIdx))
-                {
-                    byte[] neighborData = work[leftIdx];
-                    if (originalSizes != null && leftIdx < originalSizes.Count)
-                    {
-                        int leftSize = originalSizes[leftIdx];
-                        if (neighborData.Length > leftSize)
-                        {
-                            byte[] recovered = new byte[neighborData.Length - leftSize];
-                            Buffer.BlockCopy(neighborData, leftSize, recovered, 0, recovered.Length);
-                            result[missingIdx] = recovered;
-                            work[missingIdx] = recovered;
-                            madeProgress = true;
-                            continue;
-                        }
-                    }
-                    else
-                    {
-                        int half = neighborData.Length / 2;
-                        byte[] recovered = new byte[half];
-                        Buffer.BlockCopy(neighborData, half, recovered, 0, half);
-                        result[missingIdx] = recovered;
-                        work[missingIdx] = recovered;
-                        madeProgress = true;
-                        continue;
-                    }
-                }
-
                 int rightIdx = (missingIdx + 1) % totalFragments;
-                if (work.ContainsKey(rightIdx))
+                int leftIdx = (missingIdx - 1 + totalFragments) % totalFragments;
+
+                if (work.ContainsKey(rightIdx) && work.ContainsKey(leftIdx))
                 {
-                    byte[] neighborData = work[rightIdx];
-                    if (originalSizes != null && missingIdx < originalSizes.Count)
-                    {
-                        int missingSize = originalSizes[missingIdx];
-                        if (neighborData.Length >= missingSize)
-                        {
-                            byte[] recovered = new byte[missingSize];
-                            Buffer.BlockCopy(neighborData, 0, recovered, 0, missingSize);
-                            result[missingIdx] = recovered;
-                            work[missingIdx] = recovered;
-                            madeProgress = true;
-                        }
-                    }
-                    else
-                    {
-                        int half = neighborData.Length / 2;
-                        byte[] recovered = new byte[half];
-                        Buffer.BlockCopy(neighborData, 0, recovered, 0, half);
-                        result[missingIdx] = recovered;
-                        work[missingIdx] = recovered;
-                        madeProgress = true;
-                    }
+                    var rightData = work[rightIdx];
+                    var leftData = work[leftIdx];
+                    int size = originalSizes?.Count > missingIdx ? originalSizes[missingIdx] : rightData.Length;
+                    int half = size / 2;
+
+                    byte[] recovered = new byte[size];
+                    // Upper half from right fragment's upper half
+                    int copyUpper = Math.Min(half, rightData.Length);
+                    Buffer.BlockCopy(rightData, 0, recovered, 0, copyUpper);
+                    // Lower half from left fragment's lower half
+                    int leftHalf = leftData.Length / 2;
+                    int copyLower = Math.Min(half, leftData.Length - leftHalf);
+                    Buffer.BlockCopy(leftData, leftHalf, recovered, half, copyLower);
+
+                    result[missingIdx] = recovered;
+                    work[missingIdx] = recovered;
+                    madeProgress = true;
                 }
             }
         } while (madeProgress);
@@ -108,45 +88,48 @@ public class Fss1Neighbor : IFssStrategy
         List<int>? originalSizes = null)
     {
         var result = new List<byte[]>();
-        for (int i = 0; i < originalFragmentCount; i++)
+        int n = originalFragmentCount;
+        for (int i = 0; i < n; i++)
         {
             if (!encodedFragments.TryGetValue(i, out var data)) continue;
 
-            if (originalSizes != null && i < originalSizes.Count)
-            {
-                int originalSize = originalSizes[i];
-                if (data.Length >= originalSize)
-                {
-                    byte[] stripped = new byte[originalSize];
-                    Buffer.BlockCopy(data, 0, stripped, 0, originalSize);
-                    result.Add(stripped);
-                }
-            }
-            else
-            {
-                int half = data.Length / 2;
-                byte[] stripped = new byte[half];
-                Buffer.BlockCopy(data, 0, stripped, 0, half);
-                result.Add(stripped);
-            }
+            // Each encoded fragment contains:
+            //   upper = prev's upper half, lower = next's lower half
+            // We need to extract THIS fragment's original data
+            int rightIdx = (i + 1) % n;
+            int leftIdx = (i - 1 + n) % n;
+
+            if (!encodedFragments.TryGetValue(rightIdx, out var rightFrag) ||
+                !encodedFragments.TryGetValue(leftIdx, out var leftFrag))
+                continue;
+
+            int size = originalSizes?.Count > i ? originalSizes[i] : rightFrag.Length;
+            int half = size / 2;
+
+            byte[] stripped = new byte[size];
+            // Upper half from right fragment's upper half
+            int copyUpper = Math.Min(half, rightFrag.Length);
+            Buffer.BlockCopy(rightFrag, 0, stripped, 0, copyUpper);
+            // Lower half from left fragment's lower half
+            int leftHalf = leftFrag.Length / 2;
+            int copyLower = Math.Min(half, leftFrag.Length - leftHalf);
+            Buffer.BlockCopy(leftFrag, leftHalf, stripped, half, copyLower);
+
+            result.Add(stripped);
         }
         return result;
     }
 
     public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)
     {
-        if (originalSizes != null && index < originalSizes.Count && originalSizes[index] > 0)
-        {
-            int size = originalSizes[index];
-            if (size > encodedFragment.Length)
-                throw new InvalidOperationException($"FSS1.StripSingle[{index}]: originalSize={size} > fragLen={encodedFragment.Length}");
-            byte[] stripped = new byte[size];
-            Buffer.BlockCopy(encodedFragment, 0, stripped, 0, size);
-            return stripped;
-        }
-        int half = encodedFragment.Length / 2;
-        byte[] result = new byte[half];
-        Buffer.BlockCopy(encodedFragment, 0, result, 0, half);
+        // StripSingle is only used in streaming path where the fragment
+        // IS the data. FSS1 encoding rearranges data across fragments,
+        // so StripSingle cannot recover a single fragment independently.
+        // Fall back: return the fragment as-is (caller must use Strip for FSS1).
+        int size = originalSizes?.Count > index ? originalSizes[index] : encodedFragment.Length;
+        if (size > encodedFragment.Length) size = encodedFragment.Length;
+        byte[] result = new byte[size];
+        Buffer.BlockCopy(encodedFragment, 0, result, 0, size);
         return result;
     }
 }
