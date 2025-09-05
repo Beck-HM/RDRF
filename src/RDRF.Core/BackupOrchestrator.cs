@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics;
+using System.Threading.Channels;
 using System.IO.Hashing;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -142,60 +143,67 @@ public class BackupOrchestrator : IDisposable
         Debug.WriteLine($"Backing up: {filename} ({fileSize:N0} bytes)");
 
         int fragSize = fragmentSize > 0 ? fragmentSize : 1024 * 1024;
-        var originalFragments = new List<byte[]>();
+        var compressionMethod = Constants.CompressionLz4;
         string originalHash;
         string fileFingerprint;
 
-        // Phase 1: Stream read + hash + compress into fragments
-        using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
-            FileShare.Read, 65536, FileOptions.SequentialScan))
-        using (var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
+        // Phase 1: Async read + compress pipeline via Channel
+        var rawChannel = Channel.CreateBounded<byte[]>(4);
+        var plan = _fsa.Compute(fssStrategy, auxiliaryStrategies);
+
+        // Producer: read + hash + compress per fragment, returns SHA256
+        var hashTask = Task.Run(async () =>
         {
             byte[] readBuf = ArrayPool<byte>.Shared.Rent(fragSize);
             try
             {
+                using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
+                    FileShare.Read, 65536, FileOptions.SequentialScan);
+                using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+
                 int read;
-                while ((read = await fs.ReadAsync(readBuf, 0, fragSize, cancellationToken).ConfigureAwait(false)) > 0)
+                while ((read = await fs.ReadAsync(readBuf, 0, fragSize).ConfigureAwait(false)) > 0)
                 {
                     hasher.AppendData(readBuf.AsSpan(0, read));
-
-                    // Compress this fragment
                     var fragData = readBuf.AsSpan(0, read).ToArray();
-                    byte[] compressed = RDRF.Core.Compression.Compressor.Compress(fragData, Constants.CompressionLz4);
-
-                    byte[] frag = new byte[compressed.Length];
-                    Buffer.BlockCopy(compressed, 0, frag, 0, compressed.Length);
-                    originalFragments.Add(frag);
+                    byte[] compressed = RDRF.Core.Compression.Compressor
+                        .Compress(fragData, compressionMethod);
+                    await rawChannel.Writer.WriteAsync(compressed).ConfigureAwait(false);
                 }
+                rawChannel.Writer.Complete();
+
+                byte[] hashBytes = hasher.GetHashAndReset();
+                return Convert.ToHexString(hashBytes).ToLowerInvariant();
             }
             finally { ArrayPool<byte>.Shared.Return(readBuf); }
+        });
 
-            byte[] hashBytes = hasher.GetHashAndReset();
-            fileFingerprint = Convert.ToHexString(hashBytes).ToLowerInvariant();
-            originalHash = fileFingerprint;
-        }
+        // Consumer: collect compressed fragments
+        var originalFragments = new List<byte[]>();
+        await foreach (var frag in rawChannel.Reader.ReadAllAsync().ConfigureAwait(false))
+            originalFragments.Add(frag);
 
-        bool isCompressed = originalFragments.Sum(f => f.Length) < fileSize;
-        string? compressionMethod = Constants.CompressionLz4;
+        fileFingerprint = await hashTask.ConfigureAwait(false);
+        originalHash = fileFingerprint;
+
         int originalFragmentCount = originalFragments.Count;
         var originalFragmentSizes = originalFragments.Select(f => f.Length).ToList();
 
         Debug.WriteLine($"  Step 1: Streamed {fileSize:N0} bytes -> {originalFragmentCount} fragments");
 
-        var plan = _fsa.Compute(fssStrategy, auxiliaryStrategies);
+        // Phase 2: FSS encode all fragments
         var fragments = new List<byte[]>(originalFragments);
-
         foreach (var step in plan.EncodeSteps)
         {
             if (step.Step == "encode")
             {
                 fragments = _fss.Encode(fragments, step.Strategy);
-                Debug.WriteLine($"  Step 3a: Encode ({step.Strategy}): {fragments.Count} fragments");
+                Debug.WriteLine($"  Step 2: Encode ({step.Strategy}): {fragments.Count} fragments");
             }
             else if (step.Step == "etn_inject")
             {
                 fragments = _fss.Encode(fragments, Constants.FssLevel6);
-                Debug.WriteLine($"  Step 3b: ETN inject: {fragments.Count} fragments");
+                Debug.WriteLine($"  Step 2: ETN inject: {fragments.Count} fragments");
             }
         }
 
