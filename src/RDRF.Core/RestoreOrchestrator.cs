@@ -407,7 +407,6 @@ public class RestoreOrchestrator : IDisposable
         {
             if (await _storage.RcExistsAsync(fileFingerprint, ct).ConfigureAwait(false))
             {
-                validationActual = true;
                 byte[] encryptedRc = await _storage.ReadRcAsync(fileFingerprint, ct).ConfigureAwait(false);
                 byte[] rcBytes = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, _aesKey);
                 byte[] indexBytes = IndexManager.SerializeIndex(index);
@@ -432,12 +431,16 @@ public class RestoreOrchestrator : IDisposable
                         TryFss61TripleRepair(index, ref rcBytes, decryptedFragments, cvResult);
                 }
                 else
+                {
                     Debug.WriteLine($"  ETN cross-validation passed");
+                    validationActual = true;
+                }
             }
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"RC file read/validation failed: {ex.Message}");
+            validationActual = false;
         }
 
         return validationActual;
