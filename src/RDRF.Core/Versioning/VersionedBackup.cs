@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Hashing;
 using System.Security.Cryptography;
 using RDRF.Core.Diff;
@@ -237,7 +238,7 @@ private static void DedupPostProcessing(DssaAdapter storage, string actualFinger
         {
             index.Fragments[i].SourceVersion = prevFingerprint;
             string fragName = FragmentEngine.Frags.FragmentFilename(prefix, i);
-            try { storage.DeleteFragment(fragName); } catch { }
+            try { storage.DeleteFragment(fragName); } catch (Exception ex) { Debug.WriteLine($"Failed to delete old fragment '{fragName}': {ex.Message}"); }
         }
     }
 
@@ -316,6 +317,6 @@ private static void DedupPostProcessing(DssaAdapter storage, string actualFinger
                 if (fragFile.StartsWith(fingerprint + "_", StringComparison.OrdinalIgnoreCase))
                     storage.DeleteFragment(fragFile);
         }
-        catch { }
+        catch (Exception ex) { Debug.WriteLine($"Fragment cleanup failed: {ex.Message}"); }
     }
 }

@@ -26,7 +26,11 @@ public static class EtnPrecision
         // Parse index first to determine block size from file size
         RdrfIndex? index = null;
         try { index = IndexManager.DeserializeIndex(indexBytes); }
-        catch { }
+        catch (Exception ex)
+        {
+            result.ErrorMessage = $"Index deserialization failed: {ex.Message}";
+            return result;
+        }
         int blockSize = index != null ? EtnBlockMap.GetBlockSize(index.FileSize, index.FssStrategy) : 256;
 
         byte[] strippedIndexBytes = StripFss6Fields(indexBytes);
