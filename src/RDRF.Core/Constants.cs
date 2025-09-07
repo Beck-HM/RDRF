@@ -63,8 +63,8 @@ public static class Constants
     private static readonly Dictionary<string, double> FssOverhead = new()
     {
         { FssLevel1, 0.50 },
-        { FssLevel2, 0.55 },
-        { FssLevel2R, 0.57 },
+        { FssLevel2, 0.62 },
+        { FssLevel2R, 0.62 },
         { FssLevel3, 0.86 },
         { FssLevel5, 2.00 },
         { FssLevel5P, 40.0 },

@@ -160,8 +160,8 @@ public class FsaEngine
         var overheads = new Dictionary<string, double>
         {
             { Constants.FssLevel1, 0.50 },
-            { Constants.FssLevel2, 0.55 },
-            { Constants.FssLevel2R, 0.57 },
+            { Constants.FssLevel2, 0.62 },
+            { Constants.FssLevel2R, 0.62 },
             { Constants.FssLevel3, 0.86 },
             { Constants.FssLevel5, 2.00 },
             { Constants.FssLevel5P, 40.0 },
