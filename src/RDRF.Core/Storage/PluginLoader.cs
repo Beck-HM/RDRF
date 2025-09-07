@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 
 namespace RDRF.Dssa;
@@ -25,8 +26,9 @@ public static class PluginLoader
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"[PluginLoader] Failed to load plugin DLL '{dllPath}': {ex.Message}");
             }
         }
         return factories;

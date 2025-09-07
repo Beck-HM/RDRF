@@ -399,14 +399,7 @@ public class BackupOrchestrator : IDisposable
             writeBatch.Clear();
         }
 
-        // Reuse the serialized index as the standalone index (avoids a second BuildIndex)
-        var standaloneIndex = IndexManager.DeserializeIndex(serializedIndex);
-        standaloneIndex.FssParams = new Dictionary<string, object>
-        {
-            ["plan"] = JsonSerializer.SerializeToElement(plan)
-        };
-
-        byte[] indexBytes = IndexManager.SerializeIndex(standaloneIndex);
+        byte[] indexBytes = serializedIndex;
         if (!_preDerived && _salt.Length > 0)
         {
                 byte[] salted = EncryptionLayer.EncryptIndexWithSaltPrefix(indexBytes, _rcCode, _salt);
