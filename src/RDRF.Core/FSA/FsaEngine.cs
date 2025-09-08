@@ -12,7 +12,7 @@ public class FsaEngine
     {
         { Constants.FssLevel1, FamilyNeighbor },
         { Constants.FssLevel2, FamilyNeighbor },
-        { Constants.FssLevel2R, FamilyNeighbor },
+        { Constants.FssLevel2R, FamilyRs },
         { Constants.FssLevel3, FamilyRs },
         { Constants.FssLevel5, FamilyRs },
         { Constants.FssLevel5P, FamilyRs },
@@ -22,8 +22,8 @@ public class FsaEngine
 
     private static readonly Dictionary<string, List<string>> FamilyRank = new()
     {
-        { FamilyNeighbor, new List<string> { Constants.FssLevel1, Constants.FssLevel2, Constants.FssLevel2R } },
-        { FamilyRs, new List<string> { Constants.FssLevel3, Constants.FssLevel5, Constants.FssLevel5P } },
+        { FamilyNeighbor, new List<string> { Constants.FssLevel1, Constants.FssLevel2 } },
+        { FamilyRs, new List<string> { Constants.FssLevel2R, Constants.FssLevel3, Constants.FssLevel5, Constants.FssLevel5P } },
         { FamilyEtn, new List<string> { Constants.FssLevel6, Constants.FssLevel61 } },
     };
 
@@ -161,7 +161,7 @@ public class FsaEngine
         {
             { Constants.FssLevel1, 0.50 },
             { Constants.FssLevel2, 0.62 },
-            { Constants.FssLevel2R, 0.62 },
+            { Constants.FssLevel2R, 0.86 },
             { Constants.FssLevel3, 0.86 },
             { Constants.FssLevel5, 2.00 },
             { Constants.FssLevel5P, 40.0 },
