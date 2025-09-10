@@ -1,6 +1,4 @@
-using System.Buffers;
 using System.Diagnostics;
-using System.Threading.Channels;
 using System.IO.Hashing;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -147,49 +145,35 @@ public class BackupOrchestrator : IDisposable
         string originalHash;
         string fileFingerprint;
 
-        // Phase 1: Async read + compress pipeline via Channel
-        var rawChannel = Channel.CreateBounded<byte[]>(4);
+        // Phase 1: Read entire file, hash, compress as single frame, split into fragments
         var plan = _fsa.Compute(fssStrategy, auxiliaryStrategies);
 
-        // Producer: read + hash + compress per fragment, returns SHA256
-        var hashTask = Task.Run(async () =>
+        byte[] rawFileData = await File.ReadAllBytesAsync(filePath, cancellationToken)
+            .ConfigureAwait(false);
+
+        using (var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
         {
-            byte[] readBuf = ArrayPool<byte>.Shared.Rent(fragSize);
-            try
-            {
-                using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
-                    FileShare.Read, 65536, FileOptions.SequentialScan);
-                using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-
-                int read;
-                while ((read = await fs.ReadAsync(readBuf, 0, fragSize).ConfigureAwait(false)) > 0)
-                {
-                    hasher.AppendData(readBuf.AsSpan(0, read));
-                    var fragData = readBuf.AsSpan(0, read).ToArray();
-                    byte[] compressed = RDRF.Core.Compression.Compressor
-                        .Compress(fragData, compressionMethod);
-                    await rawChannel.Writer.WriteAsync(compressed).ConfigureAwait(false);
-                }
-                rawChannel.Writer.Complete();
-
-                byte[] hashBytes = hasher.GetHashAndReset();
-                return Convert.ToHexString(hashBytes).ToLowerInvariant();
-            }
-            finally { ArrayPool<byte>.Shared.Return(readBuf); }
-        });
-
-        // Consumer: collect compressed fragments
-        var originalFragments = new List<byte[]>();
-        await foreach (var frag in rawChannel.Reader.ReadAllAsync().ConfigureAwait(false))
-            originalFragments.Add(frag);
-
-        fileFingerprint = await hashTask.ConfigureAwait(false);
+            hasher.AppendData(rawFileData);
+            fileFingerprint = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
+        }
         originalHash = fileFingerprint;
+
+        byte[] compressedData = Compressor.Compress(rawFileData, compressionMethod);
+        bool dataCompressed = compressedData.Length < rawFileData.Length;
+
+        var originalFragments = new List<byte[]>();
+        for (int off = 0; off < compressedData.Length; off += fragSize)
+        {
+            int len = Math.Min(fragSize, compressedData.Length - off);
+            byte[] frag = new byte[len];
+            Buffer.BlockCopy(compressedData, off, frag, 0, len);
+            originalFragments.Add(frag);
+        }
 
         int originalFragmentCount = originalFragments.Count;
         var originalFragmentSizes = originalFragments.Select(f => f.Length).ToList();
 
-        Debug.WriteLine($"  Step 1: Streamed {fileSize:N0} bytes -> {originalFragmentCount} fragments");
+        Debug.WriteLine($"  Step 1: Read {fileSize:N0} bytes, compressed to {compressedData.Length}, split into {originalFragmentCount} fragments");
 
         // Phase 2: FSS encode all fragments
         var fragments = new List<byte[]>(originalFragments);
@@ -237,7 +221,8 @@ public class BackupOrchestrator : IDisposable
             embeddedIndex.CustomName = customName;
         if (_salt.Length > 0)
             embeddedIndex.Salt = Convert.ToHexString(_salt).ToLowerInvariant();
-        embeddedIndex.Compression = compressionMethod;
+        if (dataCompressed)
+            embeddedIndex.Compression = compressionMethod;
 
         // Compute raw fragment XxHash128 for incremental comparison (before FSS encoding)
         var rawHashes = new List<byte[]>(originalFragments.Count);
