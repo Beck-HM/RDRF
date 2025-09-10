@@ -140,7 +140,16 @@ public class Fss5CrossRecovery : IFssStrategy
         if (data.Length < 12) return false;
         ownSize = BitConverter.ToInt32(data, 0);
         if (ownSize <= 0 || ownSize > 1024 * 1024) return false;
-        return data.Length == 12 + 3 * ownSize;
+        int off = 4 + ownSize;
+        if (off + 4 > data.Length) return false;
+        int n1Size = BitConverter.ToInt32(data, off);
+        if (n1Size <= 0 || n1Size > 1024 * 1024) return false;
+        off += 4 + n1Size;
+        if (off + 4 > data.Length) return false;
+        int n2Size = BitConverter.ToInt32(data, off);
+        if (n2Size <= 0 || n2Size > 1024 * 1024) return false;
+        off += 4 + n2Size;
+        return data.Length == off;
     }
 
     private static byte[] ExtractOwnData(byte[] encoded)

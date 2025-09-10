@@ -315,6 +315,13 @@ public class RestoreOrchestrator : IDisposable
             return false;
         }
 
+        // Trim restored file to original size (removes FSS1 padding zeros)
+        if (File.Exists(outputPath) && new FileInfo(outputPath).Length > index.FileSize)
+        {
+            using var fs = new FileStream(outputPath, FileMode.Open, FileAccess.ReadWrite);
+            fs.SetLength(index.FileSize);
+        }
+
         string restoredHash = IntegrityChecker.HashFile(outputPath);
         bool valid = IntegrityChecker.VerifyHash(restoredHash, index.OriginalHash);
         Debug.WriteLine($"  Integrity check: {(valid ? "PASS" : "FAIL")}");
@@ -654,6 +661,17 @@ public class RestoreOrchestrator : IDisposable
         string outputPath)
     {
         var strategy = _fss.GetStrategy(fssStrategy);
+
+        // FSS1/FSS2 rearrange data across fragments - StripSingle cannot recover independently
+        if (fssStrategy is Constants.FssLevel1 or Constants.FssLevel2)
+        {
+            var stripped = strategy.Strip(decryptedFragments, originalCount, originalSizes);
+            using var fssOut = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
+            foreach (var frag in stripped)
+                fssOut.Write(frag, 0, frag.Length);
+            return;
+        }
+
         using var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
         for (int i = 0; i < originalCount; i++)
         {
@@ -672,6 +690,10 @@ public class RestoreOrchestrator : IDisposable
     {
         int fragmentCount = index.FragmentCount;
         int origCount = index.OriginalFragmentCount > 0 ? index.OriginalFragmentCount : fragmentCount;
+
+        // FSS1/FSS2 rearrange data across fragments - streaming per-fragment StripSingle isn't possible
+        if (index.FssStrategy is Constants.FssLevel1 or Constants.FssLevel2)
+            return false;
 
         for (int i = 0; i < fragmentCount; i++)
             if (!_storage.FragmentExists(Frags.FragmentFilename(filePrefix, i)))

@@ -161,17 +161,30 @@ public class BackupOrchestrator : IDisposable
         byte[] compressedData = Compressor.Compress(rawFileData, compressionMethod);
         bool dataCompressed = compressedData.Length < rawFileData.Length;
 
+        // Pad compressed data to fragSize boundary so all fragments have equal data size
+        // (required by FSS1 neighbor XOR which assumes uniform fragment sizes)
+        int paddedLen = ((compressedData.Length + fragSize - 1) / fragSize) * fragSize;
+        if (paddedLen != compressedData.Length)
+        {
+            byte[] padded = new byte[paddedLen];
+            Buffer.BlockCopy(compressedData, 0, padded, 0, compressedData.Length);
+            compressedData = padded;
+        }
+
         var originalFragments = new List<byte[]>();
         for (int off = 0; off < compressedData.Length; off += fragSize)
         {
-            int len = Math.Min(fragSize, compressedData.Length - off);
-            byte[] frag = new byte[len];
-            Buffer.BlockCopy(compressedData, off, frag, 0, len);
+            byte[] frag = new byte[fragSize];
+            Buffer.BlockCopy(compressedData, off, frag, 0, fragSize);
             originalFragments.Add(frag);
         }
 
         int originalFragmentCount = originalFragments.Count;
         var originalFragmentSizes = originalFragments.Select(f => f.Length).ToList();
+        // Restore actual data length for last fragment
+        int overPad = paddedLen - compressedData.Length;
+        if (overPad > 0 && originalFragmentSizes.Count > 0)
+            originalFragmentSizes[^1] = fragSize - overPad;
 
         Debug.WriteLine($"  Step 1: Read {fileSize:N0} bytes, compressed to {compressedData.Length}, split into {originalFragmentCount} fragments");
 
