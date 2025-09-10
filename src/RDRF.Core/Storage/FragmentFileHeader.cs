@@ -69,7 +69,7 @@ public static class FragmentFileHeader
         if (hasHeader && decrypted.Length >= 4)
         {
             int idxLen = BitConverter.ToInt32(decrypted[0..4]);
-            if (idxLen > 4 && idxLen <= decrypted.Length - 4)
+            if (idxLen > 0 && idxLen <= decrypted.Length - 4)
             {
                 byte[] embeddedIdx = decrypted[4..(4 + idxLen)];
                 byte[] fragData = decrypted[(4 + idxLen)..];

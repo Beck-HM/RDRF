@@ -118,7 +118,7 @@ public static class EncryptionLayer
         if (hasHeader && decrypted.Length >= 4)
         {
             int idxLen = BitConverter.ToInt32(decrypted.AsSpan(0, 4));
-            if (idxLen > 4 && idxLen <= decrypted.Length - 4)
+            if (idxLen > 0 && idxLen <= decrypted.Length - 4)
                 decrypted = decrypted[(4 + idxLen)..];
         }
 

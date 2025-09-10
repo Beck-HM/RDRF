@@ -428,7 +428,10 @@ public class RestoreOrchestrator : IDisposable
 
                     // FSS6.1: try three-node LT repair
                     if (!cvResult.IsValid)
-                        TryFss61TripleRepair(index, ref rcBytes, decryptedFragments, cvResult);
+                    {
+                        if (TryFss61TripleRepair(index, ref rcBytes, decryptedFragments, cvResult))
+                            validationActual = true;
+                    }
                 }
                 else
                 {
@@ -446,7 +449,7 @@ public class RestoreOrchestrator : IDisposable
         return validationActual;
     }
 
-    private void TryFss61TripleRepair(RdrfIndex index, ref byte[] rcBytes,
+    private bool TryFss61TripleRepair(RdrfIndex index, ref byte[] rcBytes,
         Dictionary<int, byte[]> decryptedFragments, FSS.CrossValidationResult cvResult)
     {
         try
@@ -590,10 +593,12 @@ public class RestoreOrchestrator : IDisposable
 
             if (!anyRepair)
                 Debug.WriteLine("  FSS6.1 triple repair: no applicable repair data found");
+            return anyRepair;
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"  FSS6.1 triple repair failed: {ex.Message}");
+            return false;
         }
     }
 

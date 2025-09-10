@@ -192,6 +192,9 @@ private static async Task<string> IncrementalBackupAsync(
             newData.Length, fssStrategy, fragmentSize, customName, prevFingerprint,
             prevRawHashes, progress, ct).GetAwaiter().GetResult();
 
+        if (dataCompressed)
+            embeddedIndex.Compression = Constants.CompressionLz4;
+
         byte[] indexCbor = IndexManager.SerializeIndex(embeddedIndex);
         byte[] saltedIndex = EncryptionLayer.EncryptIndexWithSaltPrefix(indexCbor, password, salt);
         storage.WriteIndex(actualFingerprint, saltedIndex);
