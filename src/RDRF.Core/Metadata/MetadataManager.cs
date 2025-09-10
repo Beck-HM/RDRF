@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace RDRF.Core.Metadata;
@@ -37,7 +38,11 @@ public class MetadataManager
                 loaded = JsonSerializer.Deserialize<MetadataStore>(json);
             }
         }
-        catch { loaded = null; }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to load metadata file '{_filePath}': {ex.Message}");
+            loaded = null;
+        }
 
         if (loaded != null)
             _store = loaded;

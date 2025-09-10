@@ -184,7 +184,7 @@ public class KeyStorageBackend : IStorageBackend
         protected override void Dispose(bool disposing)
         {
             if (!disposing) return;
-            UploadAsync().GetAwaiter().GetResult();
+            UploadAsync().ConfigureAwait(false).GetAwaiter().GetResult();
             base.Dispose(disposing);
         }
 
@@ -205,7 +205,8 @@ public class KeyStorageBackend : IStorageBackend
             };
 
             await KeyStorageBackend.SignRequestAsync(request, "s3", _region, "PUT",
-                $"/{_bucket}/{_path}", data, _accessKey, _secretKey, request.RequestUri);
+                $"/{_bucket}/{_path}", data, _accessKey, _secretKey, request.RequestUri)
+                .ConfigureAwait(false);
 
             var response = await _http.SendAsync(request).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)

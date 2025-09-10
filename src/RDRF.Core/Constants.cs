@@ -58,17 +58,4 @@ public static class Constants
         FssLevel1, FssLevel2, FssLevel2R, FssLevel3,
         FssLevel5, FssLevel5P, FssLevel6, FssLevel61
     };
-
-    // FSS Storage Overhead
-    private static readonly Dictionary<string, double> FssOverhead = new()
-    {
-        { FssLevel1, 0.50 },
-        { FssLevel2, 0.62 },
-        { FssLevel2R, 0.62 },
-        { FssLevel3, 0.86 },
-        { FssLevel5, 2.00 },
-        { FssLevel5P, 40.0 },
-        { FssLevel6, 0.00008 },
-        { FssLevel61, 0.05 },
-    };
 }

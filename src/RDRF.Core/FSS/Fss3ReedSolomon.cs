@@ -218,9 +218,11 @@ public class Fss3ReedSolomon : IFssStrategy
                     }
                     if (rowMissing.Count > 0)
                     {
-                        rs.Decode(decodeShards, rowMissing);
-                        foreach (int m in rowMissing)
-                            Buffer.BlockCopy(decodeShards[m], 0, matrix[m][r], 0, SubBlockSize);
+                        if (rs.Decode(decodeShards, rowMissing))
+                        {
+                            foreach (int m in rowMissing)
+                                Buffer.BlockCopy(decodeShards[m], 0, matrix[m][r], 0, SubBlockSize);
+                        }
                     }
                 }
             }

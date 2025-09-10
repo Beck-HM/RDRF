@@ -70,7 +70,7 @@ public class StorageOrchestrator
     public async Task<byte[]> ReadAllFragmentsAsync(string fingerprint, int version)
     {
         var records = _management.Lookup(fingerprint, version);
-        var fragments = new byte[records.Count][];
+        var fragments = new Dictionary<int, byte[]>();
 
         var tasks = records.Select(async record =>
         {
@@ -86,10 +86,10 @@ public class StorageOrchestrator
         }).ToList();
 
         var results = await Task.WhenAll(tasks).ConfigureAwait(false);
-        foreach (var (idx, data) in results.OrderBy(r => r.FragmentIndex))
+        foreach (var (idx, data) in results)
             fragments[idx] = data;
 
-        return fragments.SelectMany(f => f).ToArray();
+        return fragments.OrderBy(k => k.Key).SelectMany(kv => kv.Value).ToArray();
     }
 
     public async Task<byte[]> ReadRcAsync(string fingerprint, int version)
