@@ -442,7 +442,8 @@ public class BackupOrchestrator : IDisposable
         string? prevFingerprint,
         List<byte[]>? prevRawHashes,
         IProgress<RdrfProgressReport>? progress,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? compressionMethod = null)
     {
         int fragSize = fragmentSize > 0 ? fragmentSize : 1024 * 1024;
         string filePrefix = customName ?? fileFingerprint;
@@ -485,6 +486,9 @@ public class BackupOrchestrator : IDisposable
             index.CustomName = customName;
         if (_salt.Length > 0)
             index.Salt = Convert.ToHexString(_salt).ToLowerInvariant();
+
+        if (compressionMethod != null)
+            index.Compression = compressionMethod;
 
         index.RawFragmentHashes = allRawFragments
             .Select(f => System.IO.Hashing.XxHash128.Hash(f.AsSpan()))

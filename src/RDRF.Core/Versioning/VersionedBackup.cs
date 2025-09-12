@@ -186,18 +186,13 @@ private static async Task<string> IncrementalBackupAsync(
         }
 
         // Build the full index with all raw fragment hashes
-        var embeddedIndex = orchestrator.BuildChangedFragmentsIndex(
+        orchestrator.BuildChangedFragmentsIndex(
             rawFragments, changedRaw, changedIdxMap, changedFlags,
             actualFingerprint, fileFingerprint, Path.GetFileName(filePath),
             newData.Length, fssStrategy, fragmentSize, customName, prevFingerprint,
-            prevRawHashes, progress, ct).GetAwaiter().GetResult();
-
-        if (dataCompressed)
-            embeddedIndex.Compression = Constants.CompressionLz4;
-
-        byte[] indexCbor = IndexManager.SerializeIndex(embeddedIndex);
-        byte[] saltedIndex = EncryptionLayer.EncryptIndexWithSaltPrefix(indexCbor, password, salt);
-        storage.WriteIndex(actualFingerprint, saltedIndex);
+            prevRawHashes, progress, ct,
+            compressionMethod: dataCompressed ? Constants.CompressionLz4 : null)
+            .GetAwaiter().GetResult();
 
         AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage,
             diffResult.HumanDiff, oldVersions, fileEntries);
