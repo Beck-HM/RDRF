@@ -1,7 +1,7 @@
+using System.Buffers;
 using System.Diagnostics;
-using System.Security.Cryptography;
+using System.IO.Hashing;
 using RDRF.Core.Index;
-using RDRF.Core.Integrity;
 
 namespace RDRF.Core.FSS;
 
@@ -19,120 +19,87 @@ public class Fss5PSend : IFssStrategy
         int K = fragments.Count;
         int blockSize = fragments[0].Length;
 
-        // Merge all fragments into a single byte array padded to K*blockSize
-        byte[] fileBytes = new byte[K * blockSize];
-        int offset = 0;
-        foreach (var f in fragments)
-        {
-            Buffer.BlockCopy(f, 0, fileBytes, offset, f.Length);
-            offset += f.Length;
-        }
-
-        // Split into K data blocks
+        byte[] fileBytes = ArrayPool<byte>.Shared.Rent(K * blockSize);
         byte[][] dataBlocks = new byte[K][];
-        for (int i = 0; i < K; i++)
-        {
-            dataBlocks[i] = new byte[blockSize];
-            int srcOff = i * blockSize;
-            int copyLen = Math.Min(blockSize, fileBytes.Length - srcOff);
-            Buffer.BlockCopy(fileBytes, srcOff, dataBlocks[i], 0, copyLen);
-        }
-
-        // RS(K, K): K data + K parity = 2K total blocks
-        var rs = new ReedSolomon(K, K);
         byte[][] allBlocks = new byte[2 * K][];
-        for (int i = 0; i < K; i++)
-            allBlocks[i] = dataBlocks[i];
-        for (int i = K; i < 2 * K; i++)
-            allBlocks[i] = new byte[blockSize];
-        rs.Encode(allBlocks);
-
-        // Build K seeds, each containing blocks[0..2K-2] + fingerprint table
-        int blocksPerSeed = 2 * K - 1;
-        int seedDataSize = blocksPerSeed * blockSize;
-        int fingerprintSize = blocksPerSeed * 8;
-        byte[][] seeds = new byte[K][];
-
-        for (int s = 0; s < K; s++)
+        try
         {
-            byte[] seed = new byte[seedDataSize + fingerprintSize];
-
-            // Copy blocks 0..2K-2
-            for (int b = 0; b < blocksPerSeed; b++)
-                Buffer.BlockCopy(allBlocks[b], 0, seed, b * blockSize, blockSize);
-
-            // Build and append fingerprint table (first 8 bytes of SHA-256 per block)
-            for (int b = 0; b < blocksPerSeed; b++)
+            int offset = 0;
+            foreach (var f in fragments)
             {
-                Span<byte> hash = stackalloc byte[32];
-                SHA256.HashData(allBlocks[b], hash);
-                Buffer.BlockCopy(hash.ToArray(), 0, seed, seedDataSize + b * 8, 8);
+                Buffer.BlockCopy(f, 0, fileBytes, offset, f.Length);
+                offset += f.Length;
             }
 
-            seeds[s] = seed;
-        }
+            for (int i = 0; i < K; i++)
+            {
+                dataBlocks[i] = ArrayPool<byte>.Shared.Rent(blockSize);
+                int srcOff = i * blockSize;
+                int copyLen = Math.Min(blockSize, K * blockSize - srcOff);
+                Buffer.BlockCopy(fileBytes, srcOff, dataBlocks[i], 0, copyLen);
+            }
 
-        return seeds.ToList();
+            var rs = new ReedSolomon(K, K);
+            for (int i = 0; i < K; i++)
+                allBlocks[i] = dataBlocks[i];
+            for (int i = K; i < 2 * K; i++)
+                allBlocks[i] = ArrayPool<byte>.Shared.Rent(blockSize);
+            rs.Encode(allBlocks);
+
+            int seedDataSize = K * blockSize;
+            int fingerprintSize = K * 8;
+            byte[] template = new byte[seedDataSize + fingerprintSize];
+
+            for (int b = 0; b < K; b++)
+                Buffer.BlockCopy(allBlocks[b], 0, template, b * blockSize, blockSize);
+
+            for (int b = 0; b < K; b++)
+            {
+                var hash = XxHash128.Hash(allBlocks[b]);
+                Buffer.BlockCopy(hash, 0, template, seedDataSize + b * 8, 8);
+            }
+
+            var result = new List<byte[]>(K);
+            for (int s = 0; s < K; s++)
+            {
+                byte[] clone = new byte[template.Length];
+                Buffer.BlockCopy(template, 0, clone, 0, template.Length);
+                result.Add(clone);
+            }
+
+            return result;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(fileBytes);
+            for (int i = 0; i < K; i++)
+                if (dataBlocks[i] != null)
+                    ArrayPool<byte>.Shared.Return(dataBlocks[i]);
+            for (int i = K; i < 2 * K; i++)
+                if (allBlocks[i] != null)
+                    ArrayPool<byte>.Shared.Return(allBlocks[i]);
+        }
     }
 
     private List<byte[]>? DecodeFromSeed(byte[] seed, int K, int blockSize, List<int>? originalSizes = null)
     {
-        int blocksPerSeed = 2 * K - 1;
-        int seedDataSize = blocksPerSeed * blockSize;
+        int seedDataSize = K * blockSize;
 
-        byte[][] allBlocks = new byte[2 * K][];
-        var validIndices = new List<int>(blocksPerSeed);
-
-        for (int b = 0; b < blocksPerSeed; b++)
+        for (int b = 0; b < K; b++)
         {
-            int blockOff = b * blockSize;
-            byte[] block = new byte[blockSize];
-            Buffer.BlockCopy(seed, blockOff, block, 0, blockSize);
-            allBlocks[b] = block;
-
-            // Verify fingerprint (first 8 bytes of SHA-256)
-            byte[] expected = new byte[8];
-            Buffer.BlockCopy(seed, seedDataSize + b * 8, expected, 0, 8);
-            byte[] actual = SHA256.HashData(block);
-
-            bool valid = true;
-            for (int i = 0; i < 8; i++)
+            var actualHash = XxHash128.Hash(seed.AsSpan(b * blockSize, blockSize));
+            if (!actualHash.AsSpan(0, 8).SequenceEqual(
+                seed.AsSpan(seedDataSize + b * 8, 8)))
             {
-                if (expected[i] != actual[i]) { valid = false; break; }
+                Debug.WriteLine($"[Fss5PSend] Seed block {b} fingerprint mismatch");
+                return null;
             }
-
-            if (valid)
-                validIndices.Add(b);
         }
 
-        // Zero-fill missing blocks (including last parity block 2K-1 never in seed)
-        for (int b = blocksPerSeed; b < 2 * K; b++)
-            allBlocks[b] = new byte[blockSize];
-
-        if (validIndices.Count < K)
-        {
-            Debug.WriteLine($"[Fss5PSend] Insufficient valid blocks: {validIndices.Count} < {K}");
-            return null;
-        }
-
-        // RS decode using all valid blocks
-        var rs = new ReedSolomon(K, K);
-        var erasures = new List<int>();
-        for (int i = 0; i < 2 * K; i++)
-            if (!validIndices.Contains(i))
-                erasures.Add(i);
-
-        if (!rs.Decode(allBlocks, erasures))
-        {
-            Debug.WriteLine("[Fss5PSend] RS decode failed");
-            return null;
-        }
-
-        // Reconstruct original fragments from data blocks[0..K-1]
         var result = new List<byte[]>(K);
         for (int i = 0; i < K; i++)
         {
-            byte[] raw = allBlocks[i];
+            int rawOff = i * blockSize;
             int actualSize = originalSizes != null && i < originalSizes.Count
                 ? originalSizes[i]
                 : blockSize;
@@ -140,12 +107,14 @@ public class Fss5PSend : IFssStrategy
             if (actualSize < blockSize)
             {
                 byte[] trimmed = new byte[actualSize];
-                Buffer.BlockCopy(raw, 0, trimmed, 0, actualSize);
+                Buffer.BlockCopy(seed, rawOff, trimmed, 0, actualSize);
                 result.Add(trimmed);
             }
             else
             {
-                result.Add(raw);
+                byte[] frag = new byte[blockSize];
+                Buffer.BlockCopy(seed, rawOff, frag, 0, blockSize);
+                result.Add(frag);
             }
         }
 
@@ -158,17 +127,13 @@ public class Fss5PSend : IFssStrategy
         int totalFragments,
         List<int>? originalSizes = null)
     {
-        t_cache = null;
-        t_cacheKey = null;
-
         var result = new Dictionary<int, byte[]>();
         if (available.Count == 0) return result;
 
         var first = available.First();
         int K = totalFragments;
-        int blocksPerSeed = 2 * K - 1;
-        int seedDataSize = first.Value.Length - blocksPerSeed * 8;
-        int blockSize = seedDataSize / blocksPerSeed;
+        int seedDataSize = first.Value.Length - K * 8;
+        int blockSize = seedDataSize / K;
 
         var allFrags = DecodeFromSeed(first.Value, K, blockSize, originalSizes);
         if (allFrags == null) return result;
@@ -185,16 +150,12 @@ public class Fss5PSend : IFssStrategy
         int originalFragmentCount,
         List<int>? originalSizes = null)
     {
-        t_cache = null;
-        t_cacheKey = null;
-
         if (encodedFragments.Count == 0) return new List<byte[]>();
 
         var first = encodedFragments.First();
         int K = originalFragmentCount;
-        int blocksPerSeed = 2 * K - 1;
-        int seedDataSize = first.Value.Length - blocksPerSeed * 8;
-        int blockSize = seedDataSize / blocksPerSeed;
+        int seedDataSize = first.Value.Length - K * 8;
+        int blockSize = seedDataSize / K;
 
         var allFrags = DecodeFromSeed(first.Value, K, blockSize, originalSizes);
         return allFrags ?? new List<byte[]>();
@@ -202,11 +163,9 @@ public class Fss5PSend : IFssStrategy
 
     public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)
     {
-        // If the fragment is already at original size, return it directly
         if (originalSizes != null && index < originalSizes.Count && encodedFragment.Length <= originalSizes[index])
             return encodedFragment;
 
-        // Identify the seed by its first 32 bytes to detect session changes
         byte[] key = new byte[32];
         int keyLen = Math.Min(32, encodedFragment.Length);
         Buffer.BlockCopy(encodedFragment, 0, key, 0, keyLen);
@@ -217,9 +176,8 @@ public class Fss5PSend : IFssStrategy
             if (K == 0)
                 return encodedFragment;
 
-            int blocksPerSeed = 2 * K - 1;
-            int seedDataSize = encodedFragment.Length - blocksPerSeed * 8;
-            int blockSize = seedDataSize / blocksPerSeed;
+            int seedDataSize = encodedFragment.Length - K * 8;
+            int blockSize = seedDataSize / K;
 
             t_cache = DecodeFromSeed(encodedFragment, K, blockSize, originalSizes);
             t_cacheKey = key;
