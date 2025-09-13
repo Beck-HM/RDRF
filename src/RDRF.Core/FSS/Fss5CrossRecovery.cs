@@ -203,17 +203,17 @@ public class Fss5CrossRecovery : IFssStrategy
             return;
 
         byte[] own = known[encodedIdx];
-        byte[] n1 = known[n1Idx];
-        byte[] n2 = known[n2Idx];
+        byte[] rawN1 = IsValidFss5Fragment(known[n1Idx], out _) ? ExtractOwnData(known[n1Idx]) : known[n1Idx];
+        byte[] rawN2 = IsValidFss5Fragment(known[n2Idx], out _) ? ExtractOwnData(known[n2Idx]) : known[n2Idx];
 
-        byte[] combined = new byte[4 + own.Length + 4 + n1.Length + 4 + n2.Length];
+        byte[] combined = new byte[4 + own.Length + 4 + rawN1.Length + 4 + rawN2.Length];
         int offset = 0;
         Buffer.BlockCopy(BitConverter.GetBytes(own.Length), 0, combined, offset, 4); offset += 4;
         Buffer.BlockCopy(own, 0, combined, offset, own.Length); offset += own.Length;
-        Buffer.BlockCopy(BitConverter.GetBytes(n1.Length), 0, combined, offset, 4); offset += 4;
-        Buffer.BlockCopy(n1, 0, combined, offset, n1.Length); offset += n1.Length;
-        Buffer.BlockCopy(BitConverter.GetBytes(n2.Length), 0, combined, offset, 4); offset += 4;
-        Buffer.BlockCopy(n2, 0, combined, offset, n2.Length); offset += n2.Length;
+        Buffer.BlockCopy(BitConverter.GetBytes(rawN1.Length), 0, combined, offset, 4); offset += 4;
+        Buffer.BlockCopy(rawN1, 0, combined, offset, rawN1.Length); offset += rawN1.Length;
+        Buffer.BlockCopy(BitConverter.GetBytes(rawN2.Length), 0, combined, offset, 4); offset += 4;
+        Buffer.BlockCopy(rawN2, 0, combined, offset, rawN2.Length); offset += rawN2.Length;
 
         known[encodedIdx] = combined;
     }
