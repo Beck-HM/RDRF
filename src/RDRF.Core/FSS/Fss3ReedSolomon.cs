@@ -179,7 +179,7 @@ public class Fss3ReedSolomon : IFssStrategy
         var dataMissing = missingIndices.Where(m => m < K).ToList();
         if (dataMissing.Count > 0 && rowFrag != null)
         {
-            for (int r = 0; r < B; r++)
+            Parallel.For(0, B, r =>
             {
                 var shards = new byte[K + 1][];
                 var erasures = new List<int>();
@@ -194,9 +194,6 @@ public class Fss3ReedSolomon : IFssStrategy
 
                 if (erasures.Count > 0 && erasures.Count <= 1)
                 {
-                    // Use all available: K data (some missing) + 1 row parity = K+1 total
-                    // Need: erasures.Count <= parityShards (1)
-                    // The Decode needs the full array. Create a copy with all present.
                     var decodeShards = new byte[K + 1][];
                     for (int f = 0; f <= K; f++)
                     {
@@ -209,11 +206,10 @@ public class Fss3ReedSolomon : IFssStrategy
                     }
 
                     var rs = new ReedSolomon(K, 1);
-                    // Build erasures for the current row's missing fragments
                     var rowMissing = new List<int>();
                     foreach (int m in dataMissing)
                     {
-                        if (m < K && (m >= B || r < B)) // sanity check
+                        if (m < K && (m >= B || r < B))
                             rowMissing.Add(m);
                     }
                     if (rowMissing.Count > 0)
@@ -225,13 +221,12 @@ public class Fss3ReedSolomon : IFssStrategy
                         }
                     }
                 }
-            }
+            });
         }
 
         // Step 2: Column RS → repair sub-block level corruption within fragments
-        // (For missing fragments that were recovered above, verify column parity)
         var rsCol = new ReedSolomon(B, P);
-        foreach (int f in dataMissing)
+        Parallel.ForEach(dataMissing, f =>
         {
             if (colParity[f][0] != null)
             {
@@ -240,7 +235,6 @@ public class Fss3ReedSolomon : IFssStrategy
                 for (int r = 0; r < B; r++)
                 {
                     shards[r] = matrix[f][r];
-                    // Check if this block is zero (recovered but might be wrong)
                     if (IsZeroBlock(matrix[f][r]))
                         erasures.Add(r);
                 }
@@ -254,7 +248,7 @@ public class Fss3ReedSolomon : IFssStrategy
                         Buffer.BlockCopy(shards[r], 0, matrix[f][r], 0, SubBlockSize);
                 }
             }
-        }
+        });
 
         // Build result
         var result = new Dictionary<int, byte[]>();
