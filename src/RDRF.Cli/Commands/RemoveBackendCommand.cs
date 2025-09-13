@@ -153,7 +153,7 @@ public class RemoveBackendCommand : Command
                     {
                         try
                         {
-                            backend.DeleteAsync(rec.RemotePath).GetAwaiter().GetResult();
+                            backend.DeleteAsync(rec.RemotePath).ConfigureAwait(false).GetAwaiter().GetResult();
                             remoteDeleted++;
                         }
                         catch (Exception ex)

@@ -59,7 +59,7 @@ public class StatusCommand : Command
                 string prefix = index.CustomName ?? index.FileFingerprint;
                 string lookupKey = index.CustomName ?? index.FileFingerprint;
 
-            bool indexOk = true;
+            bool indexOk = storage.IndexExists(lookupKey);
             bool rcOk = storage.RcExists(lookupKey);
             if (rcOk)
             {

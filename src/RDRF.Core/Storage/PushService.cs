@@ -51,6 +51,11 @@ public static class PushService
                 .ToList()
             : registeredBackends;
 
+        if (targetBackends.Count == 0 && remotes.Count > 0)
+        {
+            Console.Error.WriteLine("Error: none of the configured remotes could be loaded");
+            return 1;
+        }
         if (targetBackends.Count == 0)
             targetBackends = registeredBackends;
 

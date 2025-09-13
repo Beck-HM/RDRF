@@ -117,8 +117,8 @@ public class MediaDiffStrategy : IDiffStrategy
 
         try
         {
-            using var ms = new MemoryStream(data);
-            var file = TagLib.File.Create(new StreamFileAbstraction("file", ms, ms));
+            using var readMs = new MemoryStream(data);
+            var file = TagLib.File.Create(new StreamFileAbstraction("file", readMs, new MemoryStream()));
 
             var tag = file.Tag;
             var props_ = file.Properties;

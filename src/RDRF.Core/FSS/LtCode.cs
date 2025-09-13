@@ -71,7 +71,7 @@ public static class LtCode
     {
         int K = allBlocks.Length;
         int N = 2 * K;
-        int seed = RandomNumberGenerator.GetInt32(int.MaxValue);
+        int seed = RandomNumberGenerator.GetInt32(int.MaxValue - 1) + 1;
         ulong prng = (ulong)seed;
 
         var inter = Precode.Encode(allBlocks, blockSize);

@@ -149,7 +149,7 @@ public class JsonDiffStrategy : IDiffStrategy
 
     private static string FormatValue(JsonElement el) => el.ValueKind switch
     {
-        JsonValueKind.String => $"\"{el.GetString()}\"",
+        JsonValueKind.String => $"\"{el.GetString()?.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"",
         JsonValueKind.True => "true",
         JsonValueKind.False => "false",
         JsonValueKind.Null => "null",

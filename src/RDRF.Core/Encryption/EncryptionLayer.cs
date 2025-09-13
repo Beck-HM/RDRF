@@ -119,7 +119,10 @@ public static class EncryptionLayer
         {
             int idxLen = BitConverter.ToInt32(decrypted.AsSpan(0, 4));
             if (idxLen > 0 && idxLen <= decrypted.Length - 4)
+            {
+                CryptographicOperations.ZeroMemory(decrypted.AsSpan(0, 4 + idxLen));
                 decrypted = decrypted[(4 + idxLen)..];
+            }
         }
 
         return decrypted;

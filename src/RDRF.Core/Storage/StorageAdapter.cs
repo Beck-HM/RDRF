@@ -73,7 +73,10 @@ public class LocalDssaAdapter : DssaAdapter
     public override void WriteFragment(string filename, byte[] data)
     {
         ValidateFilename(filename);
-        File.WriteAllBytes(Path.Combine(_basePath, filename), data);
+        string path = Path.Combine(_basePath, filename);
+        string tmp = path + ".tmp";
+        File.WriteAllBytes(tmp, data);
+        File.Move(tmp, path, overwrite: true);
     }
 
     public override bool FragmentExists(string filename)
