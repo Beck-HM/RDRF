@@ -75,6 +75,7 @@ public static class AesNiCtr
                     for (int j = 15; j >= 0; j--)
                         if (++ctr[j] != 0) break;
                 }
+                counter = MemoryMarshal.Read<Vector128<byte>>(ctr);
 
                 using var aes = SCryptography.Aes.Create();
                 aes.Key = aesKey;

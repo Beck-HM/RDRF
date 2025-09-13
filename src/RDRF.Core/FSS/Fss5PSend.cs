@@ -42,8 +42,7 @@ public class Fss5PSend : IFssStrategy
             var rs = new ReedSolomon(K, K);
             for (int i = 0; i < K; i++)
                 allBlocks[i] = dataBlocks[i];
-            for (int i = K; i < 2 * K; i++)
-                allBlocks[i] = ArrayPool<byte>.Shared.Rent(blockSize);
+            // rs.Encode allocates parity shards internally
             rs.Encode(allBlocks);
 
             int seedDataSize = K * blockSize;
@@ -75,9 +74,6 @@ public class Fss5PSend : IFssStrategy
             for (int i = 0; i < K; i++)
                 if (dataBlocks[i] != null)
                     ArrayPool<byte>.Shared.Return(dataBlocks[i]);
-            for (int i = K; i < 2 * K; i++)
-                if (allBlocks[i] != null)
-                    ArrayPool<byte>.Shared.Return(allBlocks[i]);
         }
     }
 
@@ -133,6 +129,7 @@ public class Fss5PSend : IFssStrategy
         var first = available.First();
         int K = totalFragments;
         int seedDataSize = first.Value.Length - K * 8;
+        if (seedDataSize <= 0) return result;
         int blockSize = seedDataSize / K;
 
         var allFrags = DecodeFromSeed(first.Value, K, blockSize, originalSizes);

@@ -29,6 +29,7 @@ public static class PluginLoader
             catch (Exception ex)
             {
                 Debug.WriteLine($"[PluginLoader] Failed to load plugin DLL '{dllPath}': {ex.Message}");
+                Console.Error.WriteLine($"[PluginLoader] Failed to load plugin '{Path.GetFileName(dllPath)}': {ex.Message}");
             }
         }
         return factories;

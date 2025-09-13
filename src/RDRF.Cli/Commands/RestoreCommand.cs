@@ -48,17 +48,23 @@ public class RestoreCommand : Command
                 return 1;
             }
 
-            string storageDir = indexFile.DirectoryName!;
-            byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
-
-            int exitCode;
-            using (var engine = new RDRFEngine(password, new LocalDssaAdapter(storageDir)))
+            try
             {
-                exitCode = await RunRestore(engine, password, encryptedIndex, output.FullName, targetVersion);
-            }
+                string storageDir = indexFile.DirectoryName!;
+                byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
 
-            CryptographicOperations.ZeroMemory(password);
-            return exitCode;
+                int exitCode;
+                using (var engine = new RDRFEngine(password, new LocalDssaAdapter(storageDir)))
+                {
+                    exitCode = await RunRestore(engine, password, encryptedIndex, output.FullName, targetVersion);
+                }
+
+                return exitCode;
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(password);
+            }
         });
     }
 

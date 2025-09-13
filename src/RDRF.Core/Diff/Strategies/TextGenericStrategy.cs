@@ -149,7 +149,9 @@ public class TextGenericStrategy : IDiffStrategy
     {
         var lines = new List<string>();
         int start = 0;
-        for (int i = 0; i < data.Length; i++)
+        if (data.Length >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF)
+            start = 3;
+        for (int i = start; i < data.Length; i++)
         {
             if (data[i] == '\n')
             {

@@ -92,6 +92,8 @@ public class BackupCommand : Command
                 return 1;
             }
 
+            try
+            {
             string storagePath = outputDir?.FullName ?? (enableNode ? ".rdrf" : Path.Combine(AppContext.BaseDirectory, "backup"));
             int fragmentSize = sizeMb.HasValue ? sizeMb.Value * 1024 * 1024 : 0;
 
@@ -165,8 +167,12 @@ public class BackupCommand : Command
                 if (count > 1) Console.WriteLine($"Backed up {count} files");
             }
 
-            CryptographicOperations.ZeroMemory(password);
             return 0;
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(password);
+            }
         });
     }
 }

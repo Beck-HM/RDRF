@@ -129,7 +129,8 @@ public class IniDiffStrategy : IDiffStrategy
         string currentSection = "";
         result[currentSection] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        var text = Encoding.UTF8.GetString(data);
+        int offset = data.Length >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF ? 3 : 0;
+        var text = Encoding.UTF8.GetString(data, offset, data.Length - offset);
         foreach (string raw in text.Split('\n'))
         {
             string line = raw.TrimEnd('\r');

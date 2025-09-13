@@ -36,46 +36,51 @@ public class InfoCommand : Command
                 return 1;
             }
 
-            byte[] encryptedIndex = await File.ReadAllBytesAsync(indexFile.FullName);
-
-            RdrfIndex index;
             try
             {
-                (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
-                index = IndexManager.DeserializeIndex(cbor);
-            }
-            catch
-            {
-                Console.Error.WriteLine("Error: wrong password or corrupted index file");
-                CryptographicOperations.ZeroMemory(password);
-                return 1;
-            }
+                byte[] encryptedIndex = await File.ReadAllBytesAsync(indexFile.FullName);
 
-            string createdAt = DateTimeOffset.FromUnixTimeSeconds(index.CreatedAt)
-                .ToString("yyyy-MM-dd HH:mm:ss UTC");
+                RdrfIndex index;
+                try
+                {
+                    (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
+                    index = IndexManager.DeserializeIndex(cbor);
+                }
+                catch
+                {
+                    Console.Error.WriteLine("Error: wrong password or corrupted index file");
+                    return 1;
+                }
 
-            Console.WriteLine($"Fingerprint: {index.FileFingerprint}");
-            Console.WriteLine($"File:        {index.OriginalName}");
-            Console.WriteLine($"Size:        {index.FileSize:N0} bytes");
-            Console.WriteLine($"Strategy:    {index.FssStrategy}");
-            Console.WriteLine($"Fragments:   {index.FragmentCount} (original: {index.OriginalFragmentCount})");
-
-            string? fss6 = (index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null)
-                ? "with FSS6/ETN" : null;
-            Console.WriteLine($"ETN:         {(fss6 ?? "no")}");
-
-            Console.WriteLine($"Salt:        {index.Salt ?? "(none)"}");
-            Console.WriteLine($"Created:     {createdAt}");
-            if (index.UpdatedAt.HasValue)
-            {
-                string updatedAt = DateTimeOffset.FromUnixTimeSeconds(index.UpdatedAt.Value)
+                string createdAt = DateTimeOffset.FromUnixTimeSeconds(index.CreatedAt)
                     .ToString("yyyy-MM-dd HH:mm:ss UTC");
-                Console.WriteLine($"Updated:     {updatedAt}");
+
+                Console.WriteLine($"Fingerprint: {index.FileFingerprint}");
+                Console.WriteLine($"File:        {index.OriginalName}");
+                Console.WriteLine($"Size:        {index.FileSize:N0} bytes");
+                Console.WriteLine($"Strategy:    {index.FssStrategy}");
+                Console.WriteLine($"Fragments:   {index.FragmentCount} (original: {index.OriginalFragmentCount})");
+
+                string? fss6 = (index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null)
+                    ? "with FSS6/ETN" : null;
+                Console.WriteLine($"ETN:         {(fss6 ?? "no")}");
+
+                Console.WriteLine($"Salt:        {index.Salt ?? "(none)"}");
+                Console.WriteLine($"Created:     {createdAt}");
+                if (index.UpdatedAt.HasValue)
+                {
+                    string updatedAt = DateTimeOffset.FromUnixTimeSeconds(index.UpdatedAt.Value)
+                        .ToString("yyyy-MM-dd HH:mm:ss UTC");
+                    Console.WriteLine($"Updated:     {updatedAt}");
+                }
+                if (index.CustomName != null)
+                    Console.WriteLine($"CustomName:  {index.CustomName}");
+                return 0;
             }
-            if (index.CustomName != null)
-                Console.WriteLine($"CustomName:  {index.CustomName}");
-            CryptographicOperations.ZeroMemory(password);
-            return 0;
+            finally
+            {
+                CryptographicOperations.ZeroMemory(password);
+            }
         });
     }
 }

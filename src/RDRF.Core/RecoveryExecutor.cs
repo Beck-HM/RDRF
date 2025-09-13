@@ -106,20 +106,35 @@ public class RecoveryExecutor
         {
             Debug.WriteLine($"[RecoveryExecutor] Attempting FSS recovery: {missingIndices.Count} missing, strategy={index.FssStrategy}");
 
-            var recovered = _fssEngine.Decode(
-                verified,
-                missingIndices,
-                index.FssStrategy,
-                index.FragmentCount,
-                index.OriginalFragmentSizes);
-
-            foreach (var kvp in recovered)
+            try
             {
-                if (!verified.ContainsKey(kvp.Key))
+                var recovered = _fssEngine.Decode(
+                    verified,
+                    missingIndices,
+                    index.FssStrategy,
+                    index.FragmentCount,
+                    index.OriginalFragmentSizes);
+
+                foreach (var kvp in recovered)
                 {
-                    verified[kvp.Key] = kvp.Value;
-                    result.RecoveredFromFss++;
+                    if (!verified.ContainsKey(kvp.Key))
+                    {
+                        // Verify recovered fragment hash
+                        string recoveredHash = IntegrityChecker.HashBytes(kvp.Value);
+                        string? expectedHash = index.FragmentHashes?.Count > kvp.Key
+                            ? index.FragmentHashes[kvp.Key]
+                            : null;
+                        if (expectedHash == null || IntegrityChecker.VerifyHash(recoveredHash, expectedHash))
+                        {
+                            verified[kvp.Key] = kvp.Value;
+                            result.RecoveredFromFss++;
+                        }
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[RecoveryExecutor] FSS recovery failed: {ex.Message}");
             }
         }
 
