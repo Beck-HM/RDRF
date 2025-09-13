@@ -43,10 +43,10 @@ public class ReedSolomon
     public byte[][] Encode(byte[][] shards)
     {
         int shardSize = shards[0].Length;
-        for (int p = 0; p < _parityShards; p++)
+        Parallel.For(0, _parityShards, p =>
         {
             int i = _dataShards + p;
-            shards[i] = new byte[shardSize];
+            byte[] parity = new byte[shardSize];
             for (int j = 0; j < shardSize; j++)
             {
                 byte val = 0;
@@ -67,9 +67,10 @@ public class ReedSolomon
                     byte c = _encodeMatrix[p, k];
                     if (c != 0) val ^= GfMul(c, shards[k][j]);
                 }
-                shards[i][j] = val;
+                parity[j] = val;
             }
-        }
+            shards[i] = parity;
+        });
         return shards;
     }
 
@@ -238,6 +239,6 @@ public class ReedSolomon
     {
         if (a == 0) return 0;
         if (b == 0) throw new DivideByZeroException();
-        return ExpTable[(LogTable[a] - LogTable[b] + 255) % 255];
+        return ExpTable[LogTable[a] - LogTable[b] + 255];
     }
 }
