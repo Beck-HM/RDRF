@@ -1,4 +1,5 @@
 using RDRF.Core.Dssa;
+using System.Collections.Concurrent;
 using System.Formats.Cbor;
 using System.Security.Cryptography;
 using System.Text;
@@ -7,6 +8,7 @@ namespace RDRF.Core.Encryption;
 
 public static class EncryptionLayer
 {
+    private static readonly ConcurrentDictionary<string, byte[]> _keyCache = new();
     public static readonly byte[] PasswordSalt = Encoding.UTF8.GetBytes("RDRF.NET-PBKDF2-SALT-v1");
 
     private const int Pbkdf2Iterations = 600_000;
@@ -16,8 +18,12 @@ public static class EncryptionLayer
     {
         if (salt == null)
             return SHA256.HashData(rcCode);
-        using var pbkdf2 = new Rfc2898DeriveBytes(rcCode, salt, Pbkdf2Iterations, HashAlgorithmName.SHA256);
-        return pbkdf2.GetBytes(32);
+        string cacheKey = Convert.ToHexString(rcCode) + Convert.ToHexString(salt);
+        return _keyCache.GetOrAdd(cacheKey, _ =>
+        {
+            using var pbkdf2 = new Rfc2898DeriveBytes(rcCode, salt, Pbkdf2Iterations, HashAlgorithmName.SHA256);
+            return pbkdf2.GetBytes(32);
+        });
     }
 
     public static byte[] GenerateRcCode(int length = 64)

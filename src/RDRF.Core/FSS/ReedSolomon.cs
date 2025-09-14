@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Threading.Tasks;
 
 namespace RDRF.Core.FSS;
@@ -11,6 +12,7 @@ public class ReedSolomon
 
     private static readonly byte[] ExpTable = new byte[512];
     private static readonly byte[] LogTable = new byte[256];
+    private static readonly ConcurrentDictionary<(int data, int parity), byte[][]> _invCache = new();
 
     static ReedSolomon()
     {
@@ -108,8 +110,13 @@ public class ReedSolomon
             }
         }
 
-        // Invert A over GF(256)
-        byte[][] invA = InvertMatrix(A);
+        // Invert A over GF(256) (cached per (dataShards, parityShards))
+        var invKey = (_dataShards, _parityShards);
+        if (!_invCache.TryGetValue(invKey, out var invA))
+        {
+            invA = InvertMatrix(A);
+            if (invA != null) _invCache[invKey] = invA;
+        }
         if (invA == null) return false;
 
         // Recover original data in parallel: data[c] = sum(invA[c][r] * shard[decodeIndices[r]])
