@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
@@ -65,30 +66,50 @@ public static class LtCode
                 dest[i] ^= src[i];
         }
     }
+    private static readonly ConcurrentDictionary<(int K, int symbolCount, int seed), (int[] deg, int[][] idx)> _symCache = new();
+
+    private static (int[] deg, int[][] idx) GetOrBuildSymbols(int K, int symbolCount, int seed)
+    {
+        var key = (K, symbolCount, seed);
+        if (_symCache.TryGetValue(key, out var cached))
+            return cached;
+
+        int N = 2 * K;
+        ulong prng = (ulong)seed;
+        var deg = new int[symbolCount];
+        var idx = new int[symbolCount][];
+        var idxSet = new HashSet<int>();
+
+        for (int si = 0; si < symbolCount; si++)
+        {
+            int d = SelectDegree(ref prng);
+            if (d > N) d = N;
+            deg[si] = d;
+            idxSet.Clear();
+            while (idxSet.Count < d)
+                idxSet.Add(NextPseudo(ref prng) % N);
+            idx[si] = idxSet.ToArray();
+        }
+
+        _symCache[key] = (deg, idx);
+        return (deg, idx);
+    }
 
     public static (List<byte[]> symbols, int seed) Encode(
         byte[][] allBlocks, int symbolCount, int blockSize)
     {
         int K = allBlocks.Length;
         int N = 2 * K;
-        int seed = RandomNumberGenerator.GetInt32(int.MaxValue - 1) + 1;
-        ulong prng = (ulong)seed;
+        int seed = K;
 
         var inter = Precode.Encode(allBlocks, blockSize);
+        var (deg, symIdx) = GetOrBuildSymbols(K, symbolCount, seed);
 
         var result = new List<byte[]>(symbolCount);
-        var idxSet = new HashSet<int>();
         for (int si = 0; si < symbolCount; si++)
         {
-            int deg = SelectDegree(ref prng);
-            if (deg > N) deg = N;
-
-            idxSet.Clear();
-            while (idxSet.Count < deg)
-                idxSet.Add(NextPseudo(ref prng) % N);
-
             byte[] data = new byte[blockSize];
-            foreach (int idx in idxSet)
+            foreach (int idx in symIdx[si])
                 XorBlock(data, inter[idx], blockSize);
             result.Add(data);
         }
@@ -125,21 +146,11 @@ public static class LtCode
 
         Precode.Derive(inter, known, K, blockSize);
 
-        var symDeg = new int[symbolCount];
-        var symIdx = new int[symbolCount][];
+        var (symDeg, symIdx) = GetOrBuildSymbols(K, symbolCount, seed);
         var symData = new byte[symbolCount][];
         int dataOff = 0;
-
-        var idxSet = new HashSet<int>();
         for (int si = 0; si < symbolCount; si++)
         {
-            int deg = SelectDegree(ref prng);
-            if (deg > N) deg = N;
-            symDeg[si] = deg;
-            idxSet.Clear();
-            while (idxSet.Count < deg)
-                idxSet.Add(NextPseudo(ref prng) % N);
-            symIdx[si] = idxSet.ToArray();
             symData[si] = new byte[blockSize];
             Buffer.BlockCopy(allSymbolData, dataOff, symData[si], 0, blockSize);
             dataOff += blockSize;

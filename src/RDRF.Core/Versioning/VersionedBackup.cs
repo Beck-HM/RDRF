@@ -111,9 +111,11 @@ private static async Task<string> IncrementalBackupAsync(
         return prevFingerprint;
     }
 
-    // Compute diff for display (on uncompressed data)
-    byte[] oldData = ReadDecryptedOriginal(storage, prevFingerprint, password);
-    var diffResult = new DiffEngine().ComputeDiff(oldData, newData);
+    // Compute diff for display (on uncompressed data, sample head only)
+    long sampleSize = newData.Length > 256 * 1024 ? 64 * 1024 : 0;
+    byte[] oldData = ReadDecryptedOriginal(storage, prevFingerprint, password, sampleSize);
+    byte[] newSample = sampleSize > 0 ? newData.AsSpan(0, (int)sampleSize).ToArray() : newData;
+    var diffResult = new DiffEngine().ComputeDiff(oldData, newSample);
 
     var fileEntries = new List<FileEntry>
     {
@@ -245,15 +247,34 @@ private static void DedupPostProcessing(DssaAdapter storage, string actualFinger
     storage.WriteIndex(actualFingerprint, updatedIndex);
 }
 
-    private static byte[] ReadDecryptedOriginal(DssaAdapter storage, string fingerprint, byte[] password)
+    private static byte[] ReadDecryptedOriginal(DssaAdapter storage, string fingerprint,
+        byte[] password, long sampleSize = 0)
     {
         byte[] encryptedIndex = storage.ReadIndex(fingerprint);
         (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
         var index = IndexManager.DeserializeIndex(cbor);
         string prefix = index.CustomName ?? fingerprint;
 
-        var rawFragments = new List<byte[]>();
-        for (int i = 0; i < index.FragmentCount; i++)
+        int fragCount = index.FragmentCount;
+        int origCount = index.OriginalFragmentCount > 0 ? index.OriginalFragmentCount : fragCount;
+
+        // Determine how many fragments to read (partial read for sampling)
+        int fragsToRead = fragCount;
+        if (sampleSize > 0)
+        {
+            long total = 0;
+            for (int i = 0; i < origCount && i < (index.OriginalFragmentSizes?.Count ?? 0); i++)
+            {
+                total += index.OriginalFragmentSizes[i];
+                if (total >= sampleSize) { fragsToRead = i + 1; break; }
+            }
+            // FSS1 concatenation: encoded[i] = data[i] + data[(i+1)], need +1 for neighbor
+            if (fragsToRead < fragCount)
+                fragsToRead = Math.Min(fragCount, fragsToRead + 1);
+        }
+
+        var rawFragments = new List<byte[]>(fragsToRead);
+        for (int i = 0; i < fragsToRead; i++)
         {
             string fragName = FragmentEngine.Frags.FragmentFilename(prefix, i);
             byte[] encrypted = storage.ReadFragment(fragName);
@@ -263,11 +284,15 @@ private static void DedupPostProcessing(DssaAdapter storage, string actualFinger
 
         var fssEngine = new FSS.FSSEngine();
         var decoded = new Dictionary<int, byte[]>();
-        for (int i = 0; i < index.OriginalFragmentCount && i < rawFragments.Count; i++)
+        for (int i = 0; i < origCount && i < rawFragments.Count; i++)
             decoded[i] = rawFragments[i];
 
-        var stripped = fssEngine.Strip(decoded, index.FssStrategy, index.OriginalFragmentCount, index.OriginalFragmentSizes);
-        return FragmentEngine.Frags.MergeFragments(stripped);
+        var stripped = fssEngine.Strip(decoded, index.FssStrategy, origCount, index.OriginalFragmentSizes);
+        byte[] result = FragmentEngine.Frags.MergeFragments(stripped);
+
+        if (sampleSize > 0 && result.Length > sampleSize)
+            return result.AsSpan(0, (int)sampleSize).ToArray();
+        return result;
     }
 
     private static void AppendVersionRecord(
