@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -14,30 +15,37 @@ public static class AesNiCtr
     public static byte[] CtrCrypt(byte[] data, byte[] aesKey, byte[] nonce)
     {
         byte[] output = new byte[data.Length];
-        var rk = ExpandKey256(aesKey);
-        var counter = BuildCounter(nonce);
-
-        if (Aes.IsSupported)
-            CtrCryptCoreAesNi(data.AsSpan(), output.AsSpan(), rk, ref counter);
-        else
-            CtrCryptCoreFallback(data, output, aesKey, nonce);
-
+        CtrCrypt(data.AsSpan(), output.AsSpan(), aesKey, nonce);
         return output;
+    }
+
+    internal static void CtrCrypt(ReadOnlySpan<byte> src, Span<byte> dst, byte[] aesKey, byte[] nonce)
+    {
+        var counter = BuildCounter(nonce);
+        if (Aes.IsSupported)
+        {
+            var rk = ExpandKey256(aesKey);
+            CtrCryptCoreAesNi(src, dst, rk, ref counter);
+        }
+        else
+        {
+            CtrCryptCoreFallback(src, dst, aesKey, nonce);
+        }
     }
 
     public static void CtrCryptStream(Stream input, Stream output, byte[] aesKey, byte[] nonce, int bufferSize = 81920)
     {
-        var rk = ExpandKey256(aesKey);
-        var counter = BuildCounter(nonce);
-        byte[] buffer = new byte[bufferSize];
-
-        while (true)
+        if (Aes.IsSupported)
         {
-            int bytesRead = input.Read(buffer, 0, buffer.Length);
-            if (bytesRead == 0) break;
+            var rk = ExpandKey256(aesKey);
+            var counter = BuildCounter(nonce);
+            byte[] buffer = new byte[bufferSize];
 
-            if (Aes.IsSupported)
+            while (true)
             {
+                int bytesRead = input.Read(buffer, 0, buffer.Length);
+                if (bytesRead == 0) break;
+
                 int offset = 0;
                 while (offset < bytesRead)
                 {
@@ -60,32 +68,59 @@ public static class AesNiCtr
                     }
                     offset += chunk;
                 }
-            }
-            else
-            {
-                int blockCount = (bytesRead + 15) / 16;
-                var counters = new byte[blockCount * 16];
-                var keystream = new byte[blockCount * 16];
-                Span<byte> ctr = stackalloc byte[16];
-                counter.CopyTo(ctr);
 
-                for (int i = 0; i < blockCount; i++)
+                output.Write(buffer, 0, bytesRead);
+            }
+        }
+        else
+        {
+            CtrCryptStreamFallback(input, output, aesKey, nonce, bufferSize);
+        }
+    }
+
+    private static void CtrCryptStreamFallback(Stream input, Stream output,
+        byte[] aesKey, byte[] nonce, int bufferSize)
+    {
+        using var aes = SCryptography.Aes.Create();
+        aes.Key = aesKey;
+        aes.Mode = SCryptography.CipherMode.ECB;
+        aes.Padding = SCryptography.PaddingMode.None;
+        using var encryptor = aes.CreateEncryptor();
+
+        var counter = BuildCounter(nonce);
+        byte[] buffer = new byte[bufferSize];
+
+        while (true)
+        {
+            int bytesRead = input.Read(buffer, 0, buffer.Length);
+            if (bytesRead == 0) break;
+
+            int blockCount = (bytesRead + 15) / 16;
+            int bufSize = blockCount * 16;
+            byte[] counters = ArrayPool<byte>.Shared.Rent(bufSize);
+            byte[] keystream = ArrayPool<byte>.Shared.Rent(bufSize);
+            try
+            {
+                Span<byte> ctr = stackalloc byte[16];
+                MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref counter, 1)).CopyTo(ctr);
+
+                var countSpan = counters.AsSpan(0, bufSize);
+                for (int ci = 0; ci < blockCount; ci++)
                 {
-                    ctr.CopyTo(counters.AsSpan(i * 16, 16));
+                    ctr.CopyTo(countSpan.Slice(ci * 16, 16));
                     for (int j = 15; j >= 0; j--)
                         if (++ctr[j] != 0) break;
                 }
                 counter = MemoryMarshal.Read<Vector128<byte>>(ctr);
 
-                using var aes = SCryptography.Aes.Create();
-                aes.Key = aesKey;
-                aes.Mode = SCryptography.CipherMode.ECB;
-                aes.Padding = SCryptography.PaddingMode.None;
-                using var enc = aes.CreateEncryptor();
-                enc.TransformBlock(counters, 0, counters.Length, keystream, 0);
+                encryptor.TransformBlock(counters, 0, bufSize, keystream, 0);
 
-                for (int i = 0; i < bytesRead; i++)
-                    buffer[i] ^= keystream[i];
+                XorSpan(buffer.AsSpan(0, bytesRead), keystream.AsSpan(0, bytesRead));
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(counters);
+                ArrayPool<byte>.Shared.Return(keystream);
             }
 
             output.Write(buffer, 0, bytesRead);
@@ -264,36 +299,64 @@ public static class AesNiCtr
         }
     }
 
+    // ── XorSpan: SIMD XOR with AVX2/SSE2 fallback ──
+
+    private static void XorSpan(Span<byte> buffer, ReadOnlySpan<byte> keystream)
+    {
+        int xorIdx = 0;
+        if (Avx2.IsSupported)
+        {
+            for (; xorIdx + 32 <= buffer.Length; xorIdx += 32)
+                Avx2.Xor(
+                    Vector256.LoadUnsafe(ref MemoryMarshal.GetReference(buffer.Slice(xorIdx))),
+                    Vector256.LoadUnsafe(ref MemoryMarshal.GetReference(keystream.Slice(xorIdx))))
+                    .CopyTo(buffer.Slice(xorIdx));
+        }
+        for (; xorIdx + 16 <= buffer.Length; xorIdx += 16)
+            Vector128.Xor(
+                Vector128.LoadUnsafe(ref MemoryMarshal.GetReference(buffer.Slice(xorIdx))),
+                Vector128.LoadUnsafe(ref MemoryMarshal.GetReference(keystream.Slice(xorIdx))))
+                .CopyTo(buffer.Slice(xorIdx));
+        for (; xorIdx < buffer.Length; xorIdx++)
+            buffer[xorIdx] ^= keystream[xorIdx];
+    }
+
     // ── Fallback (batch TransformBlock) ──
 
-    private static void CtrCryptCoreFallback(byte[] data, byte[] output, byte[] aesKey, byte[] nonce)
+    private static void CtrCryptCoreFallback(ReadOnlySpan<byte> src, Span<byte> dst, byte[] aesKey, byte[] nonce)
     {
-        int blockCount = (data.Length + 15) / 16;
-        byte[] counters = new byte[blockCount * 16];
-        byte[] keystream = new byte[blockCount * 16];
-
-        Span<byte> ctr = stackalloc byte[16];
-        nonce.AsSpan(0, Math.Min(nonce.Length, 12)).CopyTo(ctr);
-        ctr[15] = 1;
-
-        for (int i = 0; i < blockCount; i++)
+        int blockCount = (src.Length + 15) / 16;
+        int bufSize = blockCount * 16;
+        byte[] counters = ArrayPool<byte>.Shared.Rent(bufSize);
+        byte[] keystream = ArrayPool<byte>.Shared.Rent(bufSize);
+        try
         {
-            ctr.CopyTo(counters.AsSpan(i * 16, 16));
-            for (int j = 15; j >= 0; j--)
-                if (++ctr[j] != 0) break;
+            Span<byte> ctr = stackalloc byte[16];
+            nonce.AsSpan(0, Math.Min(nonce.Length, 12)).CopyTo(ctr);
+            ctr[15] = 1;
+
+            var countSpan = counters.AsSpan(0, bufSize);
+            for (int ci = 0; ci < blockCount; ci++)
+            {
+                ctr.CopyTo(countSpan.Slice(ci * 16, 16));
+                for (int j = 15; j >= 0; j--)
+                    if (++ctr[j] != 0) break;
+            }
+
+            using var aes = SCryptography.Aes.Create();
+            aes.Key = aesKey;
+            aes.Mode = SCryptography.CipherMode.ECB;
+            aes.Padding = SCryptography.PaddingMode.None;
+            using var encryptor = aes.CreateEncryptor();
+            encryptor.TransformBlock(counters, 0, bufSize, keystream, 0);
+
+            src.CopyTo(dst);
+            XorSpan(dst, keystream.AsSpan(0, src.Length));
         }
-
-        using var aes = SCryptography.Aes.Create();
-        aes.Key = aesKey;
-        aes.Mode = SCryptography.CipherMode.ECB;
-        aes.Padding = SCryptography.PaddingMode.None;
-        using var encryptor = aes.CreateEncryptor();
-        encryptor.TransformBlock(counters, 0, counters.Length, keystream, 0);
-
-        var dSpan = data.AsSpan();
-        var kSpan = keystream.AsSpan();
-        var oSpan = output.AsSpan();
-        for (int i = 0; i < data.Length; i++)
-            oSpan[i] = (byte)(dSpan[i] ^ kSpan[i]);
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(counters);
+            ArrayPool<byte>.Shared.Return(keystream);
+        }
     }
 }

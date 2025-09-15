@@ -1,4 +1,5 @@
 using RDRF.Core.Dssa;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Formats.Cbor;
 using System.Security.Cryptography;
@@ -56,7 +57,7 @@ public static class EncryptionLayer
         Buffer.BlockCopy(encryptedData, offset, nonce, 0, nonceLen);
         Buffer.BlockCopy(encryptedData, offset + nonceLen, ciphertext, 0, ciphertextLen);
 
-        return CtrCryptWithKey(ciphertext, aesKey, nonce);
+        return AesNiCtr.CtrCrypt(ciphertext, aesKey, nonce);
     }
 
     private static byte[] CtrCryptWithKey(byte[] data, byte[] aesKey, byte[] nonce)
@@ -105,7 +106,7 @@ public static class EncryptionLayer
         Buffer.BlockCopy(encryptedData, offset, nonce, 0, nonceLen);
         Buffer.BlockCopy(encryptedData, offset + nonceLen, ciphertext, 0, ciphertextLen);
 
-        return CtrCryptWithKey(ciphertext, aesKey, nonce);
+        return AesNiCtr.CtrCrypt(ciphertext, aesKey, nonce);
     }
 
     public static byte[] DecryptFragmentCtr(byte[] encryptedData, byte[] rcCode)
@@ -119,19 +120,43 @@ public static class EncryptionLayer
     {
         bool hasHeader = FragmentFileHeader.HasHeader(encryptedData);
         int hdrOff = hasHeader ? FragmentFileHeader.GetTotalHeaderSize(encryptedData) : 0;
-        byte[] decrypted = DecryptFragmentCtrWithKey(encryptedData, hdrOff, aesKey);
+        int nonceLen = Constants.NonceLength;
+        int ciphertextLen = encryptedData.Length - hdrOff - nonceLen;
+        if (ciphertextLen < 0)
+            throw new CryptographicException("Invalid encrypted data length.");
 
-        if (hasHeader && decrypted.Length >= 4)
+        byte[] nonce = new byte[nonceLen];
+        Buffer.BlockCopy(encryptedData, hdrOff, nonce, 0, nonceLen);
+
+        byte[] ciphertext = ArrayPool<byte>.Shared.Rent(ciphertextLen);
+        byte[] output = ArrayPool<byte>.Shared.Rent(ciphertextLen);
+        try
         {
-            int idxLen = BitConverter.ToInt32(decrypted.AsSpan(0, 4));
-            if (idxLen > 0 && idxLen <= decrypted.Length - 4)
-            {
-                CryptographicOperations.ZeroMemory(decrypted.AsSpan(0, 4 + idxLen));
-                decrypted = decrypted[(4 + idxLen)..];
-            }
-        }
+            Buffer.BlockCopy(encryptedData, hdrOff + nonceLen, ciphertext, 0, ciphertextLen);
+            AesNiCtr.CtrCrypt(ciphertext.AsSpan(0, ciphertextLen), output.AsSpan(0, ciphertextLen), aesKey, nonce);
 
-        return decrypted;
+            if (hasHeader && ciphertextLen >= 4)
+            {
+                int idxLen = BitConverter.ToInt32(output.AsSpan(0, 4));
+                if (idxLen > 0 && idxLen <= ciphertextLen - 4)
+                {
+                    int dataLen = ciphertextLen - (4 + idxLen);
+                    byte[] result = new byte[dataLen];
+                    Buffer.BlockCopy(output, 4 + idxLen, result, 0, dataLen);
+                    CryptographicOperations.ZeroMemory(output.AsSpan(0, 4 + idxLen));
+                    return result;
+                }
+            }
+
+            byte[] clean = new byte[ciphertextLen];
+            Buffer.BlockCopy(output, 0, clean, 0, ciphertextLen);
+            return clean;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(ciphertext);
+            ArrayPool<byte>.Shared.Return(output);
+        }
     }
 
     public static byte[] EncryptIndexWithKey(byte[] indexData, byte[] aesKey)
