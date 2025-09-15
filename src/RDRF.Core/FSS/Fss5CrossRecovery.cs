@@ -115,14 +115,17 @@ public class Fss5CrossRecovery : IFssStrategy
         {
             if (!encodedFragments.TryGetValue(i, out var data)) continue;
 
-            // If original sizes available and data matches, it's already raw (e.g. recovered)
             if (originalSizes != null && i < originalSizes.Count && data.Length <= originalSizes[i])
             {
                 result.Add(data);
                 continue;
             }
-
-            result.Add(ExtractOwnData(data));
+            if (IsValidFss5Fragment(data, out _))
+            {
+                result.Add(ExtractOwnData(data));
+                continue;
+            }
+            result.Add(data);
         }
         return result;
     }
@@ -131,7 +134,9 @@ public class Fss5CrossRecovery : IFssStrategy
     {
         if (originalSizes != null && index < originalSizes.Count && encodedFragment.Length <= originalSizes[index])
             return encodedFragment;
-        return ExtractOwnData(encodedFragment);
+        if (IsValidFss5Fragment(encodedFragment, out _))
+            return ExtractOwnData(encodedFragment);
+        return encodedFragment;
     }
 
     private static bool IsValidFss5Fragment(byte[] data, out int ownSize)

@@ -160,10 +160,11 @@ public class BackupOrchestrator : IDisposable
 
         byte[] compressedData = Compressor.Compress(rawFileData, compressionMethod);
         bool dataCompressed = compressedData.Length < rawFileData.Length;
+        int dataLenForOverPad = compressedData.Length;
 
         // Pad compressed data to fragSize boundary so all fragments have equal data size
         // (required by FSS1 neighbor XOR which assumes uniform fragment sizes)
-        int paddedLen = ((compressedData.Length + fragSize - 1) / fragSize) * fragSize;
+        int paddedLen = ((dataLenForOverPad + fragSize - 1) / fragSize) * fragSize;
         if (paddedLen != compressedData.Length)
         {
             byte[] padded = new byte[paddedLen];
@@ -181,8 +182,7 @@ public class BackupOrchestrator : IDisposable
 
         int originalFragmentCount = originalFragments.Count;
         var originalFragmentSizes = originalFragments.Select(f => f.Length).ToList();
-        // Restore actual data length for last fragment
-        int overPad = paddedLen - compressedData.Length;
+        int overPad = paddedLen - dataLenForOverPad;
         if (overPad > 0 && originalFragmentSizes.Count > 0)
             originalFragmentSizes[^1] = fragSize - overPad;
 

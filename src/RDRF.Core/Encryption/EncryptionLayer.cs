@@ -19,11 +19,11 @@ public static class EncryptionLayer
         if (salt == null)
             return SHA256.HashData(rcCode);
         string cacheKey = Convert.ToHexString(rcCode) + Convert.ToHexString(salt);
-        return _keyCache.GetOrAdd(cacheKey, _ =>
+        return (byte[])_keyCache.GetOrAdd(cacheKey, _ =>
         {
             using var pbkdf2 = new Rfc2898DeriveBytes(rcCode, salt, Pbkdf2Iterations, HashAlgorithmName.SHA256);
             return pbkdf2.GetBytes(32);
-        });
+        }).Clone();
     }
 
     public static byte[] GenerateRcCode(int length = 64)

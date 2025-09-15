@@ -13,7 +13,7 @@ public class ReedSolomon
 
     private static readonly byte[] ExpTable = new byte[512];
     private static readonly byte[] LogTable = new byte[256];
-    private static readonly ConcurrentDictionary<int, byte[][]> _invCache = new();
+    private static readonly ConcurrentDictionary<string, byte[][]> _invCache = new();
 
     static ReedSolomon()
     {
@@ -121,9 +121,11 @@ public class ReedSolomon
                 }
             }
 
-            int invKey = _dataShards;
+            var sb = new System.Text.StringBuilder();
+            sb.Append(_dataShards);
             for (int i = 0; i < _dataShards; i++)
-                invKey = HashCode.Combine(invKey, decodeIndices[i]);
+                sb.Append(',').Append(decodeIndices[i]);
+            string invKey = sb.ToString();
 
             if (!_invCache.TryGetValue(invKey, out var invA))
             {
@@ -224,7 +226,11 @@ public class ReedSolomon
     }
 
     private static byte GfAdd(byte a, byte b) => (byte)(a ^ b);
-    private static byte GfMul(byte a, byte b) => _mulTableStatic[a][b];
+    private static byte GfMul(byte a, byte b)
+    {
+        if (a == 0 || b == 0) return 0;
+        return ExpTable[LogTable[a] + LogTable[b]];
+    }
     private static readonly byte[][] _mulTableStatic = BuildMulTable();
 
     private static byte[][] BuildMulTable()

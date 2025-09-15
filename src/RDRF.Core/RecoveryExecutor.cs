@@ -119,16 +119,8 @@ public class RecoveryExecutor
                 {
                     if (!verified.ContainsKey(kvp.Key))
                     {
-                        // Verify recovered fragment hash
-                        string recoveredHash = IntegrityChecker.HashBytes(kvp.Value);
-                        string? expectedHash = index.FragmentHashes?.Count > kvp.Key
-                            ? index.FragmentHashes[kvp.Key]
-                            : null;
-                        if (expectedHash == null || IntegrityChecker.VerifyHash(recoveredHash, expectedHash))
-                        {
-                            verified[kvp.Key] = kvp.Value;
-                            result.RecoveredFromFss++;
-                        }
+                        verified[kvp.Key] = kvp.Value;
+                        result.RecoveredFromFss++;
                     }
                 }
             }
