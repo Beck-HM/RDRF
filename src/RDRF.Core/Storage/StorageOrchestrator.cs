@@ -183,7 +183,8 @@ public class StorageOrchestrator
         if (options.FragmentCount <= 0)
             return candidates[0];
 
-        return candidates[options.FragmentIndex % candidates.Count];
+        int idx = options.FragmentIndex <= 0 ? 0 : options.FragmentIndex % candidates.Count;
+        return candidates[idx];
     }
 
     private IStorageBackend SelectBackendForRc(StorageUploadOptions options)

@@ -62,6 +62,7 @@ public class Fss2Verify : IFssStrategy
         foreach (var kvp in encodedFragments)
         {
             byte[] data = kvp.Value;
+            if (data.Length < 32) continue;
             int hashLen = 32;
             byte[] fragData = new byte[data.Length - hashLen];
             Buffer.BlockCopy(data, 0, fragData, 0, fragData.Length);
@@ -126,6 +127,8 @@ public class Fss2Verify : IFssStrategy
 
     public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)
     {
+        if (encodedFragment.Length < 32)
+            return _fss1.StripSingle(encodedFragment, index, originalSizes);
         byte[] data = new byte[encodedFragment.Length - 32];
         Buffer.BlockCopy(encodedFragment, 0, data, 0, data.Length);
         return _fss1.StripSingle(data, index, originalSizes);
