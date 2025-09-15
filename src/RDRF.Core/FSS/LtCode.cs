@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
 using System.Security.Cryptography;
@@ -27,26 +28,25 @@ public static class LtCode
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void XorBlock(byte[] dest, byte[] src, int blockSize)
+    private static void XorBlock(Span<byte> dest, ReadOnlySpan<byte> src)
     {
+        int blockSize = dest.Length;
+        ref byte dRef = ref MemoryMarshal.GetReference(dest);
+        ref byte sRef = ref MemoryMarshal.GetReference(src);
         if (Avx2.IsSupported)
         {
             int i = 0;
             for (; i + 32 <= blockSize; i += 32)
             {
-                ref var d = ref dest[i];
-                ref var s = ref src[i];
-                var vd = Vector256.LoadUnsafe(ref d);
-                var vs = Vector256.LoadUnsafe(ref s);
-                Avx2.Xor(vd, vs).CopyTo(dest.AsSpan(i));
+                var vd = Vector256.LoadUnsafe(ref dRef, (nuint)i);
+                var vs = Vector256.LoadUnsafe(ref sRef, (nuint)i);
+                Avx2.Xor(vd, vs).CopyTo(dest.Slice(i));
             }
             for (; i + 16 <= blockSize; i += 16)
             {
-                ref var d = ref dest[i];
-                ref var s = ref src[i];
-                var vd = Vector128.LoadUnsafe(ref d);
-                var vs = Vector128.LoadUnsafe(ref s);
-                Vector128.Xor(vd, vs).CopyTo(dest.AsSpan(i));
+                var vd = Vector128.LoadUnsafe(ref dRef, (nuint)i);
+                var vs = Vector128.LoadUnsafe(ref sRef, (nuint)i);
+                Vector128.Xor(vd, vs).CopyTo(dest.Slice(i));
             }
             for (; i < blockSize; i++)
                 dest[i] ^= src[i];
@@ -56,11 +56,9 @@ public static class LtCode
             int i = 0;
             for (; i + 16 <= blockSize; i += 16)
             {
-                ref var d = ref dest[i];
-                ref var s = ref src[i];
-                var vd = Vector128.LoadUnsafe(ref d);
-                var vs = Vector128.LoadUnsafe(ref s);
-                Vector128.Xor(vd, vs).CopyTo(dest.AsSpan(i));
+                var vd = Vector128.LoadUnsafe(ref dRef, (nuint)i);
+                var vs = Vector128.LoadUnsafe(ref sRef, (nuint)i);
+                Vector128.Xor(vd, vs).CopyTo(dest.Slice(i));
             }
             for (; i < blockSize; i++)
                 dest[i] ^= src[i];
@@ -109,8 +107,10 @@ public static class LtCode
         for (int si = 0; si < symbolCount; si++)
         {
             byte[] data = new byte[blockSize];
-            foreach (int idx in symIdx[si])
-                XorBlock(data, inter[idx], blockSize);
+            var sd = data.AsSpan(0, blockSize);
+            var siIdx = symIdx[si];
+            for (int t = 0; t < siIdx.Length; t++)
+                XorBlock(sd, inter[siIdx[t]].AsSpan(0, blockSize));
             result.Add(data);
         }
 
@@ -124,142 +124,183 @@ public static class LtCode
     {
         int K = blockCount;
         int N = 2 * K;
-        ulong prng = (ulong)seed;
 
-        var inter = new byte[N][];
-        for (int i = 0; i < K; i++)
+        int interSize = N * blockSize;
+        int symSize = symbolCount * blockSize;
+        byte[] interBuf = ArrayPool<byte>.Shared.Rent(interSize);
+        byte[] symBuf = ArrayPool<byte>.Shared.Rent(symSize);
+        var interSpan = interBuf.AsSpan(0, interSize);
+        var symSpan = symBuf.AsSpan(0, symSize);
+
+        try
         {
-            inter[i] = new byte[blockSize];
-            Buffer.BlockCopy(allBlocks[i], 0, inter[i], 0, blockSize);
-        }
-        for (int i = K; i < N; i++)
-            inter[i] = new byte[blockSize];
+            for (int i = 0; i < K; i++)
+                Buffer.BlockCopy(allBlocks[i], 0, interBuf, i * blockSize, blockSize);
 
-        var known = new bool[N];
-        var srcKnown = new bool[K];
-        int totalBad = 0;
-        for (int i = 0; i < K; i++)
-        {
-            if (!isCorrupted[i]) { known[i] = true; srcKnown[i] = true; }
-            else totalBad++;
-        }
-
-        Precode.Derive(inter, known, K, blockSize);
-
-        var (symDeg, symIdx) = GetOrBuildSymbols(K, symbolCount, seed);
-        var symData = new byte[symbolCount][];
-        int dataOff = 0;
-        for (int si = 0; si < symbolCount; si++)
-        {
-            symData[si] = new byte[blockSize];
-            Buffer.BlockCopy(allSymbolData, dataOff, symData[si], 0, blockSize);
-            dataOff += blockSize;
-        }
-
-        var remainingDeg = new int[symbolCount];
-        for (int si = 0; si < symbolCount; si++)
-        {
-            int deg = symDeg[si];
-            byte[] sd = symData[si];
-            foreach (int bi in symIdx[si])
+            var known = new bool[N];
+            var srcKnown = new bool[K];
+            int totalBad = 0;
+            for (int i = 0; i < K; i++)
             {
-                if (known[bi])
-                {
-                    XorBlock(sd, inter[bi], blockSize);
-                    deg--;
-                }
+                if (!isCorrupted[i]) { known[i] = true; srcKnown[i] = true; }
+                else totalBad++;
             }
-            remainingDeg[si] = deg;
-        }
 
-        var symToBlock = new List<int>[N];
-        for (int i = 0; i < N; i++) symToBlock[i] = new List<int>();
-        for (int si = 0; si < symbolCount; si++)
-            foreach (int bi in symIdx[si])
-                symToBlock[bi].Add(si);
+            Precode.Derive(interSpan, known, K, blockSize);
 
-        var queue = new Queue<int>();
-        for (int si = 0; si < symbolCount; si++)
-            if (remainingDeg[si] == 1) queue.Enqueue(si);
+            var initiallyKnown = new bool[N];
+            Array.Copy(known, initiallyKnown, N);
 
-        int recovered = 0;
+            var (symDeg, symIdx) = GetOrBuildSymbols(K, symbolCount, seed);
 
-        while (recovered < totalBad)
-        {
-            bool progress = false;
-            var newlyKnown = new HashSet<int>();
-
-            while (queue.Count > 0)
+            var remainingDeg = new int[symbolCount];
+            int symStride = blockSize;
+            for (int si = 0; si < symbolCount; si++)
             {
-                int si = queue.Dequeue();
-                if (remainingDeg[si] != 1) continue;
+                int deg = symDeg[si];
+                var siIdx = symIdx[si];
+                for (int t = 0; t < siIdx.Length; t++)
+                    if (known[siIdx[t]]) deg--;
+                remainingDeg[si] = deg;
+            }
 
-                int target = -1;
-                foreach (int bi in symIdx[si])
-                    if (!known[bi]) { target = bi; break; }
-                if (target < 0) continue;
+            bool[] symMaterialized = new bool[symbolCount];
 
-                Buffer.BlockCopy(symData[si], 0, inter[target], 0, blockSize);
-                known[target] = true;
-
-                if (target < K && !srcKnown[target])
+            void EnsureSym(int si)
+            {
+                if (!symMaterialized[si])
                 {
-                    Buffer.BlockCopy(inter[target], 0, allBlocks[target], 0, blockSize);
-                    srcKnown[target] = true;
-                    recovered++;
-                    progress = true;
-                }
-
-                foreach (int si2 in symToBlock[target])
-                {
-                    if (remainingDeg[si2] <= 1) continue;
-                    XorBlock(symData[si2], inter[target], blockSize);
-                    remainingDeg[si2]--;
-                    if (remainingDeg[si2] == 1)
-                        queue.Enqueue(si2);
+                    Buffer.BlockCopy(allSymbolData, si * blockSize, symBuf, si * blockSize, blockSize);
+                    symMaterialized[si] = true;
                 }
             }
 
-            // Derive ladder/global from newly known source blocks
-            var derived = Precode.Derive(inter, known, K, blockSize);
-            foreach (int d in derived)
-                newlyKnown.Add(d);
-
-            var (unlocked, newSrcs) = Precode.Unlock(inter, known, srcKnown,
-                allBlocks, K, blockSize);
-            if (unlocked > 0)
+            var symToList = new List<int>[N];
+            for (int i = 0; i < N; i++) symToList[i] = new List<int>();
+            for (int si = 0; si < symbolCount; si++)
             {
-                recovered += unlocked;
-                progress = true;
-                foreach (int s in newSrcs)
-                    newlyKnown.Add(s);
-
-                var derived2 = Precode.Derive(inter, known, K, blockSize);
-                foreach (int d in derived2)
-                    newlyKnown.Add(d);
+                var siIdx = symIdx[si];
+                for (int t = 0; t < siIdx.Length; t++)
+                    symToList[siIdx[t]].Add(si);
             }
+            var symToBlock = new int[N][];
+            for (int i = 0; i < N; i++)
+                symToBlock[i] = symToList[i].Count > 0 ? symToList[i].ToArray() : Array.Empty<int>();
 
-            if (progress && newlyKnown.Count > 0)
+            var queue = new Queue<int>();
+            for (int si = 0; si < symbolCount; si++)
+                if (remainingDeg[si] == 1) queue.Enqueue(si);
+
+            int recovered = 0;
+
+            while (recovered < totalBad)
             {
-                // Incremental update: XOR newly known blocks from symbols
-                queue.Clear();
-                foreach (int nk in newlyKnown)
+                bool progress = false;
+                var newlyKnown = new HashSet<int>();
+
+                var recoveredBlocks = new List<int>();
+                while (queue.Count > 0)
                 {
-                    foreach (int si in symToBlock[nk])
+                    int si = queue.Dequeue();
+                    if (remainingDeg[si] != 1) continue;
+
+                    // Materialize symbol data if not yet copied from allSymbolData
+                    EnsureSym(si);
+
+                    // XOR out initially-known blocks to isolate the single unknown block
+                    var sd = symSpan.Slice(si * symStride, blockSize);
+                    var tgtIdx = symIdx[si];
+                    for (int t = 0; t < tgtIdx.Length; t++)
                     {
-                        if (remainingDeg[si] <= 1) continue;
-                        XorBlock(symData[si], inter[nk], blockSize);
-                        remainingDeg[si]--;
-                        if (remainingDeg[si] == 1)
-                            queue.Enqueue(si);
+                        int bi = tgtIdx[t];
+                        if (initiallyKnown[bi])
+                            XorBlock(sd, interSpan.Slice(bi * symStride, blockSize));
+                    }
+
+                    int target = -1;
+                    for (int t = 0; t < tgtIdx.Length; t++)
+                    {
+                        int bi = tgtIdx[t];
+                        if (!known[bi]) { target = bi; break; }
+                    }
+                    if (target < 0) continue;
+
+                    sd.CopyTo(interSpan.Slice(target * symStride, blockSize));
+                    known[target] = true;
+
+                    if (target < K && !srcKnown[target])
+                    {
+                        Buffer.BlockCopy(interBuf, target * symStride, allBlocks[target], 0, blockSize);
+                        srcKnown[target] = true;
+                        recovered++;
+                        progress = true;
+                        recoveredBlocks.Add(target);
+                    }
+
+                    var stbArr = symToBlock[target];
+                    var interTgtSlice = interSpan.Slice(target * symStride, blockSize);
+                    for (int t = 0; t < stbArr.Length; t++)
+                    {
+                        int si2 = stbArr[t];
+                        if (remainingDeg[si2] <= 1) continue;
+                        EnsureSym(si2);
+                        XorBlock(symSpan.Slice(si2 * symStride, blockSize), interTgtSlice);
+                        remainingDeg[si2]--;
+                        if (remainingDeg[si2] == 1)
+                            queue.Enqueue(si2);
                     }
                 }
+
+                // Incremental Derive: only check neighbors of queue-recovered source blocks
+                var derived = Precode.DeriveIncremental(interSpan, known, K, blockSize, recoveredBlocks);
+                foreach (int d in derived)
+                    newlyKnown.Add(d);
+
+                var (unlocked, newSrcs) = Precode.Unlock(interSpan, known, srcKnown,
+                    allBlocks, K, blockSize);
+                if (unlocked > 0)
+                {
+                    recovered += unlocked;
+                    progress = true;
+                    foreach (int s in newSrcs)
+                        newlyKnown.Add(s);
+
+                    // Incremental Derive from unlocked source blocks
+                    var derived2 = Precode.DeriveIncremental(interSpan, known, K, blockSize, newSrcs);
+                    foreach (int d in derived2)
+                        newlyKnown.Add(d);
+                }
+
+                if (progress && newlyKnown.Count > 0)
+                {
+                    queue.Clear();
+                    foreach (int nk in newlyKnown)
+                    {
+                        var nkArr = symToBlock[nk];
+                        var interSlice = interSpan.Slice(nk * symStride, blockSize);
+                        for (int t = 0; t < nkArr.Length; t++)
+                        {
+                            int si = nkArr[t];
+                            if (remainingDeg[si] <= 1) continue;
+                            EnsureSym(si);
+                            XorBlock(symSpan.Slice(si * symStride, blockSize), interSlice);
+                            remainingDeg[si]--;
+                            if (remainingDeg[si] == 1)
+                                queue.Enqueue(si);
+                        }
+                    }
+                }
+
+                if (!progress) break;
             }
 
-            if (!progress) break;
+            return recovered >= totalBad;
         }
-
-        return recovered >= totalBad;
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(interBuf);
+            ArrayPool<byte>.Shared.Return(symBuf);
+        }
     }
 
     public static (int symbolCount, double overhead) GetSymbolCount(int blockCount, double repairRatio)
