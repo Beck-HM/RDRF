@@ -201,7 +201,6 @@ public static class LtCode
 
                 Buffer.BlockCopy(symData[si], 0, inter[target], 0, blockSize);
                 known[target] = true;
-                newlyKnown.Add(target);
 
                 if (target < K && !srcKnown[target])
                 {

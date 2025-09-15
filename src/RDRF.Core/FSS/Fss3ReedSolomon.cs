@@ -74,7 +74,7 @@ public class Fss3ReedSolomon : IFssStrategy
 
         // Pack column parity into fragments
         int totalColBlocks = K * P;
-        int blocksPerFrag = maxSize / SubBlockSize;
+        int blocksPerFrag = Math.Max(1, maxSize / SubBlockSize);
         int colFragCount = (totalColBlocks + blocksPerFrag - 1) / blocksPerFrag;
         var result = new List<byte[]>(fragments) { rowFrag };
 
@@ -104,7 +104,7 @@ public class Fss3ReedSolomon : IFssStrategy
         int maxSize = available.Values.Max(f => f.Length);
         int B = (maxSize + SubBlockSize - 1) / SubBlockSize;
         int P = DefaultColParity;
-        int blocksPerFrag = maxSize / SubBlockSize;
+        int blocksPerFrag = Math.Max(1, maxSize / SubBlockSize);
         int colFragCount = (K * P + blocksPerFrag - 1) / blocksPerFrag;
         int totalEncoded = K + 1 + colFragCount;
 
