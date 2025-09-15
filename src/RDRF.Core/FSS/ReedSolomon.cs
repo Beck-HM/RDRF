@@ -9,10 +9,11 @@ public class ReedSolomon
     private readonly int _parityShards;
     private readonly int _totalShards;
     private readonly byte[,] _encodeMatrix;
+    private readonly byte[][] _mulTable;
 
     private static readonly byte[] ExpTable = new byte[512];
     private static readonly byte[] LogTable = new byte[256];
-    private static readonly ConcurrentDictionary<(int data, int parity), byte[][]> _invCache = new();
+    private static readonly ConcurrentDictionary<int, byte[][]> _invCache = new();
 
     static ReedSolomon()
     {
@@ -33,14 +34,22 @@ public class ReedSolomon
         _parityShards = parityShards;
         _totalShards = dataShards + parityShards;
 
-        // Precompute encoding matrix: _encodeMatrix[p, k] = coefficient for data[k] in parity shard p
         _encodeMatrix = new byte[parityShards, dataShards];
         for (int p = 0; p < parityShards; p++)
             for (int k = 0; k < dataShards; k++)
                 _encodeMatrix[p, k] = ExpTable[((p + 1) * k) % 255];
-    }
 
-    // ── Encode ──
+        _mulTable = new byte[256][];
+        _mulTable[0] = new byte[256];
+        for (int c = 1; c < 256; c++)
+        {
+            var row = new byte[256];
+            _mulTable[c] = row;
+            int logC = LogTable[c];
+            for (int a = 1; a < 256; a++)
+                row[a] = ExpTable[LogTable[a] + logC];
+        }
+    }
 
     public byte[][] Encode(byte[][] shards)
     {
@@ -55,32 +64,19 @@ public class ReedSolomon
                 int k = 0;
                 for (; k + 4 <= _dataShards; k += 4)
                 {
-                    byte c0 = _encodeMatrix[p, k];
-                    if (c0 != 0) val ^= GfMul(c0, shards[k][j]);
-                    byte c1 = _encodeMatrix[p, k + 1];
-                    if (c1 != 0) val ^= GfMul(c1, shards[k + 1][j]);
-                    byte c2 = _encodeMatrix[p, k + 2];
-                    if (c2 != 0) val ^= GfMul(c2, shards[k + 2][j]);
-                    byte c3 = _encodeMatrix[p, k + 3];
-                    if (c3 != 0) val ^= GfMul(c3, shards[k + 3][j]);
+                    val ^= _mulTable[_encodeMatrix[p, k]][shards[k][j]];
+                    val ^= _mulTable[_encodeMatrix[p, k + 1]][shards[k + 1][j]];
+                    val ^= _mulTable[_encodeMatrix[p, k + 2]][shards[k + 2][j]];
+                    val ^= _mulTable[_encodeMatrix[p, k + 3]][shards[k + 3][j]];
                 }
                 for (; k < _dataShards; k++)
-                {
-                    byte c = _encodeMatrix[p, k];
-                    if (c != 0) val ^= GfMul(c, shards[k][j]);
-                }
+                    val ^= _mulTable[_encodeMatrix[p, k]][shards[k][j]];
                 parity[j] = val;
             }
             shards[i] = parity;
         });
         return shards;
     }
-
-    // ── Decode with erasures ──
-    //
-    // Uses GF(256) matrix inversion on the encoding matrix sub-matrix
-    // to reconstruct missing shards.  Supports any (dataShards, parityShards)
-    // configuration as long as fewer than parityShards shards are lost.
 
     public bool Decode(byte[][] shards, List<int> erasures)
     {
@@ -94,46 +90,62 @@ public class ReedSolomon
 
         var decodeIndices = presentIndices.Take(_dataShards).ToList();
 
-        // Build encoding sub-matrix A for the chosen present shards.
-        // A[r][c] = coefficient for data[c] in shard decodeIndices[r].
-        byte[][] A = new byte[_dataShards][];
-        for (int r = 0; r < _dataShards; r++)
+        bool isIdentity = true;
+        for (int i = 0; i < _dataShards && isIdentity; i++)
+            if (decodeIndices[i] != i) isIdentity = false;
+
+        byte[][] data;
+
+        if (isIdentity)
         {
-            A[r] = new byte[_dataShards];
-            int rowIdx = decodeIndices[r];
-            for (int c = 0; c < _dataShards; c++)
+            data = new byte[_dataShards][];
+            for (int i = 0; i < _dataShards; i++)
             {
-                if (rowIdx < _dataShards)
-                    A[r][c] = (byte)(rowIdx == c ? 1 : 0);
-                else
-                    A[r][c] = ExpTable[((rowIdx - _dataShards + 1) * c) % 255];
+                data[i] = new byte[shardSize];
+                Buffer.BlockCopy(shards[i], 0, data[i], 0, shardSize);
             }
         }
-
-        // Invert A over GF(256) (cached per (dataShards, parityShards))
-        var invKey = (_dataShards, _parityShards);
-        if (!_invCache.TryGetValue(invKey, out var invA))
+        else
         {
-            invA = InvertMatrix(A);
-            if (invA != null) _invCache[invKey] = invA;
-        }
-        if (invA == null) return false;
-
-        // Recover original data in parallel: data[c] = sum(invA[c][r] * shard[decodeIndices[r]])
-        byte[][] data = new byte[_dataShards][];
-        Parallel.For(0, _dataShards, c =>
-        {
-            data[c] = new byte[shardSize];
-            for (int byteIdx = 0; byteIdx < shardSize; byteIdx++)
+            byte[][] A = new byte[_dataShards][];
+            for (int r = 0; r < _dataShards; r++)
             {
-                byte val = 0;
-                for (int r = 0; r < _dataShards; r++)
-                    val ^= GfMul(invA[c][r], shards[decodeIndices[r]][byteIdx]);
-                data[c][byteIdx] = val;
+                A[r] = new byte[_dataShards];
+                int rowIdx = decodeIndices[r];
+                for (int c = 0; c < _dataShards; c++)
+                {
+                    if (rowIdx < _dataShards)
+                        A[r][c] = (byte)(rowIdx == c ? 1 : 0);
+                    else
+                        A[r][c] = ExpTable[((rowIdx - _dataShards + 1) * c) % 255];
+                }
             }
-        });
 
-        // Re-encode all erasures in parallel
+            int invKey = _dataShards;
+            for (int i = 0; i < _dataShards; i++)
+                invKey = HashCode.Combine(invKey, decodeIndices[i]);
+
+            if (!_invCache.TryGetValue(invKey, out var invA))
+            {
+                invA = InvertMatrix(A);
+                if (invA != null) _invCache[invKey] = invA;
+            }
+            if (invA == null) return false;
+
+            data = new byte[_dataShards][];
+            Parallel.For(0, _dataShards, c =>
+            {
+                data[c] = new byte[shardSize];
+                for (int byteIdx = 0; byteIdx < shardSize; byteIdx++)
+                {
+                    byte val = 0;
+                    for (int r = 0; r < _dataShards; r++)
+                        val ^= _mulTable[invA[c][r]][shards[decodeIndices[r]][byteIdx]];
+                    data[c][byteIdx] = val;
+                }
+            });
+        }
+
         Parallel.ForEach(erasures, missingIdx =>
         {
             if (missingIdx < _dataShards)
@@ -150,16 +162,13 @@ public class ReedSolomon
                     int k = 0;
                     for (; k + 4 <= _dataShards; k += 4)
                     {
-                        byte c0 = _encodeMatrix[p, k]; if (c0 != 0) val ^= GfMul(c0, data[k][byteIdx]);
-                        byte c1 = _encodeMatrix[p, k + 1]; if (c1 != 0) val ^= GfMul(c1, data[k + 1][byteIdx]);
-                        byte c2 = _encodeMatrix[p, k + 2]; if (c2 != 0) val ^= GfMul(c2, data[k + 2][byteIdx]);
-                        byte c3 = _encodeMatrix[p, k + 3]; if (c3 != 0) val ^= GfMul(c3, data[k + 3][byteIdx]);
+                        val ^= _mulTable[_encodeMatrix[p, k]][data[k][byteIdx]];
+                        val ^= _mulTable[_encodeMatrix[p, k + 1]][data[k + 1][byteIdx]];
+                        val ^= _mulTable[_encodeMatrix[p, k + 2]][data[k + 2][byteIdx]];
+                        val ^= _mulTable[_encodeMatrix[p, k + 3]][data[k + 3][byteIdx]];
                     }
                     for (; k < _dataShards; k++)
-                    {
-                        byte c = _encodeMatrix[p, k];
-                        if (c != 0) val ^= GfMul(c, data[k][byteIdx]);
-                    }
+                        val ^= _mulTable[_encodeMatrix[p, k]][data[k][byteIdx]];
                     recovered[byteIdx] = val;
                 }
                 shards[missingIdx] = recovered;
@@ -168,8 +177,6 @@ public class ReedSolomon
 
         return true;
     }
-
-    // ── GF(256) matrix inversion via Gaussian elimination ──
 
     private static byte[][]? InvertMatrix(byte[][] matrix)
     {
@@ -187,9 +194,7 @@ public class ReedSolomon
         {
             int pivot = -1;
             for (int row = col; row < n; row++)
-            {
                 if (aug[row][col] != 0) { pivot = row; break; }
-            }
             if (pivot == -1) return null;
 
             (aug[col], aug[pivot]) = (aug[pivot], aug[col]);
@@ -218,14 +223,23 @@ public class ReedSolomon
         return result;
     }
 
-    // ── GF(2^8) operations ──
-
     private static byte GfAdd(byte a, byte b) => (byte)(a ^ b);
+    private static byte GfMul(byte a, byte b) => _mulTableStatic[a][b];
+    private static readonly byte[][] _mulTableStatic = BuildMulTable();
 
-    private static byte GfMul(byte a, byte b)
+    private static byte[][] BuildMulTable()
     {
-        if (a == 0 || b == 0) return 0;
-        return ExpTable[LogTable[a] + LogTable[b]];
+        var tbl = new byte[256][];
+        tbl[0] = new byte[256];
+        for (int c = 1; c < 256; c++)
+        {
+            var row = new byte[256];
+            tbl[c] = row;
+            int logC = LogTable[c];
+            for (int a = 1; a < 256; a++)
+                row[a] = ExpTable[LogTable[a] + logC];
+        }
+        return tbl;
     }
 
     private static byte GfMulVal(byte a, byte val)
