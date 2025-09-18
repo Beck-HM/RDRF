@@ -39,7 +39,7 @@ public class FssEndToEndTests
             dir = Path.GetDirectoryName(dir)!; // bin
             dir = Path.GetDirectoryName(dir)!; // RDRF.Core.Tests
             dir = Path.GetDirectoryName(dir)!; // tests
-            return Path.Combine(dir, "1.mp4");
+            return Path.Combine(dir, "2.mp4");
         }
     }
 

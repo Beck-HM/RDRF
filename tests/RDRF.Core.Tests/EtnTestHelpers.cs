@@ -19,7 +19,7 @@ public static class EtnTestHelpers
             var dir = AppContext.BaseDirectory;
             for (int i = 0; i < 5; i++)
                 dir = Path.GetDirectoryName(dir)!;
-            return Path.Combine(dir, "1.mp4");
+            return Path.Combine(dir, "2.mp4");
         }
     }
 
