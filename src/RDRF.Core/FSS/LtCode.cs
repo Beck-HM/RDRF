@@ -64,9 +64,11 @@ public static class LtCode
                 dest[i] ^= src[i];
         }
     }
-    private static readonly ConcurrentDictionary<(int K, int symbolCount, int seed), (int[] deg, int[][] idx)> _symCache = new();
+    public static double RepairRatio { get; set; } = 1.0;
 
-    private static (int[] deg, int[][] idx) GetOrBuildSymbols(int K, int symbolCount, int seed)
+    private static readonly ConcurrentDictionary<(int K, int symbolCount, int seed), (int[] deg, short[][] idx)> _symCache = new();
+
+    private static (int[] deg, short[][] idx) GetOrBuildSymbols(int K, int symbolCount, int seed)
     {
         var key = (K, symbolCount, seed);
         if (_symCache.TryGetValue(key, out var cached))
@@ -75,7 +77,7 @@ public static class LtCode
         int N = 2 * K;
         ulong prng = (ulong)seed;
         var deg = new int[symbolCount];
-        var idx = new int[symbolCount][];
+        var idx = new short[symbolCount][];
         var idxSet = new HashSet<int>();
 
         for (int si = 0; si < symbolCount; si++)
@@ -86,7 +88,11 @@ public static class LtCode
             idxSet.Clear();
             while (idxSet.Count < d)
                 idxSet.Add(NextPseudo(ref prng) % N);
-            idx[si] = idxSet.ToArray();
+            var arr = new short[d];
+            int pos = 0;
+            foreach (int val in idxSet)
+                arr[pos++] = (short)val;
+            idx[si] = arr;
         }
 
         _symCache[key] = (deg, idx);
@@ -147,6 +153,8 @@ public static class LtCode
             }
 
             Precode.Derive(interSpan, known, K, blockSize);
+
+            int knownSourceCount = K - totalBad;
 
             var initiallyKnown = new bool[N];
             Array.Copy(known, initiallyKnown, N);
@@ -252,21 +260,22 @@ public static class LtCode
                 }
 
                 // Incremental Derive: only check neighbors of queue-recovered source blocks
-                var derived = Precode.DeriveIncremental(interSpan, known, K, blockSize, recoveredBlocks);
+                var derived = Precode.DeriveIncremental(interSpan, known, K, blockSize, recoveredBlocks, knownSourceCount);
                 foreach (int d in derived)
                     newlyKnown.Add(d);
 
                 var (unlocked, newSrcs) = Precode.Unlock(interSpan, known, srcKnown,
-                    allBlocks, K, blockSize);
+                    allBlocks, K, blockSize, knownSourceCount);
                 if (unlocked > 0)
                 {
                     recovered += unlocked;
+                    knownSourceCount += unlocked;
                     progress = true;
                     foreach (int s in newSrcs)
                         newlyKnown.Add(s);
 
                     // Incremental Derive from unlocked source blocks
-                    var derived2 = Precode.DeriveIncremental(interSpan, known, K, blockSize, newSrcs);
+                    var derived2 = Precode.DeriveIncremental(interSpan, known, K, blockSize, newSrcs, knownSourceCount);
                     foreach (int d in derived2)
                         newlyKnown.Add(d);
                 }

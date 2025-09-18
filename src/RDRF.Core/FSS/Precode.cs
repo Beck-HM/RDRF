@@ -234,7 +234,8 @@ public static class Precode
 
     public static (int recovered, List<int> newSources) Unlock(
         Span<byte> interBuf, bool[] known,
-        bool[] srcKnown, byte[][] allBlocks, int K, int blockSize)
+        bool[] srcKnown, byte[][] allBlocks, int K, int blockSize,
+        int knownSourceCount)
     {
         int recovered = 0;
         var newSources = new List<int>();
@@ -274,16 +275,12 @@ public static class Precode
         }
 
         int gIdx = 2 * K - 1;
-        if (known[gIdx])
+        if (known[gIdx] && knownSourceCount == K - 1)
         {
             int missing = -1;
-            int count = 0;
             for (int i = 0; i < K; i++)
-            {
-                if (srcKnown[i]) count++;
-                else missing = i;
-            }
-            if (count == K - 1 && missing >= 0)
+                if (!srcKnown[i]) { missing = i; break; }
+            if (missing >= 0)
             {
                 var target = interBuf.Slice(missing * blockSize, blockSize);
                 interBuf.Slice(gIdx * blockSize, blockSize).CopyTo(target);
@@ -304,7 +301,7 @@ public static class Precode
     }
 
     public static List<int> DeriveIncremental(Span<byte> interBuf, bool[] known, int K, int blockSize,
-        List<int> changedSrcIndices)
+        List<int> changedSrcIndices, int knownSourceCount)
     {
         var derived = new List<int>();
         int N = 2 * K;
@@ -340,20 +337,14 @@ public static class Precode
         }
 
         int gIdx = N - 1;
-        if (!known[gIdx])
+        if (!known[gIdx] && knownSourceCount == K)
         {
-            int knownCount = 0;
+            var target = interBuf.Slice(gIdx * blockSize, blockSize);
+            target.Clear();
             for (int i = 0; i < K; i++)
-                if (known[i]) knownCount++;
-            if (knownCount == K)
-            {
-                var target = interBuf.Slice(gIdx * blockSize, blockSize);
-                target.Clear();
-                for (int i = 0; i < K; i++)
-                    XorIntoSpan(target, interBuf.Slice(i * blockSize, blockSize));
-                known[gIdx] = true;
-                derived.Add(gIdx);
-            }
+                XorIntoSpan(target, interBuf.Slice(i * blockSize, blockSize));
+            known[gIdx] = true;
+            derived.Add(gIdx);
         }
 
         return derived;

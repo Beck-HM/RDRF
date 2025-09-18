@@ -273,7 +273,8 @@ public class BackupOrchestrator : IDisposable
                     var ib = SplitToBlocks(serializedIndex, bs);
                     if (ib.Length > 0)
                     {
-                        var (sym, seed) = LtCode.Encode(ib, ib.Length, bs);
+                        int symCount = Math.Max(1, (int)(ib.Length * LtCode.RepairRatio));
+                        var (sym, seed) = LtCode.Encode(ib, symCount, bs);
                         return new Fss61RepairData
                         {
                             Seed = seed, BlockCount = ib.Length, BlockSize = bs,
@@ -300,7 +301,8 @@ public class BackupOrchestrator : IDisposable
                     if (fb.Count > 0)
                     {
                         var allFrags = fb.ToArray();
-                        var (sym, seed) = LtCode.Encode(allFrags, allFrags.Length, bs);
+                        int symCount = Math.Max(1, (int)(allFrags.Length * LtCode.RepairRatio));
+                        var (sym, seed) = LtCode.Encode(allFrags, symCount, bs);
                         return new Fss61RepairData
                         {
                             Seed = seed, BlockCount = allFrags.Length, BlockSize = bs,
@@ -315,7 +317,8 @@ public class BackupOrchestrator : IDisposable
                     var rb = SplitToBlocks(rcBytes, bs);
                     if (rb.Length > 0)
                     {
-                        var (sym, seed) = LtCode.Encode(rb, rb.Length, bs);
+                        int symCount = Math.Max(1, (int)(rb.Length * LtCode.RepairRatio));
+                        var (sym, seed) = LtCode.Encode(rb, symCount, bs);
                         return new Fss61RepairData
                         {
                             Seed = seed, BlockCount = rb.Length, BlockSize = bs,
@@ -520,7 +523,8 @@ public class BackupOrchestrator : IDisposable
                 var indexBlocks = SplitToBlocks(serializedIndex, bs);
                 if (indexBlocks.Length > 0)
                 {
-                    var (sym, seed) = LtCode.Encode(indexBlocks, indexBlocks.Length, bs);
+                    int symCount = Math.Max(1, (int)(indexBlocks.Length * LtCode.RepairRatio));
+                    var (sym, seed) = LtCode.Encode(indexBlocks, symCount, bs);
                     rcFile.RepairA = new Fss61RepairData
                     {
                         Seed = seed, BlockCount = indexBlocks.Length, BlockSize = bs,
@@ -543,7 +547,8 @@ public class BackupOrchestrator : IDisposable
                 if (fragBlocks.Count > 0)
                 {
                     var allFrags = fragBlocks.ToArray();
-                    var (sym, seed) = LtCode.Encode(allFrags, allFrags.Length, bs);
+                    int symCount = Math.Max(1, (int)(allFrags.Length * LtCode.RepairRatio));
+                    var (sym, seed) = LtCode.Encode(allFrags, symCount, bs);
                     rcFile.RepairB = new Fss61RepairData
                     {
                         Seed = seed, BlockCount = allFrags.Length, BlockSize = bs,
@@ -555,7 +560,8 @@ public class BackupOrchestrator : IDisposable
                 var rcBlocks = SplitToBlocks(rcBytes, bs);
                 if (rcBlocks.Length > 0)
                 {
-                    var (sym, seed) = LtCode.Encode(rcBlocks, rcBlocks.Length, bs);
+                    int symCount = Math.Max(1, (int)(rcBlocks.Length * LtCode.RepairRatio));
+                    var (sym, seed) = LtCode.Encode(rcBlocks, symCount, bs);
                     indexObj.Fss61RepairC = new Fss61RepairData
                     {
                         Seed = seed, BlockCount = rcBlocks.Length, BlockSize = bs,
