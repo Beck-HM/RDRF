@@ -1,8 +1,9 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Threading.Channels;
+using System.IO.Hashing;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Threading.Channels;
 using RDRF.Core.Compression;
 using RDRF.Core.Encryption;
 using RDRF.Core.ETN;
@@ -257,31 +258,34 @@ public class RestoreOrchestrator : IDisposable
                     fileFingerprint, ct).ConfigureAwait(false);
             }
 
-            // Strip ETN/FSS6.1 trailers (parallel)
-            bool isFss61 = fssStrategy == Constants.FssLevel61;
-            var keys = decryptedFragments.Keys.ToList();
-            Parallel.ForEach(keys, idx =>
+            // Strip ETN/FSS6.1 trailers (parallel, only if ETN data exists)
+            if (hasFss6)
             {
-                decryptedFragments[idx] = isFss61
-                    ? StripAnyTrailer(decryptedFragments[idx])
-                    : ((Fss6Etn)_fss.GetStrategy(Constants.FssLevel6)).Strip(decryptedFragments[idx]);
-            });
-
-            if (allowFssRecovery)
-            {
-                var recoveryResult = await _recoveryExecutor.ExecuteRecoveryAsync(
-                    index, decryptedFragments, _metadata, skipVerification: etnActual).ConfigureAwait(false);
-                foreach (var kvp in recoveryResult.RecoveredFragments)
-                    decryptedFragments[kvp.Key] = kvp.Value;
-                var stillMissing = new List<int>();
-                for (int i = 0; i < fragmentCount; i++)
-                    if (!decryptedFragments.ContainsKey(i)) stillMissing.Add(i);
-                if (stillMissing.Count > 0)
+                bool isFss61 = fssStrategy == Constants.FssLevel61;
+                var keys = decryptedFragments.Keys.ToList();
+                Parallel.ForEach(keys, idx =>
                 {
-                    Debug.WriteLine($"  Restore failed: {stillMissing.Count} fragments still missing");
-                    return false;
-                }
+                    decryptedFragments[idx] = isFss61
+                        ? StripAnyTrailer(decryptedFragments[idx])
+                        : ((Fss6Etn)_fss.GetStrategy(Constants.FssLevel6)).Strip(decryptedFragments[idx]);
+                });
             }
+
+                if (allowFssRecovery)
+                {
+                    var recoveryResult = await _recoveryExecutor.ExecuteRecoveryAsync(
+                        index, decryptedFragments, _metadata, skipVerification: etnActual).ConfigureAwait(false);
+                    foreach (var kvp in recoveryResult.RecoveredFragments)
+                        decryptedFragments[kvp.Key] = kvp.Value;
+                    var stillMissing = new List<int>();
+                    for (int i = 0; i < fragmentCount; i++)
+                        if (!decryptedFragments.ContainsKey(i)) stillMissing.Add(i);
+                    if (stillMissing.Count > 0)
+                    {
+                        Debug.WriteLine($"  Restore failed: {stillMissing.Count} fragments still missing");
+                        return false;
+                    }
+                }
             else
             {
                 var missing = new List<int>();
@@ -722,14 +726,14 @@ public class RestoreOrchestrator : IDisposable
                 return false;
 
         var strategy = _fss.GetStrategy(index.FssStrategy);
-        var etn = (Fss6Etn)_fss.GetStrategy(Constants.FssLevel6);
+        bool hasEtn = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
+        var etn = hasEtn ? (Fss6Etn)_fss.GetStrategy(Constants.FssLevel6) : null;
 
         try
         {
             using var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
             using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
-            // Two-stage pipeline: Producer (read+decrypt) → Consumer (strip+decode+write+hash)
             var channel = Channel.CreateBounded<(int idx, byte[] data)>(4);
 
             var producer = Task.Run(async () =>
