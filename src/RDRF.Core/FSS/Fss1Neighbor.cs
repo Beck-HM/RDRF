@@ -45,24 +45,11 @@ public class Fss1Neighbor : IFssStrategy
                 if (work.ContainsKey(leftIdx))
                 {
                     byte[] neighborData = work[leftIdx];
-                    if (originalSizes != null && leftIdx < originalSizes.Count)
+                    int half = neighborData.Length / 2;
+                    if (neighborData.Length > half)
                     {
-                        int leftSize = originalSizes[leftIdx];
-                        if (neighborData.Length > leftSize)
-                        {
-                            byte[] recovered = new byte[neighborData.Length - leftSize];
-                            Buffer.BlockCopy(neighborData, leftSize, recovered, 0, recovered.Length);
-                            result[missingIdx] = recovered;
-                            work[missingIdx] = recovered;
-                            madeProgress = true;
-                            continue;
-                        }
-                    }
-                    else
-                    {
-                        int half = neighborData.Length / 2;
-                        byte[] recovered = new byte[half];
-                        Buffer.BlockCopy(neighborData, half, recovered, 0, half);
+                        byte[] recovered = new byte[neighborData.Length - half];
+                        Buffer.BlockCopy(neighborData, half, recovered, 0, recovered.Length);
                         result[missingIdx] = recovered;
                         work[missingIdx] = recovered;
                         madeProgress = true;
@@ -74,21 +61,9 @@ public class Fss1Neighbor : IFssStrategy
                 if (work.ContainsKey(rightIdx))
                 {
                     byte[] neighborData = work[rightIdx];
-                    if (originalSizes != null && missingIdx < originalSizes.Count)
+                    int half = neighborData.Length / 2;
+                    if (neighborData.Length >= half)
                     {
-                        int missingSize = originalSizes[missingIdx];
-                        if (neighborData.Length >= missingSize)
-                        {
-                            byte[] recovered = new byte[missingSize];
-                            Buffer.BlockCopy(neighborData, 0, recovered, 0, missingSize);
-                            result[missingIdx] = recovered;
-                            work[missingIdx] = recovered;
-                            madeProgress = true;
-                        }
-                    }
-                    else
-                    {
-                        int half = neighborData.Length / 2;
                         byte[] recovered = new byte[half];
                         Buffer.BlockCopy(neighborData, 0, recovered, 0, half);
                         result[missingIdx] = recovered;

@@ -196,6 +196,7 @@ private static async Task<string> IncrementalBackupAsync(
             compressionMethod: dataCompressed ? Constants.CompressionLz4 : null)
             .GetAwaiter().GetResult();
 
+        CleanupOldFragments(storage, prevFingerprint);
         AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage,
             diffResult.HumanDiff, oldVersions, fileEntries);
         return actualFingerprint;
@@ -211,6 +212,7 @@ private static async Task<string> IncrementalBackupAsync(
                 progress, ct).ConfigureAwait(false);
         }
 
+        CleanupOldFragments(storage, prevFingerprint);
         DedupPostProcessing(storage, actualFingerprint, password, prevFingerprint, prevRawHashes, newRawHashes);
         AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage,
             diffResult.HumanDiff, oldVersions, fileEntries);
