@@ -744,7 +744,7 @@ public class RestoreOrchestrator : IDisposable
                     byte[] encrypted = await _storage.ReadFragmentAsync(
                         Frags.FragmentFilename(filePrefix, i), ct).ConfigureAwait(false);
                     byte[] decrypted = EncryptionLayer.DecryptAndStripFragment(encrypted, _aesKey);
-                    if (etn != null)
+                    if (etn != null && index.FssStrategy != Constants.FssLevel61)
                         decrypted = etn.Strip(decrypted);
                     await channel.Writer.WriteAsync((i, decrypted), ct).ConfigureAwait(false);
                 }

@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using RDRF.Core.Compression;
 using RDRF.Core.Encryption;
 using RDRF.Core.ETN;
 using RDRF.Core.FragmentEngine;
@@ -60,9 +61,12 @@ public class EtnEdgeCaseTests
             FragmentEngine.Frags.MergeFragments(decrypted, tmpMergePath);
             byte[] restored = File.ReadAllBytes(tmpMergePath);
             try { File.Delete(tmpMergePath); } catch { }
+            if (index.Compression == Constants.CompressionLz4)
+                restored = Compression.Compressor.Decompress(restored, index.Compression);
+            else if (restored.Length > index.FileSize)
+                Array.Resize(ref restored, (int)index.FileSize);
             byte[] originalHash = SHA256.HashData(File.ReadAllBytes(EtnTestHelpers.TestFile));
             byte[] restoredHash = SHA256.HashData(restored);
-
             Assert.Equal(Convert.ToHexString(originalHash), Convert.ToHexString(restoredHash));
             _output.WriteLine("PASS: RC file missing, restore still succeeds");
         }
