@@ -261,7 +261,7 @@ public class RestoreOrchestrator : IDisposable
             // Strip ETN/FSS6.1 trailers (parallel, only if ETN data exists)
             if (hasFss6)
             {
-                bool isFss61 = fssStrategy == Constants.FssLevel61;
+                bool isFss61 = fssStrategy is Constants.FssLevel61 or Constants.FssLevel62;
                 var keys = decryptedFragments.Keys.ToList();
                 Parallel.ForEach(keys, idx =>
                 {
@@ -665,6 +665,8 @@ public class RestoreOrchestrator : IDisposable
     {
         var (raw61, _, _, _, _) = FSS.Fss61RepairTrailer.Parse(frag);
         if (raw61.Length < frag.Length) return raw61;
+        var (raw62, _, _, _, _) = FSS.Fss62RepairTrailer.Parse(frag);
+        if (raw62.Length < frag.Length) return raw62;
         var (rawEtn, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
         return rawEtn;
     }
@@ -744,7 +746,8 @@ public class RestoreOrchestrator : IDisposable
                     byte[] encrypted = await _storage.ReadFragmentAsync(
                         Frags.FragmentFilename(filePrefix, i), ct).ConfigureAwait(false);
                     byte[] decrypted = EncryptionLayer.DecryptAndStripFragment(encrypted, _aesKey);
-                    if (etn != null && index.FssStrategy != Constants.FssLevel61)
+                    if (etn != null && index.FssStrategy != Constants.FssLevel61
+                        && index.FssStrategy != Constants.FssLevel62)
                         decrypted = etn.Strip(decrypted);
                     await channel.Writer.WriteAsync((i, decrypted), ct).ConfigureAwait(false);
                 }

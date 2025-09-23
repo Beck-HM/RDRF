@@ -247,8 +247,10 @@ public class BackupOrchestrator : IDisposable
         byte[] rcBytes = [];
 
         bool hasFss6 = plan.ActiveStrategies.Contains(Constants.FssLevel6)
-                     || plan.ActiveStrategies.Contains(Constants.FssLevel61);
+                     || plan.ActiveStrategies.Contains(Constants.FssLevel61)
+                     || plan.ActiveStrategies.Contains(Constants.FssLevel62);
         bool hasFss61 = plan.ActiveStrategies.Contains(Constants.FssLevel61);
+        bool hasFss62 = plan.ActiveStrategies.Contains(Constants.FssLevel62);
         if (hasFss6)
         {
             var (etnFragments, etnIndexJson, etnRcJson) = Fss6Etn.InjectCrossValidation(
@@ -351,6 +353,83 @@ public class BackupOrchestrator : IDisposable
                 serializedIndex = IndexManager.SerializeIndex(indexObj);
             }
             catch (Exception ex) { Debug.WriteLine($"FSS6.1 triple repair generation failed: {ex.Message}"); }
+        }
+
+        // FSS6.2: three-node independent Duip repair generation
+        if (hasFss62 && rcBytes.Length > 0)
+        {
+            try
+            {
+                var rcFile62 = RcFile.FromCbor(rcBytes);
+                var indexObj62 = IndexManager.DeserializeIndex(serializedIndex);
+                int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
+
+                // A (Index)
+                var ib = SplitToBlocks(serializedIndex, bs);
+                if (ib.Length > 0)
+                {
+                    var (symA, entropyA, seedA) = DuipCode.Encode(ib, bs);
+                    rcFile62.Repair62A = new Fss62RepairData
+                    {
+                        Seed = seedA, BlockCount = ib.Length, BlockSize = bs,
+                        Data = FlattenSymbols(symA, bs), EntropySamples = entropyA,
+                    };
+                }
+
+                // B (Fragments)
+                var fb = new List<byte[]>();
+                foreach (var frag in fragments)
+                {
+                    var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
+                    for (int off = 0; off < rawData.Length; off += bs)
+                    {
+                        int len = Math.Min(bs, rawData.Length - off);
+                        byte[] block = new byte[bs];
+                        Buffer.BlockCopy(rawData, off, block, 0, len);
+                        fb.Add(block);
+                    }
+                }
+                if (fb.Count > 0)
+                {
+                    var allFrags = fb.ToArray();
+                    var (symB, entropyB, seedB) = DuipCode.Encode(allFrags, bs);
+                    var repair62B = new Fss62RepairData
+                    {
+                        Seed = seedB, BlockCount = allFrags.Length, BlockSize = bs,
+                        Data = FlattenSymbols(symB, bs), EntropySamples = entropyB,
+                    };
+                    rcFile62.Repair62B = repair62B;
+                    indexObj62.Fss62RepairB = repair62B;
+                }
+
+                // C (RC)
+                var rb = SplitToBlocks(rcBytes, bs);
+                if (rb.Length > 0)
+                {
+                    var (symC, entropyC, seedC) = DuipCode.Encode(rb, bs);
+                    indexObj62.Fss62RepairC = new Fss62RepairData
+                    {
+                        Seed = seedC, BlockCount = rb.Length, BlockSize = bs,
+                        Data = FlattenSymbols(symC, bs), EntropySamples = entropyC,
+                    };
+                }
+
+                // D: replace trailers
+                if (rcFile62.Repair62A != null && indexObj62.Fss62RepairC != null)
+                {
+                    string fp = filePrefix ?? fileFingerprint;
+                    for (int i = 0; i < fragments.Count; i++)
+                    {
+                        var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(fragments[i]);
+                        fragments[i] = Fss62RepairTrailer.Build(rawData, fp, fp,
+                            rcFile62.Repair62A, indexObj62.Fss62RepairC);
+                    }
+                }
+
+                rcBytes = rcFile62.ToCborBytes();
+                serializedIndex = IndexManager.SerializeIndex(indexObj62);
+            }
+            catch (Exception ex) { Debug.WriteLine($"FSS6.2 repair generation failed: {ex.Message}"); }
         }
 
         // Strip BM fields from the Index before embedding in fragment headers

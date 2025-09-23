@@ -18,13 +18,14 @@ public class FsaEngine
         { Constants.FssLevel5P, FamilyRs },
         { Constants.FssLevel6, FamilyEtn },
         { Constants.FssLevel61, FamilyEtn },
+        { Constants.FssLevel62, FamilyEtn },
     };
 
     private static readonly Dictionary<string, List<string>> FamilyRank = new()
     {
         { FamilyNeighbor, new List<string> { Constants.FssLevel1, Constants.FssLevel2 } },
         { FamilyRs, new List<string> { Constants.FssLevel2R, Constants.FssLevel3, Constants.FssLevel5, Constants.FssLevel5P } },
-        { FamilyEtn, new List<string> { Constants.FssLevel6, Constants.FssLevel61 } },
+        { FamilyEtn, new List<string> { Constants.FssLevel6, Constants.FssLevel61, Constants.FssLevel62 } },
     };
 
     public FsaPlan Compute(string primary, List<string>? auxiliary = null)
