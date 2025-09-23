@@ -13,6 +13,8 @@ public class RcFile
 
     public Fss61RepairData? RepairA { get; set; }
     public Fss61RepairData? RepairB { get; set; }
+    public Fss62RepairData? Repair62A { get; set; }
+    public Fss62RepairData? Repair62B { get; set; }
 
     public byte[] ToCborBytes()
     {
@@ -27,6 +29,8 @@ public class RcFile
 
         WriteRepair(writer, "repair_a", RepairA);
         WriteRepair(writer, "repair_b", RepairB);
+        WriteFss62Repair(writer, "repair_62a", Repair62A);
+        WriteFss62Repair(writer, "repair_62b", Repair62B);
 
         writer.WriteEndMap();
         return writer.Encode();
@@ -49,6 +53,8 @@ public class RcFile
                 case "created_at":           rc.CreatedAt = reader.ReadInt64(); break;
                 case "repair_a":             rc.RepairA = ReadRepair(reader); break;
                 case "repair_b":             rc.RepairB = ReadRepair(reader); break;
+                case "repair_62a":           rc.Repair62A = ReadFss62Repair(reader); break;
+                case "repair_62b":           rc.Repair62B = ReadFss62Repair(reader); break;
                 default:                     reader.SkipValue(); break;
             }
         }
@@ -80,6 +86,39 @@ public class RcFile
                 case "block_count": rd.BlockCount = r.ReadInt32(); break;
                 case "block_size":  rd.BlockSize = r.ReadInt32(); break;
                 case "data":        rd.Data = r.ReadByteString(); break;
+                default:            r.SkipValue(); break;
+            }
+        }
+        r.ReadEndMap();
+        return rd;
+    }
+
+    private static void WriteFss62Repair(CborWriter w, string key, Fss62RepairData? r)
+    {
+        if (r == null) return;
+        w.WriteTextString(key);
+        w.WriteStartMap(null);
+        w.WriteTextString("seed"); w.WriteInt32(r.Seed);
+        w.WriteTextString("block_count"); w.WriteInt32(r.BlockCount);
+        w.WriteTextString("block_size"); w.WriteInt32(r.BlockSize);
+        w.WriteTextString("data"); w.WriteByteString(r.Data);
+        w.WriteTextString("entropy"); w.WriteByteString(r.EntropySamples);
+        w.WriteEndMap();
+    }
+
+    private static Fss62RepairData ReadFss62Repair(CborReader r)
+    {
+        var rd = new Fss62RepairData();
+        r.ReadStartMap();
+        while (r.PeekState() != CborReaderState.EndMap)
+        {
+            switch (r.ReadTextString())
+            {
+                case "seed":        rd.Seed = r.ReadInt32(); break;
+                case "block_count": rd.BlockCount = r.ReadInt32(); break;
+                case "block_size":  rd.BlockSize = r.ReadInt32(); break;
+                case "data":        rd.Data = r.ReadByteString(); break;
+                case "entropy":     rd.EntropySamples = r.ReadByteString(); break;
                 default:            r.SkipValue(); break;
             }
         }

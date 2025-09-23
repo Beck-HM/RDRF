@@ -82,6 +82,8 @@ public static class IndexManager
         WriteFragments(writer, index.Fragments);
         WriteRepairData(writer, "fss61_repair_b", index.Fss61RepairB);
         WriteRepairData(writer, "fss61_repair_c", index.Fss61RepairC);
+        WriteFss62RepairData(writer, "fss62_repair_b", index.Fss62RepairB);
+        WriteFss62RepairData(writer, "fss62_repair_c", index.Fss62RepairC);
 
         writer.WriteEndMap();
         return writer.Encode();
@@ -120,6 +122,8 @@ public static class IndexManager
                 case "fragments":                   index.Fragments = ReadFragments(reader); break;
                 case "fss61_repair_b":              index.Fss61RepairB = ReadRepairData(reader); break;
                 case "fss61_repair_c":              index.Fss61RepairC = ReadRepairData(reader); break;
+                case "fss62_repair_b":              index.Fss62RepairB = ReadFss62RepairData(reader); break;
+                case "fss62_repair_c":              index.Fss62RepairC = ReadFss62RepairData(reader); break;
                 default:                            reader.SkipValue(); break;
             }
         }
@@ -500,6 +504,39 @@ public static class IndexManager
         w.WriteEndMap();
     }
 
+    private static void WriteFss62RepairData(CborWriter w, string key, FSS.Fss62RepairData? r)
+    {
+        if (r == null) return;
+        w.WriteTextString(key);
+        w.WriteStartMap(null);
+        w.WriteTextString("seed"); w.WriteInt32(r.Seed);
+        w.WriteTextString("block_count"); w.WriteInt32(r.BlockCount);
+        w.WriteTextString("block_size"); w.WriteInt32(r.BlockSize);
+        w.WriteTextString("data"); w.WriteByteString(r.Data);
+        w.WriteTextString("entropy"); w.WriteByteString(r.EntropySamples);
+        w.WriteEndMap();
+    }
+
+    private static FSS.Fss62RepairData? ReadFss62RepairData(CborReader r)
+    {
+        var rd = new FSS.Fss62RepairData();
+        r.ReadStartMap();
+        while (r.PeekState() != CborReaderState.EndMap)
+        {
+            switch (r.ReadTextString())
+            {
+                case "seed":        rd.Seed = r.ReadInt32(); break;
+                case "block_count": rd.BlockCount = r.ReadInt32(); break;
+                case "block_size":  rd.BlockSize = r.ReadInt32(); break;
+                case "data":        rd.Data = r.ReadByteString(); break;
+                case "entropy":     rd.EntropySamples = r.ReadByteString(); break;
+                default:            r.SkipValue(); break;
+            }
+        }
+        r.ReadEndMap();
+        return rd;
+    }
+
     private static FSS.Fss61RepairData? ReadRepairData(CborReader r)
     {
         var rd = new FSS.Fss61RepairData();
@@ -545,6 +582,8 @@ public class RdrfIndex
     public List<FragmentInfo>? Fragments { get; set; }
     public FSS.Fss61RepairData? Fss61RepairB { get; set; }
     public FSS.Fss61RepairData? Fss61RepairC { get; set; }
+    public FSS.Fss62RepairData? Fss62RepairB { get; set; }
+    public FSS.Fss62RepairData? Fss62RepairC { get; set; }
 }
 
 public class FragmentInfo
