@@ -36,7 +36,8 @@ public static class EtnPrecision
         byte[] strippedIndexBytes = StripFss6Fields(indexBytes);
         byte[] actualIndexFlat = EtnBlockMap.Build(strippedIndexBytes, blockSize);
         int actualIndexCount = EtnBlockMap.BlockCount(actualIndexFlat);
-        byte[] actualRcFlat = EtnBlockMap.Build(rcBytes, blockSize);
+        byte[] strippedRcBytes = StripFss6RcFields(rcBytes);
+        byte[] actualRcFlat = EtnBlockMap.Build(strippedRcBytes, blockSize);
         int actualRcCount = EtnBlockMap.BlockCount(actualRcFlat);
 
         var rcStoredIndexBm = rcFile.IndexBlockMap.Select(EtnBlockMap.HexToHash).ToList();
@@ -258,18 +259,36 @@ public static class EtnPrecision
         return set.ToList();
     }
 
+    internal static byte[] StripFss6RcFields(byte[] rcBytes)
+    {
+        var rc = RcFile.FromCbor(rcBytes);
+        rc.RepairA = null;
+        rc.RepairB = null;
+        rc.Repair62A = null;
+        rc.Repair62B = null;
+        return rc.ToCborBytes();
+    }
+
     internal static byte[] StripFss6Fields(byte[] indexBytes)
     {
         var index = IndexManager.DeserializeIndex(indexBytes);
         if (index == null) return indexBytes;
         index.Fss6FragmentBlockMaps = null;
         index.Fss6RcBlockMap = null;
+        index.Fss61RepairB = null;
+        index.Fss61RepairC = null;
+        index.Fss62RepairB = null;
+        index.Fss62RepairC = null;
         return IndexManager.SerializeIndex(index);
     }
 
     private static (byte[] data, byte[] fragFlat, int fragCount, byte[] indexFlat, int indexCount, byte[] rcFlat, int rcCount) ParseAnyTrailer(byte[] fragmentData)
     {
-        // Try FSS6.1 repair trailer first
+        // Try FSS6.2 repair trailer first (must precede 6.1 — 6.1 parse misreads 6.2 trailers)
+        var (raw62, _, _, _, _) = Fss62RepairTrailer.Parse(fragmentData);
+        if (raw62.Length < fragmentData.Length)
+            return (raw62, [], 0, [], 0, [], 0);
+        // Try FSS6.1 repair trailer
         var (raw61, _, _, _, _) = Fss61RepairTrailer.Parse(fragmentData);
         if (raw61.Length < fragmentData.Length)
             return (raw61, [], 0, [], 0, [], 0);

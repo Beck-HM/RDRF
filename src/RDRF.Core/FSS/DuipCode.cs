@@ -159,8 +159,6 @@ public static class DuipCode
                 {
                     int si2 = stbArr[t];
                     if (remainingDeg[si2] <= 1) continue;
-                    XorBlock(allSymbolData.AsSpan(si2 * symStride, blockSize),
-                        allBlocks[target].AsSpan(0, blockSize));
                     remainingDeg[si2]--;
                     if (remainingDeg[si2] == 1)
                         queue.Enqueue(si2);
