@@ -27,7 +27,10 @@ public static class DuipCode
         int R1 = (int)(0.4 * R);
         int R2a = (int)(0.25 * R);
         int R2b = (int)(0.25 * R);
-        int R3 = R - R1 - R2a - R2b;
+        // Layer 3 is always exactly 1 Global symbol. Excess symbols go to Layer 1.
+        int extra = R - R1 - R2a - R2b - 1;
+        if (extra > 0) R1 += extra;
+        int R3 = 1;
 
         ulong prng = (ulong)seed;
         int[] colCoverage = new int[K];
@@ -50,22 +53,11 @@ public static class DuipCode
             result.Add(GenSymbol(sourceBlocks, K, blockSize, faceSize, faceCount, entropy, entropyBits,
                 ref prng, colCoverage, faceCoverage, useReverseDeg: false, lowEntropyOnly: true));
 
-        // Layer 3: global (last symbol = XOR all source)
-        for (int i = 0; i < R3; i++)
-        {
-            if (i == R3 - 1)
-            {
-                byte[] global = new byte[blockSize];
-                for (int j = 0; j < K; j++)
-                    XorBlock(global.AsSpan(0, blockSize), sourceBlocks[j].AsSpan(0, blockSize));
-                result.Add(global);
-            }
-            else
-            {
-                result.Add(GenSymbol(sourceBlocks, K, blockSize, faceSize, faceCount, entropy, entropyBits,
-                    ref prng, colCoverage, faceCoverage, useReverseDeg: false, lowEntropyOnly: false));
-            }
-        }
+        // Layer 3: exactly 1 Global symbol (XOR all source)
+        byte[] global = new byte[blockSize];
+        for (int j = 0; j < K; j++)
+            XorBlock(global.AsSpan(0, blockSize), sourceBlocks[j].AsSpan(0, blockSize));
+        result.Add(global);
 
         return (result, entropy, seed);
     }
@@ -451,35 +443,30 @@ public static class DuipCode
         int R1 = (int)(0.4 * R);
         int R2a = (int)(0.25 * R);
         int R2b = (int)(0.25 * R);
-        int R3 = R - R1 - R2a - R2b;
+        int extra = R - R1 - R2a - R2b - 1;
+        if (extra > 0) R1 += extra;
 
         int[] colCoverage = new int[K];
         int[] faceCoverage = new int[faceCount];
 
         int si = 0;
-        int actualR1 = Math.Max(0, R1);
-        for (int i = 0; i < actualR1 && si < R - 1; i++, si++)
+        for (int i = 0; i < R1 && si < R - 1; i++, si++)
             BuildOneSymbol(K, faceSize, faceCount, entropy, entropyBits, ref prng,
                 colCoverage, faceCoverage, false, false, out symDeg[si], out symIdx[si]);
 
-        int actualR2a = Math.Max(0, R2a);
-        for (int i = 0; i < actualR2a && si < R - 1; i++, si++)
+        for (int i = 0; i < R2a && si < R - 1; i++, si++)
             BuildOneSymbol(K, faceSize, faceCount, entropy, entropyBits, ref prng,
                 colCoverage, faceCoverage, true, false, out symDeg[si], out symIdx[si]);
 
-        int actualR2b = Math.Max(0, R2b);
-        for (int i = 0; i < actualR2b && si < R - 1; i++, si++)
+        for (int i = 0; i < R2b && si < R - 1; i++, si++)
             BuildOneSymbol(K, faceSize, faceCount, entropy, entropyBits, ref prng,
                 colCoverage, faceCoverage, false, true, out symDeg[si], out symIdx[si]);
 
-        // Remaining symbols (R3) go to layer 3 (global)
+        // Last symbol (si = R - 1) = Global (degree K, all indices)
         var allIndices = new int[K];
         for (int i = 0; i < K; i++) allIndices[i] = i;
-        for (; si < R; si++)
-        {
-            symDeg[si] = K;
-            symIdx[si] = allIndices;
-        }
+        symDeg[R - 1] = K;
+        symIdx[R - 1] = allIndices;
     }
 
     private static void BuildOneSymbol(int K, int faceSize, int faceCount,

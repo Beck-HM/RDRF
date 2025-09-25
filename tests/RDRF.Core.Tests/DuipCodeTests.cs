@@ -50,6 +50,62 @@ public class DuipCodeTests
     }
 
     [Fact]
+    public void EncodeDecode_CorruptOne_RecoversFully()
+    {
+        int K = 50, bs = 256;
+        var blocks = MakeBlocks(K, bs);
+        var original = blocks.Select(b => b.ToArray()).ToArray();
+
+        var (symbols, entropy, seed) = DuipCode.Encode(blocks, bs);
+        var symFlat = symbols.SelectMany(s => s).ToArray();
+
+        // Corrupt block 0
+        var isBad = new bool[K];
+        isBad[0] = true;
+        blocks[0] = new byte[bs];
+        RandomNumberGenerator.Fill(blocks[0]);
+
+        int recovered = DuipCode.Decode(blocks, isBad, symFlat, entropy, K, bs, 32, 8);
+        Assert.True(recovered >= 1, $"Should recover corrupted block: {recovered}");
+
+        // Verify recovered block matches original
+        Assert.Equal(original[0], blocks[0]);
+        // Verify untouched blocks are unchanged
+        for (int i = 1; i < K; i++)
+            Assert.Equal(original[i], blocks[i]);
+    }
+
+    [Fact]
+    public void EncodeDecode_CorruptMultiple_AllRestored()
+    {
+        int K = 100, bs = 256;
+        var blocks = MakeBlocks(K, bs);
+        var original = blocks.Select(b => b.ToArray()).ToArray();
+
+        var (symbols, entropy, seed) = DuipCode.Encode(blocks, bs);
+        var symFlat = symbols.SelectMany(s => s).ToArray();
+
+        // Corrupt blocks 0, 10, 42
+        int[] corruptIndices = [0, 10, 42];
+        var isBad = new bool[K];
+        foreach (int idx in corruptIndices)
+        {
+            isBad[idx] = true;
+            blocks[idx] = new byte[bs];
+            RandomNumberGenerator.Fill(blocks[idx]);
+        }
+
+        int recovered = DuipCode.Decode(blocks, isBad, symFlat, entropy, K, bs, 32, 8);
+        Assert.True(recovered == corruptIndices.Length, $"Should recover all corrupted: {recovered}/{corruptIndices.Length}");
+
+        foreach (int idx in corruptIndices)
+            Assert.Equal(original[idx], blocks[idx]);
+        for (int i = 1; i < K; i++)
+            if (!corruptIndices.Contains(i))
+                Assert.Equal(original[i], blocks[i]);
+    }
+
+    [Fact]
     public void EncodeDecode_5PercentLoss()
     {
         int K = 100, bs = 256;
