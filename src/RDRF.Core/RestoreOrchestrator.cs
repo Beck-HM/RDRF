@@ -459,10 +459,12 @@ public class RestoreOrchestrator : IDisposable
                     if (cvResult.CorruptedFragments.Count > 0)
                         Debug.WriteLine($"    - Corrupted fragments: {string.Join(", ", cvResult.CorruptedFragments)}");
 
-                    // FSS6.1: try three-node LT repair
+                    // FSS6.1/6.2: try three-node repair
                     if (!cvResult.IsValid)
                     {
                         if (TryFss61TripleRepair(index, ref rcBytes, decryptedFragments, cvResult))
+                            validationActual = true;
+                        if (!validationActual && TryFss62TripleRepair(index, ref rcBytes, decryptedFragments, cvResult))
                             validationActual = true;
                     }
                 }
@@ -631,6 +633,152 @@ public class RestoreOrchestrator : IDisposable
         catch (Exception ex)
         {
             Debug.WriteLine($"  FSS6.1 triple repair failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    private bool TryFss62TripleRepair(RdrfIndex index, ref byte[] rcBytes,
+        Dictionary<int, byte[]> decryptedFragments, FSS.CrossValidationResult cvResult)
+    {
+        try
+        {
+            var rcFile = RcFile.FromCbor(rcBytes);
+            bool anyRepair = false;
+
+            // Read repair_A and repair_C from first available fragment trailer
+            FSS.Fss62RepairData? fragRepair62A = null;
+            FSS.Fss62RepairData? fragRepair62C = null;
+            foreach (var kvp in decryptedFragments)
+            {
+                var (_, _, _, ra, rc) = FSS.Fss62RepairTrailer.Parse(kvp.Value);
+                if (ra != null) fragRepair62A = ra;
+                if (rc != null) fragRepair62C = rc;
+                if (fragRepair62A != null && fragRepair62C != null) break;
+            }
+
+            // Repair A (Index) from RC.Repair62A or fragment trailer
+            if (cvResult.IndexCorrupted)
+            {
+                var ra = rcFile.Repair62A ?? fragRepair62A;
+                if (ra != null)
+                {
+                    int bs = ra.BlockSize;
+                    byte[] idxBytes = IndexManager.SerializeIndex(index);
+                    var blocks = SplitToBlocks(idxBytes, bs);
+                    var isBad = new bool[blocks.Length];
+                    for (int i = 0; i < cvResult.IndexCorruptedBlocks.Count && i < blocks.Length; i++)
+                        isBad[cvResult.IndexCorruptedBlocks[i]] = true;
+
+                    int recovered = FSS.DuipCode.Decode(blocks, isBad, ra.Data, ra.EntropySamples,
+                        blocks.Length, bs, FSS.DuipCode.DefaultFaceSize, FSS.DuipCode.DefaultEntropyBits);
+                    if (recovered >= cvResult.IndexCorruptedBlocks.Count)
+                    {
+                        var fixedIndex = IndexManager.DeserializeIndex(MergeBlocks(blocks, idxBytes.Length, bs));
+                        if (fixedIndex != null)
+                        {
+                            index.FileFingerprint = fixedIndex.FileFingerprint;
+                            index.OriginalName = fixedIndex.OriginalName;
+                            index.OriginalHash = fixedIndex.OriginalHash;
+                            anyRepair = true;
+                            Debug.WriteLine($"  Duip repaired Index (A): {recovered} blocks");
+                        }
+                    }
+                }
+            }
+
+            // Repair B (Fragments) from index.Fss62RepairB or RC.Repair62B
+            if (cvResult.CorruptedFragments.Count > 0)
+            {
+                FSS.Fss62RepairData? rb = index.Fss62RepairB ?? rcFile.Repair62B;
+                if (rb != null)
+                {
+                    int bs = rb.BlockSize;
+                    var sorted = decryptedFragments.OrderBy(k => k.Key).ToList();
+                    int totalBlocks = 0;
+                    var rawLengths = new List<int>();
+                    foreach (var kvp in sorted)
+                    {
+                        var (rawData, _, _, _, _) = FSS.Fss62RepairTrailer.Parse(kvp.Value);
+                        rawLengths.Add(rawData.Length);
+                        totalBlocks += (rawData.Length + bs - 1) / bs;
+                    }
+
+                    var allBlocks = new byte[totalBlocks][];
+                    var isBad = new bool[totalBlocks];
+                    int gIdx = 0;
+                    for (int fi = 0; fi < sorted.Count; fi++)
+                    {
+                        var (rawData, _, _, _, _) = FSS.Fss62RepairTrailer.Parse(sorted[fi].Value);
+                        cvResult.CorruptedFragmentBlocks.TryGetValue(fi, out var badBlocks);
+                        for (int off = 0; off < rawData.Length; off += bs)
+                        {
+                            int len = Math.Min(bs, rawData.Length - off);
+                            allBlocks[gIdx] = new byte[bs];
+                            Buffer.BlockCopy(rawData, off, allBlocks[gIdx], 0, len);
+                            int localIdx = off / bs;
+                            if (badBlocks != null && badBlocks.Contains(localIdx))
+                                isBad[gIdx] = true;
+                            gIdx++;
+                        }
+                    }
+
+                    int recovered = FSS.DuipCode.Decode(allBlocks, isBad, rb.Data, rb.EntropySamples,
+                        totalBlocks, bs, FSS.DuipCode.DefaultFaceSize, FSS.DuipCode.DefaultEntropyBits);
+                    if (recovered > 0)
+                    {
+                        gIdx = 0;
+                        for (int fi = 0; fi < sorted.Count; fi++)
+                        {
+                            byte[] frag = sorted[fi].Value;
+                            int rawLen = rawLengths[fi];
+                            cvResult.CorruptedFragmentBlocks.TryGetValue(fi, out var badBlocks);
+                            for (int off = 0; off < rawLen; off += bs)
+                            {
+                                int localIdx = off / bs;
+                                if (badBlocks != null && badBlocks.Contains(localIdx))
+                                {
+                                    int len = Math.Min(bs, rawLen - off);
+                                    Buffer.BlockCopy(allBlocks[gIdx], 0, frag, off, len);
+                                }
+                                gIdx++;
+                            }
+                        }
+                        anyRepair = true;
+                        Debug.WriteLine($"  Duip repaired Fragments (B): {recovered} blocks");
+                    }
+                }
+            }
+
+            // Repair C (RC) from index.Fss62RepairC or fragment trailer
+            if (cvResult.RcCorrupted)
+            {
+                var rc = index.Fss62RepairC ?? fragRepair62C;
+                if (rc != null)
+                {
+                    int bs = rc.BlockSize;
+                    var blocks = SplitToBlocks(rcBytes, bs);
+                    var isBad = new bool[blocks.Length];
+                    for (int i = 0; i < cvResult.RcCorruptedBlocks.Count && i < blocks.Length; i++)
+                        isBad[cvResult.RcCorruptedBlocks[i]] = true;
+
+                    int recovered = FSS.DuipCode.Decode(blocks, isBad, rc.Data, rc.EntropySamples,
+                        blocks.Length, bs, FSS.DuipCode.DefaultFaceSize, FSS.DuipCode.DefaultEntropyBits);
+                    if (recovered > 0)
+                    {
+                        rcBytes = MergeBlocks(blocks, rcBytes.Length, bs);
+                        anyRepair = true;
+                        Debug.WriteLine($"  Duip repaired RC (C): {recovered} blocks");
+                    }
+                }
+            }
+
+            if (!anyRepair)
+                Debug.WriteLine("  FSS6.2 triple repair: no applicable repair data found");
+            return anyRepair;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"  FSS6.2 triple repair failed: {ex.Message}");
             return false;
         }
     }
