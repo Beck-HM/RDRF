@@ -326,15 +326,16 @@ public class RestoreOrchestrator : IDisposable
             fs.SetLength(index.FileSize);
         }
 
+        long outSize = File.Exists(outputPath) ? new FileInfo(outputPath).Length : -1;
         string restoredHash = IntegrityChecker.HashFile(outputPath);
         bool valid = IntegrityChecker.VerifyHash(restoredHash, index.OriginalHash);
         Debug.WriteLine($"  Integrity check: {(valid ? "PASS" : "FAIL")}");
 
         if (valid)
         {
-            Debug.WriteLine("  Restore complete!");
             return true;
         }
+        Debug.WriteLine($"  Integrity check FAILED");
         return false;
     }
 
@@ -811,10 +812,10 @@ public class RestoreOrchestrator : IDisposable
 
     private static byte[] StripAnyTrailer(byte[] frag)
     {
-        var (raw61, _, _, _, _) = FSS.Fss61RepairTrailer.Parse(frag);
-        if (raw61.Length < frag.Length) return raw61;
         var (raw62, _, _, _, _) = FSS.Fss62RepairTrailer.Parse(frag);
         if (raw62.Length < frag.Length) return raw62;
+        var (raw61, _, _, _, _) = FSS.Fss61RepairTrailer.Parse(frag);
+        if (raw61.Length < frag.Length) return raw61;
         var (rawEtn, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
         return rawEtn;
     }
@@ -848,11 +849,14 @@ public class RestoreOrchestrator : IDisposable
             return;
         }
 
+        bool alreadyStripped = fssStrategy is Constants.FssLevel61 or Constants.FssLevel62;
         using var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
         for (int i = 0; i < originalCount; i++)
         {
             if (!decryptedFragments.TryGetValue(i, out var data)) continue;
-            byte[] original = strategy.StripSingle(data, i, originalSizes);
+            byte[] original = alreadyStripped
+                ? data
+                : strategy.StripSingle(data, i, originalSizes);
             output.Write(original, 0, original.Length);
             decryptedFragments[i] = null!;
         }
