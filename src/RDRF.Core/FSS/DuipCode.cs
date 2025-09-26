@@ -1,4 +1,4 @@
-using System.Buffers;
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
@@ -8,11 +8,15 @@ namespace RDRF.Core.FSS;
 
 public static class DuipCode
 {
+    private const int MaxDegree = 8;
+
     public const int DefaultFaceSize = 32;
     public const int DefaultEntropyBits = 8;
     public const int DefaultBlockSize = 256;
 
     public static double RepairRatio { get; set; } = 0.5;
+
+    // Cache disabled — entropy differs per data source (A/B/C), making simple key invalid.
 
     public static (List<byte[]> symbols, byte[] entropySamples, int seed) Encode(
         byte[][] sourceBlocks, int blockSize, int faceSize = DefaultFaceSize, int entropyBits = DefaultEntropyBits)
@@ -27,7 +31,6 @@ public static class DuipCode
         int R1 = (int)(0.4 * R);
         int R2a = (int)(0.25 * R);
         int R2b = (int)(0.25 * R);
-        // Layer 3 is always exactly 1 Global symbol. Excess symbols go to Layer 1.
         int extra = R - R1 - R2a - R2b - 1;
         if (extra > 0) R1 += extra;
         int R3 = 1;
@@ -36,22 +39,30 @@ public static class DuipCode
         int[] colCoverage = new int[K];
         int[] faceCoverage = new int[faceCount];
 
+        // Pre-sort faces by entropy for lowEntropyOnly
+        var sortedFaces = Enumerable.Range(0, faceCount)
+            .OrderBy(f => entropy[f]).ToArray();
+        int third = Math.Max(1, faceCount / 3);
+
         var result = new List<byte[]>(R);
 
         // Layer 1: adaptive sparse
         for (int si = 0; si < R1; si++)
-            result.Add(GenSymbol(sourceBlocks, K, blockSize, faceSize, faceCount, entropy, entropyBits,
-                ref prng, colCoverage, faceCoverage, useReverseDeg: false, lowEntropyOnly: false));
+            result.Add(GenSymbol(sourceBlocks, K, blockSize, faceSize, entropy, entropyBits,
+                ref prng, colCoverage, faceCoverage, sortedFaces, third,
+                useReverseDeg: false, lowEntropyOnly: false));
 
         // Layer 2A: reverse compensation
         for (int si = 0; si < R2a; si++)
-            result.Add(GenSymbol(sourceBlocks, K, blockSize, faceSize, faceCount, entropy, entropyBits,
-                ref prng, colCoverage, faceCoverage, useReverseDeg: true, lowEntropyOnly: false));
+            result.Add(GenSymbol(sourceBlocks, K, blockSize, faceSize, entropy, entropyBits,
+                ref prng, colCoverage, faceCoverage, sortedFaces, third,
+                useReverseDeg: true, lowEntropyOnly: false));
 
         // Layer 2B: cross-region bridging (low entropy faces only)
         for (int si = 0; si < R2b; si++)
-            result.Add(GenSymbol(sourceBlocks, K, blockSize, faceSize, faceCount, entropy, entropyBits,
-                ref prng, colCoverage, faceCoverage, useReverseDeg: false, lowEntropyOnly: true));
+            result.Add(GenSymbol(sourceBlocks, K, blockSize, faceSize, entropy, entropyBits,
+                ref prng, colCoverage, faceCoverage, sortedFaces, third,
+                useReverseDeg: false, lowEntropyOnly: true));
 
         // Layer 3: exactly 1 Global symbol (XOR all source)
         byte[] global = new byte[blockSize];
@@ -286,16 +297,16 @@ public static class DuipCode
                     if (pivotRow < 0) continue;
 
                     int srcBlock = unk[col];
-                    byte[] recoveredData = new byte[blockSize];
-                    Buffer.BlockCopy(rhsMat, pivotRow * blockSize, recoveredData, 0, blockSize);
+                    Span<byte> recBuf = stackalloc byte[blockSize];
+                    rhsMat.AsSpan(pivotRow * blockSize, blockSize).CopyTo(recBuf);
 
                     for (int c = col + 1; c < Nf; c++)
                     {
                         if (mat[pivotRow, c] == 1)
-                            XorBlock(recoveredData.AsSpan(), allBlocks[unk[c]].AsSpan(0, blockSize));
+                            XorBlock(recBuf, allBlocks[unk[c]].AsSpan(0, blockSize));
                     }
 
-                    Buffer.BlockCopy(recoveredData, 0, allBlocks[srcBlock], 0, blockSize);
+                    recBuf.CopyTo(allBlocks[srcBlock]);
                     known[srcBlock] = true;
                     recovered++;
                 }
@@ -318,16 +329,22 @@ public static class DuipCode
             int start = f * faceSize;
             int end = Math.Min(start + faceSize, K);
 
-            // XOR first 64 bytes of all blocks in this face
-            Span<byte> xorBuf = stackalloc byte[64];
+            // XOR first 64 bytes of all blocks in this face (SIMD)
+            Vector256<byte> acc = Vector256<byte>.Zero;
             for (int i = start; i < end; i++)
             {
                 int copyLen = Math.Min(64, sourceBlocks[i].Length);
-                for (int j = 0; j < copyLen; j++)
-                    xorBuf[j] ^= sourceBlocks[i][j];
+                ref byte sRef = ref MemoryMarshal.GetReference(sourceBlocks[i].AsSpan());
+                acc = Avx2.Xor(acc, Vector256.LoadUnsafe(ref sRef));
+                // Also XOR the next 32 bytes for the remaining 32-63 range
+                if (copyLen > 32)
+                {
+                    ref byte sRef2 = ref MemoryMarshal.GetReference(sourceBlocks[i].AsSpan(32));
+                    acc = Avx2.Xor(acc, Vector256.LoadUnsafe(ref sRef2));
+                }
             }
 
-            ulong hash = System.IO.Hashing.XxHash64.HashToUInt64(xorBuf);
+            ulong hash = System.IO.Hashing.XxHash64.HashToUInt64(MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref acc, 1)));
             entropy[f] = (byte)(hash & ((1UL << entropyBits) - 1));
         }
 
@@ -337,20 +354,17 @@ public static class DuipCode
     // ── Symbol Generation ──
 
     private static byte[] GenSymbol(byte[][] sourceBlocks, int K, int blockSize,
-        int faceSize, int faceCount, byte[] entropy, int entropyBits,
+        int faceSize, byte[] entropy, int entropyBits,
         ref ulong prng, int[] colCoverage, int[] faceCoverage,
+        int[] sortedFaces, int third,
         bool useReverseDeg, bool lowEntropyOnly)
     {
-        int faceMaxVal = (1 << entropyBits) - 1;
-
-        // Choose anchor face
         int anchorFace;
         if (useReverseDeg)
         {
-            // Pick least covered face
             int minCover = int.MaxValue;
             anchorFace = 0;
-            for (int f = 0; f < faceCount; f++)
+            for (int f = 0; f < faceCoverage.Length; f++)
             {
                 if (faceCoverage[f] < minCover)
                 {
@@ -361,15 +375,11 @@ public static class DuipCode
         }
         else if (lowEntropyOnly)
         {
-            // Pick from lowest-entropy 1/3 of faces
-            var sorted = Enumerable.Range(0, faceCount)
-                .OrderBy(f => entropy[f]).ToList();
-            int third = Math.Max(1, faceCount / 3);
-            anchorFace = sorted[NextPseudo(ref prng) % third];
+            anchorFace = sortedFaces[NextPseudo(ref prng) % third];
         }
         else
         {
-            anchorFace = NextPseudo(ref prng) % faceCount;
+            anchorFace = NextPseudo(ref prng) % faceCoverage.Length;
         }
         faceCoverage[anchorFace]++;
 
@@ -382,62 +392,60 @@ public static class DuipCode
             <= 12 => 5,
             _ => 6,
         };
-
         if (useReverseDeg)
-            degree = Math.Clamp(10 - degree, 2, 8);
+            degree = Math.Clamp(10 - degree, 2, MaxDegree);
 
-        // Select columns for this symbol
-        var used = new List<int>();
+        Span<int> used = stackalloc int[MaxDegree];
+        int usedCount = 0;
+
         int anchorCol = anchorFace * faceSize + (NextPseudo(ref prng) % Math.Min(faceSize, K - anchorFace * faceSize));
-        used.Add(anchorCol);
+        used[usedCount++] = anchorCol;
         colCoverage[anchorCol]++;
 
-        // Remaining degree-1 columns
         for (int t = 1; t < degree; t++)
         {
             int col;
             if (NextPseudo(ref prng) % 3 > 0)
             {
-                // Pick from columns with coverage < 2
-                var lowCov = new List<int>();
+                Span<int> lowCov = stackalloc int[K];
+                int lowCnt = 0;
                 for (int i = 0; i < K; i++)
-                    if (colCoverage[i] < 2 && !used.Contains(i))
-                        lowCov.Add(i);
-                if (lowCov.Count > 0)
                 {
-                    col = lowCov[NextPseudo(ref prng) % lowCov.Count];
+                    if (colCoverage[i] < 2 && !IsUsed(used, usedCount, i))
+                        lowCov[lowCnt++] = i;
+                }
+                if (lowCnt > 0)
+                {
+                    col = lowCov[NextPseudo(ref prng) % lowCnt];
                     colCoverage[col]++;
-                    used.Add(col);
+                    used[usedCount++] = col;
                     continue;
                 }
             }
 
-            // Fallback: random unused column
-            int tries = 0;
-            do
-            {
-                col = NextPseudo(ref prng) % K;
-                tries++;
-            } while (used.Contains(col) && tries < K * 2);
-
-            if (!used.Contains(col))
-            {
+            // Fallback: random column (accept duplicates)
+            col = NextPseudo(ref prng) % K;
+            bool dup = false;
+            for (int i = 0; i < usedCount; i++)
+                if (used[i] == col) { dup = true; break; }
+            if (!dup)
                 colCoverage[col]++;
-                used.Add(col);
-            }
-            else
-            {
-                // Accept duplicate if all columns already covered
-                col = NextPseudo(ref prng) % K;
-                used.Add(col);
-            }
+            used[usedCount++] = col;
         }
 
         // XOR all selected columns
         byte[] sym = new byte[blockSize];
-        foreach (int bi in used)
-            XorBlock(sym.AsSpan(0, blockSize), sourceBlocks[bi].AsSpan(0, blockSize));
+        for (int i = 0; i < usedCount; i++)
+            XorBlock(sym.AsSpan(0, blockSize), sourceBlocks[used[i]].AsSpan(0, blockSize));
         return sym;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsUsed(Span<int> used, int count, int col)
+    {
+        for (int i = 0; i < count; i++)
+            if (used[i] == col) return true;
+        return false;
     }
 
     private static int GaussianEliminate(int[,] mat, int rows, int cols)
@@ -483,29 +491,36 @@ public static class DuipCode
         int[] colCoverage = new int[K];
         int[] faceCoverage = new int[faceCount];
 
+        var sortedFaces = Enumerable.Range(0, faceCount)
+            .OrderBy(f => entropy[f]).ToArray();
+        int third = Math.Max(1, faceCount / 3);
+
         int si = 0;
         for (int i = 0; i < R1 && si < R - 1; i++, si++)
-            BuildOneSymbol(K, faceSize, faceCount, entropy, entropyBits, ref prng,
-                colCoverage, faceCoverage, false, false, out symDeg[si], out symIdx[si]);
+            BuildOneSymbol(K, faceSize, entropy, entropyBits, ref prng,
+                colCoverage, faceCoverage, sortedFaces, third, false, false,
+                out symDeg[si], out symIdx[si]);
 
         for (int i = 0; i < R2a && si < R - 1; i++, si++)
-            BuildOneSymbol(K, faceSize, faceCount, entropy, entropyBits, ref prng,
-                colCoverage, faceCoverage, true, false, out symDeg[si], out symIdx[si]);
+            BuildOneSymbol(K, faceSize, entropy, entropyBits, ref prng,
+                colCoverage, faceCoverage, sortedFaces, third, true, false,
+                out symDeg[si], out symIdx[si]);
 
         for (int i = 0; i < R2b && si < R - 1; i++, si++)
-            BuildOneSymbol(K, faceSize, faceCount, entropy, entropyBits, ref prng,
-                colCoverage, faceCoverage, false, true, out symDeg[si], out symIdx[si]);
+            BuildOneSymbol(K, faceSize, entropy, entropyBits, ref prng,
+                colCoverage, faceCoverage, sortedFaces, third, false, true,
+                out symDeg[si], out symIdx[si]);
 
-        // Last symbol (si = R - 1) = Global (degree K, all indices)
         var allIndices = new int[K];
         for (int i = 0; i < K; i++) allIndices[i] = i;
         symDeg[R - 1] = K;
         symIdx[R - 1] = allIndices;
     }
 
-    private static void BuildOneSymbol(int K, int faceSize, int faceCount,
+    private static void BuildOneSymbol(int K, int faceSize,
         byte[] entropy, int entropyBits, ref ulong prng,
         int[] colCoverage, int[] faceCoverage,
+        int[] sortedFaces, int third,
         bool useReverseDeg, bool lowEntropyOnly,
         out int degree, out int[] indices)
     {
@@ -514,7 +529,7 @@ public static class DuipCode
         {
             int minCover = int.MaxValue;
             anchorFace = 0;
-            for (int f = 0; f < faceCount; f++)
+            for (int f = 0; f < faceCoverage.Length; f++)
             {
                 if (faceCoverage[f] < minCover)
                 {
@@ -525,14 +540,11 @@ public static class DuipCode
         }
         else if (lowEntropyOnly)
         {
-            var sorted = Enumerable.Range(0, faceCount)
-                .OrderBy(f => entropy[f]).ToList();
-            int third = Math.Max(1, faceCount / 3);
-            anchorFace = sorted[NextPseudo(ref prng) % third];
+            anchorFace = sortedFaces[NextPseudo(ref prng) % third];
         }
         else
         {
-            anchorFace = NextPseudo(ref prng) % faceCount;
+            anchorFace = NextPseudo(ref prng) % faceCoverage.Length;
         }
         faceCoverage[anchorFace]++;
 
@@ -545,16 +557,14 @@ public static class DuipCode
             <= 12 => 5,
             _ => 6,
         };
-
         if (useReverseDeg)
-            degree = Math.Clamp(10 - degree, 2, 8);
+            degree = Math.Clamp(10 - degree, 2, MaxDegree);
 
-        int faceStart = anchorFace * faceSize;
-        int faceEnd = Math.Min(faceStart + faceSize, K);
-        int faceLen = faceEnd - faceStart;
-        int anchorCol = anchorFace * faceSize + (NextPseudo(ref prng) % faceLen);
+        Span<int> used = stackalloc int[MaxDegree];
+        int usedCount = 0;
 
-        var used = new List<int> { anchorCol };
+        int anchorCol = anchorFace * faceSize + (NextPseudo(ref prng) % Math.Min(faceSize, K - anchorFace * faceSize));
+        used[usedCount++] = anchorCol;
         colCoverage[anchorCol]++;
 
         for (int t = 1; t < degree; t++)
@@ -562,39 +572,35 @@ public static class DuipCode
             int col;
             if (NextPseudo(ref prng) % 3 > 0)
             {
-                var lowCov = new List<int>();
+                Span<int> lowCov = stackalloc int[K];
+                int lowCnt = 0;
                 for (int i = 0; i < K; i++)
-                    if (colCoverage[i] < 2 && !used.Contains(i))
-                        lowCov.Add(i);
-                if (lowCov.Count > 0)
                 {
-                    col = lowCov[NextPseudo(ref prng) % lowCov.Count];
+                    if (colCoverage[i] < 2 && !IsUsed(used, usedCount, i))
+                        lowCov[lowCnt++] = i;
+                }
+                if (lowCnt > 0)
+                {
+                    col = lowCov[NextPseudo(ref prng) % lowCnt];
                     colCoverage[col]++;
-                    used.Add(col);
+                    used[usedCount++] = col;
                     continue;
                 }
             }
 
-            int tries = 0;
-            do
-            {
-                col = NextPseudo(ref prng) % K;
-                tries++;
-            } while (used.Contains(col) && tries < K * 2);
-
-            if (!used.Contains(col))
-            {
+            // Fallback: random column (accept duplicates)
+            col = NextPseudo(ref prng) % K;
+            bool dup = false;
+            for (int i = 0; i < usedCount; i++)
+                if (used[i] == col) { dup = true; break; }
+            if (!dup)
                 colCoverage[col]++;
-                used.Add(col);
-            }
-            else
-            {
-                col = NextPseudo(ref prng) % K;
-                used.Add(col);
-            }
+            used[usedCount++] = col;
         }
 
-        indices = used.ToArray();
+        indices = new int[usedCount];
+        for (int i = 0; i < usedCount; i++)
+            indices[i] = used[i];
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
