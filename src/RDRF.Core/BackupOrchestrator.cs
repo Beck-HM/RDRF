@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.IO.Hashing;
 using System.Security.Cryptography;
@@ -364,65 +365,93 @@ public class BackupOrchestrator : IDisposable
                 var indexObj62 = IndexManager.DeserializeIndex(serializedIndex);
                 int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
 
-                // A (Index)
-                var ib = SplitToBlocks(serializedIndex, bs);
-                if (ib.Length > 0)
+                // A/B/C: parallel FSS6.2 three-node Duip repair generation
+                var task62A = Task.Run(() =>
                 {
-                    var (symA, entropyA, seedA) = DuipCode.Encode(ib, bs);
-                    rcFile62.Repair62A = new Fss62RepairData
+                    var ib = SplitToBlocks(serializedIndex, bs);
+                    if (ib.Length > 0)
                     {
-                        Seed = seedA, BlockCount = ib.Length, BlockSize = bs,
-                        Data = FlattenSymbols(symA, bs), EntropySamples = entropyA,
-                    };
-                }
-
-                // B (Fragments)
-                var fb = new List<byte[]>();
-                foreach (var frag in fragments)
-                {
-                    var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
-                    for (int off = 0; off < rawData.Length; off += bs)
-                    {
-                        int len = Math.Min(bs, rawData.Length - off);
-                        byte[] block = new byte[bs];
-                        Buffer.BlockCopy(rawData, off, block, 0, len);
-                        fb.Add(block);
+                        var (sym, entropy, seed) = DuipCode.Encode(ib, bs);
+                        return new Fss62RepairData
+                        {
+                            Seed = seed, BlockCount = ib.Length, BlockSize = bs,
+                            Data = FlattenSymbols(sym, bs), EntropySamples = entropy,
+                        };
                     }
-                }
-                if (fb.Count > 0)
+                    return null;
+                });
+
+                var task62B = Task.Run(() =>
                 {
-                    var allFrags = fb.ToArray();
-                    var (symB, entropyB, seedB) = DuipCode.Encode(allFrags, bs);
-                    var repair62B = new Fss62RepairData
+                    // Pre-parse fragment trailers once (cache for D stage)
+                    var rawDataCache = new (byte[] data, int len)[fragments.Count];
+                    var fb = new List<byte[]>();
+                    for (int i = 0; i < fragments.Count; i++)
                     {
-                        Seed = seedB, BlockCount = allFrags.Length, BlockSize = bs,
-                        Data = FlattenSymbols(symB, bs), EntropySamples = entropyB,
-                    };
+                        var parsed = EtnTrailer.Parse(fragments[i]);
+                        byte[] rawData = parsed.Item1;
+                        rawDataCache[i] = (rawData, rawData.Length);
+                        for (int off = 0; off < rawData.Length; off += bs)
+                        {
+                            int len = Math.Min(bs, rawData.Length - off);
+                            byte[] block = new byte[bs];
+                            Buffer.BlockCopy(rawData, off, block, 0, len);
+                            fb.Add(block);
+                        }
+                    }
+                    if (fb.Count > 0)
+                    {
+                        var allFrags = fb.ToArray();
+                        var (sym, entropy, seed) = DuipCode.Encode(allFrags, bs);
+                        return (new Fss62RepairData
+                        {
+                            Seed = seed, BlockCount = allFrags.Length, BlockSize = bs,
+                            Data = FlattenSymbols(sym, bs), EntropySamples = entropy,
+                        }, rawDataCache);
+                    }
+                    return ((Fss62RepairData?)null, rawDataCache);
+                });
+
+                var task62C = Task.Run(() =>
+                {
+                    var rb = SplitToBlocks(rcBytes, bs);
+                    if (rb.Length > 0)
+                    {
+                        var (sym, entropy, seed) = DuipCode.Encode(rb, bs);
+                        return new Fss62RepairData
+                        {
+                            Seed = seed, BlockCount = rb.Length, BlockSize = bs,
+                            Data = FlattenSymbols(sym, bs), EntropySamples = entropy,
+                        };
+                    }
+                    return null;
+                });
+
+                Task.WaitAll(task62A, task62B, task62C);
+
+                var repair62A = task62A.Result;
+                var task62BResult = task62B.Result;
+                var repair62B = task62BResult.Item1;
+                var rawDataCache = task62BResult.Item2;
+                var repair62C = task62C.Result;
+
+                if (repair62A != null) rcFile62.Repair62A = repair62A;
+                if (repair62B != null)
+                {
                     rcFile62.Repair62B = repair62B;
                     indexObj62.Fss62RepairB = repair62B;
                 }
+                if (repair62C != null) indexObj62.Fss62RepairC = repair62C;
 
-                // C (RC)
-                var rb = SplitToBlocks(rcBytes, bs);
-                if (rb.Length > 0)
-                {
-                    var (symC, entropyC, seedC) = DuipCode.Encode(rb, bs);
-                    indexObj62.Fss62RepairC = new Fss62RepairData
-                    {
-                        Seed = seedC, BlockCount = rb.Length, BlockSize = bs,
-                        Data = FlattenSymbols(symC, bs), EntropySamples = entropyC,
-                    };
-                }
-
-                // D: replace trailers
-                if (rcFile62.Repair62A != null && indexObj62.Fss62RepairC != null)
+                // D: replace trailers (uses cached parse results from B)
+                if (repair62A != null && repair62C != null)
                 {
                     string fp = filePrefix ?? fileFingerprint;
                     for (int i = 0; i < fragments.Count; i++)
                     {
-                        var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(fragments[i]);
+                        var (rawData, _) = rawDataCache[i];
                         fragments[i] = Fss62RepairTrailer.Build(rawData, fp, fp,
-                            rcFile62.Repair62A, indexObj62.Fss62RepairC);
+                            repair62A, repair62C);
                     }
                 }
 

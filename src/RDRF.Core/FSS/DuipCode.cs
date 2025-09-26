@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Collections.Concurrent;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
@@ -204,7 +204,7 @@ public static class DuipCode
             if (!progress) break;
         }
 
-        // Phase 3: Face-by-face matrix solve (faceSize = DefaultFaceSize)
+        // Phase 3: Face-by-face matrix solve
         if (recovered < totalBad)
         {
             int faceSz = DefaultFaceSize;
@@ -217,6 +217,21 @@ public static class DuipCode
                 if (!known[i])
                     unkByFace[i / faceSz].Add(i);
 
+            // Pre-build symbol-to-face mapping (avoid per-face full R scan)
+            var faceSymbols = new List<int>[fCount];
+            for (int i = 0; i < fCount; i++) faceSymbols[i] = new List<int>();
+            for (int si = 0; si < R - 1; si++)
+            {
+                var idxArr = symIdx[si];
+                var seen = new HashSet<int>();
+                for (int t = 0; t < idxArr.Length; t++)
+                {
+                    int f = idxArr[t] / faceSz;
+                    if (seen.Add(f))
+                        faceSymbols[f].Add(si);
+                }
+            }
+
             for (int f = 0; f < fCount; f++)
             {
                 var unk = unkByFace[f];
@@ -228,26 +243,17 @@ public static class DuipCode
                 for (int i = 0; i < Nf; i++)
                     colMap[unk[i]] = i;
 
-                // Collect symbols that cover any of this face's unknown blocks
-                var rows = new List<int>();  // symbol indices
-                for (int si = 0; si < R - 1; si++)
-                {
-                    var idxArr = symIdx[si];
-                    for (int t = 0; t < idxArr.Length; t++)
-                    {
-                        if (colMap.ContainsKey(idxArr[t]))
-                        {
-                            rows.Add(si);
-                            break;
-                        }
-                    }
-                }
+                // Use pre-built face-to-symbol mapping instead of scanning all R symbols
+                var rows = faceSymbols[f];
 
                 int Mf = rows.Count;
-                if (Mf < Nf) continue;  // not enough constraints
+                if (Mf < Nf) continue;
 
-                // Build Mf × Nf matrix + RHS
-                int[,] mat = new int[Mf, Nf];
+                // Build Mf × Nf matrix (int[][] jagged, faster than int[,])
+                int[][] mat = new int[Mf][];
+                for (int r = 0; r < Mf; r++)
+                    mat[r] = new int[Nf];
+
                 byte[] rhsMat = new byte[Mf * blockSize];
 
                 for (int r = 0; r < Mf; r++)
@@ -255,10 +261,8 @@ public static class DuipCode
                     int si = rows[r];
                     var idxArr = symIdx[si];
 
-                    // Copy symbol raw data
                     Buffer.BlockCopy(allSymbolData, si * blockSize, rhsMat, r * blockSize, blockSize);
 
-                    // XOR out all known blocks
                     for (int t = 0; t < idxArr.Length; t++)
                     {
                         int bi = idxArr[t];
@@ -266,7 +270,6 @@ public static class DuipCode
                             XorBlock(rhsMat.AsSpan(r * blockSize, blockSize), allBlocks[bi].AsSpan(0, blockSize));
                     }
 
-                    // XOR out non-face unknown blocks (cross-face blocks treated as known for this face)
                     for (int t = 0; t < idxArr.Length; t++)
                     {
                         int bi = idxArr[t];
@@ -274,26 +277,23 @@ public static class DuipCode
                             XorBlock(rhsMat.AsSpan(r * blockSize, blockSize), allBlocks[bi].AsSpan(0, blockSize));
                     }
 
-                    // Mark face-local columns
                     for (int t = 0; t < idxArr.Length; t++)
                     {
                         int bi = idxArr[t];
                         if (colMap.TryGetValue(bi, out int ci))
-                            mat[r, ci] = 1;
+                            mat[r][ci] = 1;
                     }
                 }
 
-                // Gaussian elimination
                 int rank = GaussianEliminate(mat, Mf, Nf);
-                if (rank < Nf) continue;  // can't fully solve this face
+                if (rank < Nf) continue;
 
-                // Back-substitute
                 for (int col = 0; col < Nf; col++)
                 {
                     int pivotRow = -1;
                     for (int r = col; r < Mf; r++)
                     {
-                        if (mat[r, col] == 1) { pivotRow = r; break; }
+                        if (mat[r][col] == 1) { pivotRow = r; break; }
                     }
                     if (pivotRow < 0) continue;
 
@@ -303,7 +303,7 @@ public static class DuipCode
 
                     for (int c = col + 1; c < Nf; c++)
                     {
-                        if (mat[pivotRow, c] == 1)
+                        if (mat[pivotRow][c] == 1)
                             XorBlock(recBuf, allBlocks[unk[c]].AsSpan(0, blockSize));
                     }
 
@@ -408,41 +408,36 @@ public static class DuipCode
             int col;
             if (NextPseudo(ref prng) % 3 > 0)
             {
-                int[] lowCovArr = ArrayPool<int>.Shared.Rent(K);
-                int lowCnt = 0;
-                try
+                col = PickLowCoverage(SimdLowCovCount(colCoverage, K, used, usedCount),
+                    colCoverage, K, used, usedCount, ref prng);
+                if (col >= 0)
                 {
-                    for (int i = 0; i < K; i++)
-                    {
-                        if (colCoverage[i] < 2 && !IsUsed(used, usedCount, i))
-                            lowCovArr[lowCnt++] = i;
-                    }
-                    if (lowCnt > 0)
-                    {
-                        col = lowCovArr[NextPseudo(ref prng) % lowCnt];
-                        colCoverage[col]++;
-                        used[usedCount++] = col;
-                        continue;
-                    }
+                    colCoverage[col]++;
+                    used[usedCount++] = col;
+                    continue;
                 }
-                finally { ArrayPool<int>.Shared.Return(lowCovArr); }
             }
 
             // Fallback: random column (accept duplicates)
             col = NextPseudo(ref prng) % K;
-            bool dup = false;
-            for (int i = 0; i < usedCount; i++)
-                if (used[i] == col) { dup = true; break; }
-            if (!dup)
+            if (!IsUsed(used, usedCount, col))
                 colCoverage[col]++;
             used[usedCount++] = col;
         }
 
-        // XOR all selected columns
-        byte[] sym = new byte[blockSize];
-        for (int i = 0; i < usedCount; i++)
-            XorBlock(sym.AsSpan(0, blockSize), sourceBlocks[used[i]].AsSpan(0, blockSize));
-        return sym;
+        // XOR all selected columns (ArrayPool for sym buffer)
+        byte[] symBuf = ArrayPool<byte>.Shared.Rent(blockSize);
+        try
+        {
+            Array.Clear(symBuf, 0, blockSize);
+            for (int i = 0; i < usedCount; i++)
+                XorBlock(symBuf.AsSpan(0, blockSize), sourceBlocks[used[i]].AsSpan(0, blockSize));
+
+            byte[] result = new byte[blockSize];
+            Buffer.BlockCopy(symBuf, 0, result, 0, blockSize);
+            return result;
+        }
+        finally { ArrayPool<byte>.Shared.Return(symBuf); }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -453,7 +448,82 @@ public static class DuipCode
         return false;
     }
 
-    private static int GaussianEliminate(int[,] mat, int rows, int cols)
+    // ── AVX2-accelerated colCoverage low-coverage pick ──
+    // Same PRNG consumption as old scalar scan: 1 NextPseudo call per pick.
+    // Two-pass SIMD: count → PRNG pick → find.
+
+    private static int SimdLowCovCount(int[] colCoverage, int K, Span<int> used, int usedCount)
+    {
+        int cnt = 0;
+        ref int colRef = ref MemoryMarshal.GetReference<int>(colCoverage);
+        var twoVec = Vector256.Create(2);
+        nuint off = 0;
+
+        for (; off + 8 <= (nuint)K; off += 8)
+        {
+            var sub = Avx2.Subtract(Vector256.LoadUnsafe(ref colRef, off), twoVec);
+            int byteMask = Avx2.MoveMask(sub.AsByte());
+
+            for (int b = 0; b < 8; b++)
+                if ((byteMask & (1 << (b * 4 + 3))) != 0)
+                {
+                    int ci = (int)off + b;
+                    if (!IsUsed(used, usedCount, ci))
+                        cnt++;
+                }
+        }
+
+        for (int i = (int)off; i < K; i++)
+            if (colCoverage[i] < 2 && !IsUsed(used, usedCount, i))
+                cnt++;
+
+        return cnt;
+    }
+
+    private static int SimdFindPick(int[] colCoverage, int K, Span<int> used, int usedCount, int pick)
+    {
+        ref int colRef = ref MemoryMarshal.GetReference<int>(colCoverage);
+        var twoVec = Vector256.Create(2);
+        nuint off = 0;
+        int idx = 0;
+
+        for (; off + 8 <= (nuint)K; off += 8)
+        {
+            var sub = Avx2.Subtract(Vector256.LoadUnsafe(ref colRef, off), twoVec);
+            int byteMask = Avx2.MoveMask(sub.AsByte());
+
+            for (int b = 0; b < 8; b++)
+                if ((byteMask & (1 << (b * 4 + 3))) != 0)
+                {
+                    int ci = (int)off + b;
+                    if (!IsUsed(used, usedCount, ci))
+                    {
+                        if (idx == pick) return ci;
+                        idx++;
+                    }
+                }
+        }
+
+        for (int i = (int)off; i < K; i++)
+            if (colCoverage[i] < 2 && !IsUsed(used, usedCount, i))
+            {
+                if (idx == pick) return i;
+                idx++;
+            }
+
+        return -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int PickLowCoverage(int lowCnt, int[] colCoverage, int K,
+        Span<int> used, int usedCount, ref ulong prng)
+    {
+        if (lowCnt == 0) return -1;
+        int pick = NextPseudo(ref prng) % lowCnt;
+        return SimdFindPick(colCoverage, K, used, usedCount, pick);
+    }
+
+    private static int GaussianEliminate(int[][] mat, int rows, int cols)
     {
         int rank = 0;
         for (int col = 0; col < cols; col++)
@@ -461,21 +531,22 @@ public static class DuipCode
             int pivot = -1;
             for (int r = rank; r < rows; r++)
             {
-                if (mat[r, col] == 1) { pivot = r; break; }
+                if (mat[r][col] == 1) { pivot = r; break; }
             }
             if (pivot < 0) continue;
 
-            // Swap
-            for (int c = col; c < cols; c++)
-                (mat[rank, c], mat[pivot, c]) = (mat[pivot, c], mat[rank, c]);
+            var tmp = mat[rank];
+            mat[rank] = mat[pivot];
+            mat[pivot] = tmp;
 
-            // Eliminate other rows
+            var rankRow = mat[rank];
             for (int r = 0; r < rows; r++)
             {
-                if (r != rank && mat[r, col] == 1)
+                if (r != rank && mat[r][col] == 1)
                 {
+                    var row = mat[r];
                     for (int c = col; c < cols; c++)
-                        mat[r, c] ^= mat[rank, c];
+                        row[c] ^= rankRow[c];
                 }
             }
             rank++;
@@ -577,32 +648,19 @@ public static class DuipCode
             int col;
             if (NextPseudo(ref prng) % 3 > 0)
             {
-                int[] lowCovArr = ArrayPool<int>.Shared.Rent(K);
-                int lowCnt = 0;
-                try
+                col = PickLowCoverage(SimdLowCovCount(colCoverage, K, used, usedCount),
+                    colCoverage, K, used, usedCount, ref prng);
+                if (col >= 0)
                 {
-                    for (int i = 0; i < K; i++)
-                    {
-                        if (colCoverage[i] < 2 && !IsUsed(used, usedCount, i))
-                            lowCovArr[lowCnt++] = i;
-                    }
-                    if (lowCnt > 0)
-                    {
-                        col = lowCovArr[NextPseudo(ref prng) % lowCnt];
-                        colCoverage[col]++;
-                        used[usedCount++] = col;
-                        continue;
-                    }
+                    colCoverage[col]++;
+                    used[usedCount++] = col;
+                    continue;
                 }
-                finally { ArrayPool<int>.Shared.Return(lowCovArr); }
             }
 
             // Fallback: random column (accept duplicates)
             col = NextPseudo(ref prng) % K;
-            bool dup = false;
-            for (int i = 0; i < usedCount; i++)
-                if (used[i] == col) { dup = true; break; }
-            if (!dup)
+            if (!IsUsed(used, usedCount, col))
                 colCoverage[col]++;
             used[usedCount++] = col;
         }
