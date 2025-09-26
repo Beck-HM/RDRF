@@ -126,7 +126,7 @@ public class Fss6Etn : IFssStrategy
     {
         var list = new List<string>(blockCount);
         for (int i = 0; i < blockCount; i++)
-            list.Add(EtnBlockMap.HashToHex(EtnBlockMap.TruncateSecond(flat, i)));
+            list.Add(EtnBlockMap.HashToBase64(EtnBlockMap.TruncateSecond(flat, i)));
         return list;
     }
 }

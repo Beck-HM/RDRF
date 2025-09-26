@@ -40,9 +40,9 @@ public static class EtnPrecision
         byte[] actualRcFlat = EtnBlockMap.Build(strippedRcBytes, blockSize);
         int actualRcCount = EtnBlockMap.BlockCount(actualRcFlat);
 
-        var rcStoredIndexBm = rcFile.IndexBlockMap.Select(EtnBlockMap.HexToHash).ToList();
+        var rcStoredIndexBm = rcFile.IndexBlockMap.Select(EtnBlockMap.HashFromString).ToList();
         var rcStoredFragmentBms = rcFile.FragmentBlockMaps
-            .Select(list => list.Select(EtnBlockMap.HexToHash).ToList()).ToList();
+            .Select(list => list.Select(EtnBlockMap.HashFromString).ToList()).ToList();
 
         int n = fragmentsWithTrailers.Count;
         var actualFragmentFlats = new byte[n][];
@@ -68,9 +68,9 @@ public static class EtnPrecision
             trailerRcCounts[i] = tRcCnt;
         });
 
-        var indexStoredRcBm = index?.Fss6RcBlockMap?.Select(EtnBlockMap.HexToHash).ToList() ?? new List<byte[]>();
+        var indexStoredRcBm = index?.Fss6RcBlockMap?.Select(EtnBlockMap.HashFromString).ToList() ?? new List<byte[]>();
         var indexStoredFragmentBms = index?.Fss6FragmentBlockMaps
-            ?.Select(list => list.Select(EtnBlockMap.HexToHash).ToList()).ToList()
+            ?.Select(list => list.Select(EtnBlockMap.HashFromString).ToList()).ToList()
             ?? new List<List<byte[]>>();
 
         CheckIndex(result, actualIndexFlat, actualIndexCount, rcStoredIndexBm, trailerIndexFlats, trailerIndexCounts);
