@@ -192,69 +192,107 @@ public static class DuipCode
             if (!progress) break;
         }
 
-        // Phase 3: Small matrix (≤3 unknown blocks)
+        // Phase 3: Face-by-face matrix solve (faceSize = DefaultFaceSize)
         if (recovered < totalBad)
         {
-            var unknown = new List<int>();
+            int faceSz = DefaultFaceSize;
+            int fCount = (K + faceSz - 1) / faceSz;
+
+            // Group remaining unknown blocks by face
+            var unkByFace = new List<int>[fCount];
+            for (int i = 0; i < fCount; i++) unkByFace[i] = new List<int>();
             for (int i = 0; i < K; i++)
-                if (!known[i]) unknown.Add(i);
-            int N = unknown.Count;
+                if (!known[i])
+                    unkByFace[i / faceSz].Add(i);
 
-            // Collect symbols covering these unknown blocks
-            var coveringSymbols = new List<int>();
-            for (int si = 0; si < R - 1; si++)
+            for (int f = 0; f < fCount; f++)
             {
-                var idxArr = symIdx[si];
-                bool covers = false;
-                for (int t = 0; t < idxArr.Length; t++)
-                {
-                    if (unknown.Contains(idxArr[t])) { covers = true; break; }
-                }
-                if (covers) coveringSymbols.Add(si);
-            }
-            int M = coveringSymbols.Count;
+                var unk = unkByFace[f];
+                if (unk.Count == 0) continue;
+                int Nf = unk.Count;
 
-            if (N > 0 && M >= 1)
-            {
-                // Build M×N matrix over GF(2)
-                int[,] mat = new int[M, N];
-                byte[] rhs = new byte[M * blockSize];
+                // Build colMap: block index → column in matrix
+                var colMap = new Dictionary<int, int>();
+                for (int i = 0; i < Nf; i++)
+                    colMap[unk[i]] = i;
 
-                for (int mi = 0; mi < M; mi++)
+                // Collect symbols that cover any of this face's unknown blocks
+                var rows = new List<int>();  // symbol indices
+                for (int si = 0; si < R - 1; si++)
                 {
-                    int si = coveringSymbols[mi];
                     var idxArr = symIdx[si];
                     for (int t = 0; t < idxArr.Length; t++)
                     {
-                        int col = unknown.IndexOf(idxArr[t]);
-                        if (col >= 0)
-                            mat[mi, col] = 1;
+                        if (colMap.ContainsKey(idxArr[t]))
+                        {
+                            rows.Add(si);
+                            break;
+                        }
                     }
-                    Buffer.BlockCopy(allSymbolData, si * symStride, rhs, mi * blockSize, blockSize);
                 }
 
-                // Gaussian elimination over GF(2)
-                int rank = GaussianEliminate(mat, M, N);
+                int Mf = rows.Count;
+                if (Mf < Nf) continue;  // not enough constraints
 
-                // Back-substitute: solve as many as possible (partial recovery)
-                for (int col = 0; col < N; col++)
+                // Build Mf × Nf matrix + RHS
+                int[,] mat = new int[Mf, Nf];
+                byte[] rhsMat = new byte[Mf * blockSize];
+
+                for (int r = 0; r < Mf; r++)
+                {
+                    int si = rows[r];
+                    var idxArr = symIdx[si];
+
+                    // Copy symbol raw data
+                    Buffer.BlockCopy(allSymbolData, si * blockSize, rhsMat, r * blockSize, blockSize);
+
+                    // XOR out all known blocks
+                    for (int t = 0; t < idxArr.Length; t++)
+                    {
+                        int bi = idxArr[t];
+                        if (known[bi])
+                            XorBlock(rhsMat.AsSpan(r * blockSize, blockSize), allBlocks[bi].AsSpan(0, blockSize));
+                    }
+
+                    // XOR out non-face unknown blocks (cross-face blocks treated as known for this face)
+                    for (int t = 0; t < idxArr.Length; t++)
+                    {
+                        int bi = idxArr[t];
+                        if (!known[bi] && !colMap.ContainsKey(bi))
+                            XorBlock(rhsMat.AsSpan(r * blockSize, blockSize), allBlocks[bi].AsSpan(0, blockSize));
+                    }
+
+                    // Mark face-local columns
+                    for (int t = 0; t < idxArr.Length; t++)
+                    {
+                        int bi = idxArr[t];
+                        if (colMap.TryGetValue(bi, out int ci))
+                            mat[r, ci] = 1;
+                    }
+                }
+
+                // Gaussian elimination
+                int rank = GaussianEliminate(mat, Mf, Nf);
+                if (rank < Nf) continue;  // can't fully solve this face
+
+                // Back-substitute
+                for (int col = 0; col < Nf; col++)
                 {
                     int pivotRow = -1;
-                    for (int r = col; r < M; r++)
+                    for (int r = col; r < Mf; r++)
                     {
                         if (mat[r, col] == 1) { pivotRow = r; break; }
                     }
                     if (pivotRow < 0) continue;
 
-                    int srcBlock = unknown[col];
+                    int srcBlock = unk[col];
                     byte[] recoveredData = new byte[blockSize];
-                    Buffer.BlockCopy(rhs, pivotRow * blockSize, recoveredData, 0, blockSize);
+                    Buffer.BlockCopy(rhsMat, pivotRow * blockSize, recoveredData, 0, blockSize);
 
-                    // XOR all already-known columns in this row
-                    for (int c = col + 1; c < N; c++)
+                    for (int c = col + 1; c < Nf; c++)
                     {
                         if (mat[pivotRow, c] == 1)
-                            XorBlock(recoveredData.AsSpan(), allBlocks[unknown[c]].AsSpan(0, blockSize));
+                            XorBlock(recoveredData.AsSpan(), allBlocks[unk[c]].AsSpan(0, blockSize));
                     }
 
                     Buffer.BlockCopy(recoveredData, 0, allBlocks[srcBlock], 0, blockSize);
