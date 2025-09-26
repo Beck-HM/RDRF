@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -407,20 +408,24 @@ public static class DuipCode
             int col;
             if (NextPseudo(ref prng) % 3 > 0)
             {
-                Span<int> lowCov = stackalloc int[K];
+                int[] lowCovArr = ArrayPool<int>.Shared.Rent(K);
                 int lowCnt = 0;
-                for (int i = 0; i < K; i++)
+                try
                 {
-                    if (colCoverage[i] < 2 && !IsUsed(used, usedCount, i))
-                        lowCov[lowCnt++] = i;
+                    for (int i = 0; i < K; i++)
+                    {
+                        if (colCoverage[i] < 2 && !IsUsed(used, usedCount, i))
+                            lowCovArr[lowCnt++] = i;
+                    }
+                    if (lowCnt > 0)
+                    {
+                        col = lowCovArr[NextPseudo(ref prng) % lowCnt];
+                        colCoverage[col]++;
+                        used[usedCount++] = col;
+                        continue;
+                    }
                 }
-                if (lowCnt > 0)
-                {
-                    col = lowCov[NextPseudo(ref prng) % lowCnt];
-                    colCoverage[col]++;
-                    used[usedCount++] = col;
-                    continue;
-                }
+                finally { ArrayPool<int>.Shared.Return(lowCovArr); }
             }
 
             // Fallback: random column (accept duplicates)
@@ -572,20 +577,24 @@ public static class DuipCode
             int col;
             if (NextPseudo(ref prng) % 3 > 0)
             {
-                Span<int> lowCov = stackalloc int[K];
+                int[] lowCovArr = ArrayPool<int>.Shared.Rent(K);
                 int lowCnt = 0;
-                for (int i = 0; i < K; i++)
+                try
                 {
-                    if (colCoverage[i] < 2 && !IsUsed(used, usedCount, i))
-                        lowCov[lowCnt++] = i;
+                    for (int i = 0; i < K; i++)
+                    {
+                        if (colCoverage[i] < 2 && !IsUsed(used, usedCount, i))
+                            lowCovArr[lowCnt++] = i;
+                    }
+                    if (lowCnt > 0)
+                    {
+                        col = lowCovArr[NextPseudo(ref prng) % lowCnt];
+                        colCoverage[col]++;
+                        used[usedCount++] = col;
+                        continue;
+                    }
                 }
-                if (lowCnt > 0)
-                {
-                    col = lowCov[NextPseudo(ref prng) % lowCnt];
-                    colCoverage[col]++;
-                    used[usedCount++] = col;
-                    continue;
-                }
+                finally { ArrayPool<int>.Shared.Return(lowCovArr); }
             }
 
             // Fallback: random column (accept duplicates)
