@@ -214,7 +214,7 @@ public static class DuipCode
             }
             int M = coveringSymbols.Count;
 
-            if (N <= 3 && M >= N + 1)
+            if (N > 0 && M >= 1)
             {
                 // Build M×N matrix over GF(2)
                 int[,] mat = new int[M, N];
@@ -235,33 +235,31 @@ public static class DuipCode
 
                 // Gaussian elimination over GF(2)
                 int rank = GaussianEliminate(mat, M, N);
-                if (rank >= N)
+
+                // Back-substitute: solve as many as possible (partial recovery)
+                for (int col = 0; col < N; col++)
                 {
-                    // Back-substitute to recover each unknown block
-                    for (int col = 0; col < N; col++)
+                    int pivotRow = -1;
+                    for (int r = col; r < M; r++)
                     {
-                        int pivotRow = -1;
-                        for (int r = col; r < M; r++)
-                        {
-                            if (mat[r, col] == 1) { pivotRow = r; break; }
-                        }
-                        if (pivotRow < 0) continue;
-
-                        int srcBlock = unknown[col];
-                        byte[] recoveredData = new byte[blockSize];
-                        Buffer.BlockCopy(rhs, pivotRow * blockSize, recoveredData, 0, blockSize);
-
-                        // XOR all already-known columns in this row
-                        for (int c = col + 1; c < N; c++)
-                        {
-                            if (mat[pivotRow, c] == 1)
-                                XorBlock(recoveredData.AsSpan(), allBlocks[unknown[c]].AsSpan(0, blockSize));
-                        }
-
-                        Buffer.BlockCopy(recoveredData, 0, allBlocks[srcBlock], 0, blockSize);
-                        known[srcBlock] = true;
-                        recovered++;
+                        if (mat[r, col] == 1) { pivotRow = r; break; }
                     }
+                    if (pivotRow < 0) continue;
+
+                    int srcBlock = unknown[col];
+                    byte[] recoveredData = new byte[blockSize];
+                    Buffer.BlockCopy(rhs, pivotRow * blockSize, recoveredData, 0, blockSize);
+
+                    // XOR all already-known columns in this row
+                    for (int c = col + 1; c < N; c++)
+                    {
+                        if (mat[pivotRow, c] == 1)
+                            XorBlock(recoveredData.AsSpan(), allBlocks[unknown[c]].AsSpan(0, blockSize));
+                    }
+
+                    Buffer.BlockCopy(recoveredData, 0, allBlocks[srcBlock], 0, blockSize);
+                    known[srcBlock] = true;
+                    recovered++;
                 }
             }
         }
