@@ -180,7 +180,33 @@ public static class EtnBlockMap
             actualFlat.AsSpan(off, len), storedSecond.AsSpan(0, len));
     }
 
-    public static byte[] HexToHash(string hex) => Convert.FromHexString(hex);
+    public static byte[] HashFromString(string encoded)
+    {
+        // Auto-detect: hex (only 0-9a-f) or base64url
+        for (int i = 0; i < encoded.Length; i++)
+        {
+            char c = encoded[i];
+            if (!(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f'))
+                return Base64ToHash(encoded);
+        }
+        return Convert.FromHexString(encoded);
+    }
+
+    public static string HashToBase64(byte[] hash)
+        => Convert.ToBase64String(hash).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static byte[] Base64ToHash(string encoded)
+    {
+        string padded;
+        switch (encoded.Length % 4)
+        {
+            case 2: padded = encoded + "=="; break;
+            case 3: padded = encoded + "="; break;
+            default: padded = encoded; break;
+        }
+        padded = padded.Replace('-', '+').Replace('_', '/');
+        return Convert.FromBase64String(padded);
+    }
 
     public static string HashToHex(byte[] hash)
     {
