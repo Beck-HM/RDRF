@@ -12,19 +12,39 @@ public static class LtCode
 {
     public const int DefaultBlockSize = 256;
 
-    private static readonly sbyte[] DegreeMap = BuildDegreeMap();
+    private static readonly ConcurrentDictionary<int, double[]> _degreeCdfCache = new();
 
-    private static sbyte[] BuildDegreeMap()
+    private static double[] BuildRsdCdf(int N)
     {
-        int[] thresholds = { 10, 30, 50, 70, 85, 95, 99, 100 };
-        var map = new sbyte[100];
-        int idx = 0;
-        for (int d = 0; d < thresholds.Length; d++)
+        double c = 0.08;
+        double delta = 0.5;
+        double S = c * Math.Log(N / delta) * Math.Sqrt(N);
+        if (S < 2) S = 2;
+        int cutoff = (int)Math.Ceiling(N / S);
+        int maxDeg = Math.Min(N, cutoff);
+
+        var mu = new double[maxDeg + 1];
+        double total = 0;
+
+        for (int d = 1; d <= maxDeg; d++)
         {
-            int end = thresholds[d];
-            while (idx < end) map[idx++] = (sbyte)(d + 1);
+            double rho = (d == 1) ? 1.0 / N : 1.0 / ((double)d * (d - 1));
+            double tau = d < cutoff ? S / ((double)d * N) : 0;
+            if (d == cutoff)
+                tau = S * Math.Log(S / delta) / N;
+            mu[d] = rho + tau;
+            total += mu[d];
         }
-        return map;
+
+        var cdf = new double[maxDeg + 1];
+        double cum = 0;
+        for (int d = 1; d <= maxDeg; d++)
+        {
+            cum += mu[d] / total;
+            cdf[d] = cum;
+        }
+        cdf[maxDeg] = 1.0;
+        return cdf;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -82,7 +102,7 @@ public static class LtCode
 
         for (int si = 0; si < symbolCount; si++)
         {
-            int d = SelectDegree(ref prng);
+            int d = SelectDegree(ref prng, N);
             if (d > N) d = N;
             deg[si] = d;
             idxSet.Clear();
@@ -332,9 +352,13 @@ public static class LtCode
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int SelectDegree(ref ulong state)
+    private static int SelectDegree(ref ulong state, int N)
     {
-        int v = NextPseudo(ref state);
-        return DegreeMap[(int)((v & 0x7FFFFFFF) % 100)];
+        var cdf = _degreeCdfCache.GetOrAdd(N, BuildRsdCdf);
+        uint r = (uint)NextPseudo(ref state);
+        double rf = r / (double)0x80000000;
+        for (int d = 1; d < cdf.Length; d++)
+            if (rf < cdf[d]) return d;
+        return cdf.Length - 1;
     }
 }
