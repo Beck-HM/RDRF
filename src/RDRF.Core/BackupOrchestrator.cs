@@ -633,7 +633,7 @@ public class BackupOrchestrator : IDisposable
                 var fragBlocks = new List<byte[]>();
                 foreach (var frag in fragments)
                 {
-                    var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
+                    var rawData = EtnTrailer.Parse(frag).RawData;
                     for (int off = 0; off < rawData.Length; off += bs)
                     {
                         int len = Math.Min(bs, rawData.Length - off);

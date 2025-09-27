@@ -161,7 +161,7 @@ void RunStandardDemo()
 void RunStressTests(int sizeMB)
 {
     int total = 0, passed = 0;
-    string resultsFile = Path.Combine(Path.GetTempPath(), $"EtnStress_{Guid.NewGuid():N}.csv");
+    string resultsFile = Path.Combine(@"F:\RDRF\RDRF.NET\tests\RDRF_TestOutput", $"EtnStress_{Guid.NewGuid():N}.csv");
     var csv = new System.Text.StringBuilder();
     csv.AppendLine("Scenario,Result,Details,Time");
     var swTotal = System.Diagnostics.Stopwatch.StartNew();
@@ -824,7 +824,7 @@ byte[] DecryptRc(LocalDssaAdapter storage, string fingerprint, byte[] aesKey)
 
 static string CreateTempDir(string? customBase = null)
 {
-    string dir = Path.Combine(customBase ?? Path.GetTempPath(), $"EtnDemo_{Guid.NewGuid():N}");
+    string dir = Path.Combine(customBase ?? @"F:\RDRF\RDRF.NET\tests\RDRF_TestOutput", $"EtnDemo_{Guid.NewGuid():N}");
     Directory.CreateDirectory(dir);
     return dir;
 }

@@ -103,8 +103,7 @@ public class StatusCommand : Command
 
                     if (hasEtn)
                     {
-                        var (rawData, _, _, _, _, _, _) = RDRF.Core.ETN.EtnTrailer.Parse(decrypted);
-                        decrypted = rawData;
+                        decrypted = RDRF.Core.ETN.EtnTrailer.Parse(decrypted).RawData;
                     }
 
                     string actualHash = IntegrityChecker.HashBytes(decrypted);

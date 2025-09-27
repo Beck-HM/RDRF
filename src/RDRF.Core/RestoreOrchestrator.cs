@@ -820,10 +820,7 @@ public class RestoreOrchestrator : IDisposable
     }
 
     private static byte[] StripEtnOnly(byte[] frag)
-    {
-        var (raw, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
-        return raw;
-    }
+        => EtnTrailer.Parse(frag).RawData;
 
     // ── Strip FSS Encoding ──
 
