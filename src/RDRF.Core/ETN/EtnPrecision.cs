@@ -284,15 +284,12 @@ public static class EtnPrecision
 
     private static (byte[] data, byte[] fragFlat, int fragCount, byte[] indexFlat, int indexCount, byte[] rcFlat, int rcCount) ParseAnyTrailer(byte[] fragmentData)
     {
-        // Try FSS6.2 repair trailer first (must precede 6.1 — 6.1 parse misreads 6.2 trailers)
         var (raw62, _, _, _, _) = Fss62RepairTrailer.Parse(fragmentData);
         if (raw62.Length < fragmentData.Length)
-            return (raw62, [], 0, [], 0, [], 0);
-        // Try FSS6.1 repair trailer
+            return EtnTrailer.Parse(raw62);
         var (raw61, _, _, _, _) = Fss61RepairTrailer.Parse(fragmentData);
         if (raw61.Length < fragmentData.Length)
-            return (raw61, [], 0, [], 0, [], 0);
-        // Fall back to ETN trailer
+            return EtnTrailer.Parse(raw61);
         return EtnTrailer.Parse(fragmentData);
     }
 }

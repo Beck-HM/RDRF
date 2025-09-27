@@ -27,9 +27,12 @@ public class Fss6Etn : IFssStrategy
 
     public byte[] Strip(byte[] fragmentData)
     {
-        // Try FSS6.1 trailer first, fall back to ETN trailer
         var (raw61, _, _, _, _) = Fss61RepairTrailer.Parse(fragmentData);
-        if (raw61.Length < fragmentData.Length) return raw61;
+        if (raw61.Length < fragmentData.Length)
+        {
+            var (raw, _, _, _, _, _, _) = EtnTrailer.Parse(raw61);
+            return raw;
+        }
         var (data, _, _, _, _, _, _) = EtnTrailer.Parse(fragmentData);
         return data;
     }
