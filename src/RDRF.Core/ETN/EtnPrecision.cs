@@ -23,7 +23,6 @@ public static class EtnPrecision
             return result;
         }
 
-        // Parse index first to determine block size from file size
         RdrfIndex? index = null;
         try { index = IndexManager.DeserializeIndex(indexBytes); }
         catch (Exception ex)
@@ -41,42 +40,52 @@ public static class EtnPrecision
         int actualRcCount = EtnBlockMap.BlockCount(actualRcFlat);
 
         var rcStoredIndexBm = rcFile.IndexBlockMap.Select(EtnBlockMap.HashFromString).ToList();
+        var rcStoredIndex2B = rcFile.Index2B?.Select(EtnBlockMap.HashFromString).ToList();
         var rcStoredFragmentBms = rcFile.FragmentBlockMaps
             .Select(list => list.Select(EtnBlockMap.HashFromString).ToList()).ToList();
+        var rcStoredFragment2B = rcFile.Fragment2B
+            ?.Select(list => list.Select(EtnBlockMap.HashFromString).ToList()).ToList();
 
         int n = fragmentsWithTrailers.Count;
         var actualFragmentFlats = new byte[n][];
         var fragmentBlockCounts = new int[n];
-        var trailerFragmentFlats = new byte[n][];
-        var trailerFragmentCounts = new int[n];
-        var trailerIndexFlats = new byte[n][];
-        var trailerIndexCounts = new int[n];
-        var trailerRcFlats = new byte[n][];
-        var trailerRcCounts = new int[n];
+        var trailerIndex2B = new byte[n][];
+        var trailerIndex2BCounts = new int[n];
+        var trailerIndex8B = new byte[n][];
+        var trailerRc2B = new byte[n][];
+        var trailerRc2BCounts = new int[n];
+        var trailerRc8B = new byte[n][];
 
         Parallel.For(0, n, i =>
         {
-            var (data, tFragFlat, tFragCnt, tIdxFlat, tIdxCnt, tRcFlat, tRcCnt)
-                = ParseAnyTrailer(fragmentsWithTrailers[i]);
-            actualFragmentFlats[i] = EtnBlockMap.Build(data, blockSize);
+            var t = ParseAnyTrailer(fragmentsWithTrailers[i]);
+            actualFragmentFlats[i] = EtnBlockMap.Build(t.RawData, blockSize);
             fragmentBlockCounts[i] = EtnBlockMap.BlockCount(actualFragmentFlats[i]);
-            trailerFragmentFlats[i] = tFragFlat;
-            trailerFragmentCounts[i] = tFragCnt;
-            trailerIndexFlats[i] = tIdxFlat;
-            trailerIndexCounts[i] = tIdxCnt;
-            trailerRcFlats[i] = tRcFlat;
-            trailerRcCounts[i] = tRcCnt;
+            trailerIndex2B[i] = t.Index2B;
+            trailerIndex2BCounts[i] = t.Index2BCount;
+            trailerIndex8B[i] = t.Index8B;
+            trailerRc2B[i] = t.Rc2B;
+            trailerRc2BCounts[i] = t.Rc2BCount;
+            trailerRc8B[i] = t.Rc8B;
         });
 
-        var indexStoredRcBm = index?.Fss6RcBlockMap?.Select(EtnBlockMap.HashFromString).ToList() ?? new List<byte[]>();
+        var indexStoredRcBm = index?.Fss6RcBlockMap?.Select(EtnBlockMap.HashFromString).ToList() ?? [];
+        var indexStoredRc2B = index?.Fss6Rc2B?.Select(EtnBlockMap.HashFromString).ToList();
         var indexStoredFragmentBms = index?.Fss6FragmentBlockMaps
             ?.Select(list => list.Select(EtnBlockMap.HashFromString).ToList()).ToList()
-            ?? new List<List<byte[]>>();
+            ?? [];
+        var indexStoredFragment2B = index?.Fss6Fragment2B
+            ?.Select(list => list.Select(EtnBlockMap.HashFromString).ToList()).ToList();
 
-        CheckIndex(result, actualIndexFlat, actualIndexCount, rcStoredIndexBm, trailerIndexFlats, trailerIndexCounts);
-        CheckRc(result, actualRcFlat, actualRcCount, indexStoredRcBm, trailerRcFlats, trailerRcCounts);
+        CheckIndex(result, actualIndexFlat, actualIndexCount,
+            rcStoredIndexBm, rcStoredIndex2B,
+            trailerIndex2B, trailerIndex2BCounts, trailerIndex8B);
+        CheckRc(result, actualRcFlat, actualRcCount,
+            indexStoredRcBm, indexStoredRc2B,
+            trailerRc2B, trailerRc2BCounts, trailerRc8B);
         CheckFragments(result, actualFragmentFlats, fragmentBlockCounts,
-            trailerFragmentFlats, trailerFragmentCounts, rcStoredFragmentBms, indexStoredFragmentBms);
+            rcStoredFragmentBms, rcStoredFragment2B,
+            indexStoredFragmentBms, indexStoredFragment2B);
 
         result.IsValid = !result.IndexCorrupted && !result.RcCorrupted && result.CorruptedFragments.Count == 0;
         return result;
@@ -85,103 +94,133 @@ public static class EtnPrecision
     private static void CheckIndex(
         PrecisionResult result,
         byte[] actualIndexFlat, int actualIndexCount,
-        List<byte[]> rcStoredIndexBm,
-        byte[][] trailerIndexFlats, int[] trailerIndexCounts)
+        List<byte[]> rc8B,
+        List<byte[]>? rc2B,
+        byte[][] trailerIdx2B, int[] trailerIdx2BCounts,
+        byte[][] trailerIdx8B)
     {
-        bool rcMatch = rcStoredIndexBm.Count > 0 &&
-            EtnBlockMap.DiffTrimmed(actualIndexFlat, actualIndexCount, rcStoredIndexBm).Count == 0;
-        var trailerConsensus = TrailerConsensusFlat(trailerIndexFlats, trailerIndexCounts);
-        bool trailerMatch = trailerConsensus != null &&
-            EtnBlockMap.DiffTrimmed(actualIndexFlat, actualIndexCount, trailerConsensus).Count == 0;
+        // Tier 1: 8B from RC (C) vs 2B from trailer consensus (B)
+        bool rc8BMatch = rc8B.Count > 0 &&
+            EtnBlockMap.DiffTrimmed(actualIndexFlat, actualIndexCount, rc8B).Count == 0;
+        var trailer2BConsensus = TrailerConsensusFlat(trailerIdx2B, trailerIdx2BCounts);
+        bool trailer2BMatch = trailer2BConsensus != null &&
+            EtnBlockMap.DiffTrimmed(actualIndexFlat, actualIndexCount, trailer2BConsensus).Count == 0;
 
-        if (rcMatch && trailerMatch) return;
+        // All three agree: OK
+        if (rc8BMatch && trailer2BMatch) return;
 
-        if (!rcMatch && trailerMatch)
+        var suspicious = new List<int>();
+        if (!trailer2BMatch && trailer2BConsensus != null)
+            suspicious = EtnBlockMap.DiffTrimmed(trailer2BConsensus, actualIndexFlat, actualIndexCount);
+
+        if (suspicious.Count == 0 && !rc8BMatch)
         {
-            result.RcCorrupted = true;
-            result.RcCorruptedBlocks = EtnBlockMap.DiffTrimmed(rcStoredIndexBm, actualIndexFlat, actualIndexCount);
-            return;
+            for (int b = 0; b < actualIndexCount; b++) suspicious.Add(b);
         }
 
-        if (rcMatch && !trailerMatch)
+        if (suspicious.Count == 0) return;
+
+        // Tier 2: confirm suspicious with 8B from trailer (B) + 8B from RC (C)
+        var corrupted = new List<int>();
+        foreach (int b in suspicious)
         {
-            result.CorruptedFragmentTrailers = FindDisagreeingFlat(trailerIndexFlats, trailerIndexCounts, actualIndexFlat, actualIndexCount);
-            return;
+            // 8B from trailer
+            bool trailer8BOk = trailerIdx8B.Length > 0 && trailerIdx8B[0].Length > 0 &&
+                b < trailerIdx2BCounts[0] &&
+                EtnBlockMap.IsSecondPassMatch(actualIndexFlat, b,
+                    trailerIdx8B[0].AsSpan(b * EtnBlockMap.SecondHashLen, EtnBlockMap.SecondHashLen).ToArray());
+            // 8B from RC CBOR
+            bool rc8BOk = b < rc8B.Count &&
+                EtnBlockMap.IsSecondPassMatch(actualIndexFlat, b, rc8B[b]);
+
+            if (!trailer8BOk && !rc8BOk)
+                corrupted.Add(b);
         }
 
-        if (!rcMatch && !trailerMatch && trailerConsensus != null &&
-            EtnBlockMap.DiffTrimmed(rcStoredIndexBm, trailerConsensus).Count == 0)
+        if (corrupted.Count > 0)
         {
             result.IndexCorrupted = true;
-            result.IndexCorruptedBlocks = EtnBlockMap.DiffTrimmed(rcStoredIndexBm, actualIndexFlat, actualIndexCount);
-            return;
+            result.IndexCorruptedBlocks = corrupted;
         }
-
-        result.IndexCorrupted = true;
-        result.IndexCorruptedBlocks = EtnBlockMap.DiffTrimmed(trailerConsensus ?? rcStoredIndexBm, actualIndexFlat, actualIndexCount);
     }
 
     private static void CheckRc(
         PrecisionResult result,
         byte[] actualRcFlat, int actualRcCount,
-        List<byte[]> indexStoredRcBm,
-        byte[][] trailerRcFlats, int[] trailerRcCounts)
+        List<byte[]> index8B,
+        List<byte[]>? index2B,
+        byte[][] trailerRc2B, int[] trailerRc2BCounts,
+        byte[][] trailerRc8B)
     {
-        bool indexMatch = indexStoredRcBm.Count > 0 &&
-            EtnBlockMap.DiffTrimmed(actualRcFlat, actualRcCount, indexStoredRcBm).Count == 0;
-        var trailerConsensus = TrailerConsensusFlat(trailerRcFlats, trailerRcCounts);
-        bool trailerMatch = trailerConsensus != null &&
-            EtnBlockMap.DiffTrimmed(actualRcFlat, actualRcCount, trailerConsensus).Count == 0;
+        bool index8BMatch = index8B.Count > 0 &&
+            EtnBlockMap.DiffTrimmed(actualRcFlat, actualRcCount, index8B).Count == 0;
+        var trailer2BConsensus = TrailerConsensusFlat(trailerRc2B, trailerRc2BCounts);
+        bool trailer2BMatch = trailer2BConsensus != null &&
+            EtnBlockMap.DiffTrimmed(actualRcFlat, actualRcCount, trailer2BConsensus).Count == 0;
 
-        if (indexMatch && trailerMatch) return;
+        if (index8BMatch && trailer2BMatch) return;
 
-        if (indexMatch && !trailerMatch)
+        var suspicious = new List<int>();
+        if (!trailer2BMatch && trailer2BConsensus != null)
+            suspicious = EtnBlockMap.DiffTrimmed(trailer2BConsensus, actualRcFlat, actualRcCount);
+
+        if (suspicious.Count == 0 && !index8BMatch)
         {
-            result.CorruptedFragmentTrailers = Union(result.CorruptedFragmentTrailers,
-                FindDisagreeingFlat(trailerRcFlats, trailerRcCounts, actualRcFlat, actualRcCount));
-            return;
+            for (int b = 0; b < actualRcCount; b++) suspicious.Add(b);
         }
 
-        if (!indexMatch && trailerMatch) return;
+        if (suspicious.Count == 0) return;
 
-        if (!indexMatch && !trailerMatch && trailerConsensus != null &&
-            EtnBlockMap.DiffTrimmed(indexStoredRcBm, trailerConsensus).Count == 0)
+        // Tier 2: 8B from trailer (B) + 8B from Index (A)
+        var corrupted = new List<int>();
+        foreach (int b in suspicious)
+        {
+            bool trailer8BOk = trailerRc8B.Length > 0 && trailerRc8B[0].Length > 0 &&
+                b < trailerRc2BCounts[0] &&
+                EtnBlockMap.IsSecondPassMatch(actualRcFlat, b,
+                    trailerRc8B[0].AsSpan(b * EtnBlockMap.SecondHashLen, EtnBlockMap.SecondHashLen).ToArray());
+            bool idx8BOk = b < index8B.Count &&
+                EtnBlockMap.IsSecondPassMatch(actualRcFlat, b, index8B[b]);
+
+            if (!trailer8BOk && !idx8BOk)
+                corrupted.Add(b);
+        }
+
+        if (corrupted.Count > 0)
         {
             result.RcCorrupted = true;
-            result.RcCorruptedBlocks = EtnBlockMap.DiffTrimmed(indexStoredRcBm, actualRcFlat, actualRcCount);
-            return;
+            result.RcCorruptedBlocks = corrupted;
         }
-
-        result.RcCorrupted = true;
-        result.RcCorruptedBlocks = EtnBlockMap.DiffTrimmed(trailerConsensus ?? indexStoredRcBm, actualRcFlat, actualRcCount);
     }
 
     private static void CheckFragments(
         PrecisionResult result,
         byte[][] actualFragmentFlats, int[] fragmentBlockCounts,
-        byte[][] trailerFragmentFlats, int[] trailerFragmentCounts,
-        List<List<byte[]>> rcStoredFragmentBms,
-        List<List<byte[]>> indexStoredFragmentBms)
+        List<List<byte[]>> rc8B,
+        List<List<byte[]>>? rc2B,
+        List<List<byte[]>> index8B,
+        List<List<byte[]>>? index2B)
     {
         for (int i = 0; i < actualFragmentFlats.Length; i++)
         {
             var actualFlat = actualFragmentFlats[i];
             int blockCount = fragmentBlockCounts[i];
-            bool hasTrailer = i < trailerFragmentFlats.Length;
-            bool hasRc = i < rcStoredFragmentBms.Count;
-            bool hasIndex = i < indexStoredFragmentBms.Count;
+            bool hasRc8B = i < rc8B.Count;
+            bool hasIdx8B = i < index8B.Count;
+            if (!hasRc8B && !hasIdx8B) continue;
 
-            if (!hasRc && !hasIndex) continue;
-
-            // Tier 1: compare actual[..2] vs trailer fragment BM (2B)
+            // Tier 1: frag2B from Index CBOR (A) or RC CBOR (C)
+            List<byte[]>? frag2B = (index2B != null && i < index2B.Count) ? index2B[i]
+                : (rc2B != null && i < rc2B.Count) ? rc2B[i] : null;
             var suspicious = new List<int>();
-            if (hasTrailer && trailerFragmentFlats[i].Length > 0)
+            if (frag2B != null && frag2B.Count > 0)
             {
-                byte[] tFlat = trailerFragmentFlats[i];
-                int tCount = Math.Min(blockCount, trailerFragmentCounts[i]);
+                int tCount = Math.Min(blockCount, frag2B.Count);
                 for (int b = 0; b < tCount; b++)
-                    if (actualFlat[b * 32] != tFlat[b * 2] || actualFlat[b * 32 + 1] != tFlat[b * 2 + 1])
+                {
+                    if (actualFlat[b * 32] != frag2B[b][0] || actualFlat[b * 32 + 1] != frag2B[b][1])
                         suspicious.Add(b);
+                }
                 for (int b = tCount; b < blockCount; b++)
                     suspicious.Add(b);
             }
@@ -193,14 +232,14 @@ public static class EtnPrecision
 
             if (suspicious.Count == 0) continue;
 
-            // Tier 2: confirm suspicious against RC (8B) + Index (8B)
+            // Tier 2: frag8B from RC (C) + Index (A)
             var corrupted = new List<int>();
             foreach (int b in suspicious)
             {
-                bool rcOk = hasRc && b < rcStoredFragmentBms[i].Count &&
-                    EtnBlockMap.IsSecondPassMatch(actualFlat, b, rcStoredFragmentBms[i][b]);
-                bool idxOk = hasIndex && b < indexStoredFragmentBms[i].Count &&
-                    EtnBlockMap.IsSecondPassMatch(actualFlat, b, indexStoredFragmentBms[i][b]);
+                bool rcOk = hasRc8B && b < rc8B[i].Count &&
+                    EtnBlockMap.IsSecondPassMatch(actualFlat, b, rc8B[i][b]);
+                bool idxOk = hasIdx8B && b < index8B[i].Count &&
+                    EtnBlockMap.IsSecondPassMatch(actualFlat, b, index8B[i][b]);
 
                 if (!rcOk && !idxOk)
                     corrupted.Add(b);
@@ -224,8 +263,8 @@ public static class EtnPrecision
     {
         if (trailerFlats.Length == 0) return null;
         if (trailerFlats.Length == 1)
-            return ToListOfBytes(trailerFlats[0], trailerCounts[0]);
-        var reference = ToListOfBytes(trailerFlats[0], trailerCounts[0]);
+            return ToListOfBytes2B(trailerFlats[0], trailerCounts[0]);
+        var reference = ToListOfBytes2B(trailerFlats[0], trailerCounts[0]);
         for (int i = 1; i < trailerFlats.Length; i++)
             if (EtnBlockMap.DiffTrimmed(trailerFlats[i], trailerCounts[i], EtnBlockMap.TrailerHashLen, reference).Count != 0) return null;
         return reference;
@@ -240,7 +279,7 @@ public static class EtnPrecision
         return list;
     }
 
-    private static List<byte[]> ToListOfBytes(byte[] flat, int count)
+    private static List<byte[]> ToListOfBytes2B(byte[] flat, int count)
     {
         var list = new List<byte[]>(count);
         for (int i = 0; i < count; i++)
@@ -262,6 +301,10 @@ public static class EtnPrecision
     internal static byte[] StripFss6RcFields(byte[] rcBytes)
     {
         var rc = RcFile.FromCbor(rcBytes);
+        rc.IndexBlockMap = [];
+        rc.Index2B = null;
+        rc.FragmentBlockMaps = [];
+        rc.Fragment2B = null;
         rc.RepairA = null;
         rc.RepairB = null;
         rc.Repair62A = null;
@@ -274,7 +317,9 @@ public static class EtnPrecision
         var index = IndexManager.DeserializeIndex(indexBytes);
         if (index == null) return indexBytes;
         index.Fss6FragmentBlockMaps = null;
+        index.Fss6Fragment2B = null;
         index.Fss6RcBlockMap = null;
+        index.Fss6Rc2B = null;
         index.Fss61RepairB = null;
         index.Fss61RepairC = null;
         index.Fss62RepairB = null;
@@ -282,7 +327,7 @@ public static class EtnPrecision
         return IndexManager.SerializeIndex(index);
     }
 
-    private static (byte[] data, byte[] fragFlat, int fragCount, byte[] indexFlat, int indexCount, byte[] rcFlat, int rcCount) ParseAnyTrailer(byte[] fragmentData)
+    private static EtnTrailerData ParseAnyTrailer(byte[] fragmentData)
     {
         var (raw62, _, _, _, _) = Fss62RepairTrailer.Parse(fragmentData);
         if (raw62.Length < fragmentData.Length)
@@ -305,6 +350,5 @@ public class PrecisionResult
     public Dictionary<int, List<int>> CorruptedFragmentBlocks { get; set; } = new();
     public Dictionary<int, List<int>> SuspiciousFragmentBlocks { get; set; } = new();
     public List<int> CorruptedFragmentTrailers { get; set; } = new();
-    /// <summary>Error message when validation fails.</summary>
     public string? ErrorMessage { get; set; }
 }

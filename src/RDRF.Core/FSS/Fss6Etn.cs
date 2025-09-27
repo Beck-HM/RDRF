@@ -29,12 +29,8 @@ public class Fss6Etn : IFssStrategy
     {
         var (raw61, _, _, _, _) = Fss61RepairTrailer.Parse(fragmentData);
         if (raw61.Length < fragmentData.Length)
-        {
-            var (raw, _, _, _, _, _, _) = EtnTrailer.Parse(raw61);
-            return raw;
-        }
-        var (data, _, _, _, _, _, _) = EtnTrailer.Parse(fragmentData);
-        return data;
+            return EtnTrailer.Parse(raw61).RawData;
+        return EtnTrailer.Parse(fragmentData).RawData;
     }
 
     public byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null)
@@ -42,14 +38,11 @@ public class Fss6Etn : IFssStrategy
 
     public static byte[] BuildBlockMap(byte[] data) => EtnBlockMap.Build(data);
     public static bool CompareBlockMaps(List<byte[]> a, List<byte[]> b) => EtnBlockMap.DiffTrimmed(a, b).Count == 0;
-    public static byte[] BuildTrailer(byte[] fragFlat, int fragCount, byte[] indexFlat, int indexCount, byte[] rcFlat, int rcCount, int rawSize = 0)
-        => EtnTrailer.Build(fragFlat, fragCount, indexFlat, indexCount, rcFlat, rcCount, rawSize);
+    public static byte[] BuildTrailer(byte[] indexFlat, int indexCount, byte[] rcFlat, int rcCount, int rawSize = 0)
+        => EtnTrailer.Build(indexFlat, indexCount, rcFlat, rcCount, rawSize);
 
-    public static (byte[] data, byte[] indexFlat, int indexCount, byte[] rcFlat, int rcCount) ParseTrailer(byte[] fragmentData)
-    {
-        var (data, _, _, indexFlat, indexCount, rcFlat, rcCount) = EtnTrailer.Parse(fragmentData);
-        return (data, indexFlat, indexCount, rcFlat, rcCount);
-    }
+    public static EtnTrailerData ParseTrailer(byte[] fragmentData)
+        => EtnTrailer.Parse(fragmentData);
 
     public static byte[] StripEtnFieldsFromIndexJson(byte[] indexBytes)
         => EtnPrecision.StripFss6Fields(indexBytes);
@@ -67,24 +60,26 @@ public class Fss6Etn : IFssStrategy
             fragmentBlockFlats[i] = EtnBlockMap.Build(fragments[i], bs);
         });
 
+        // C (RC) stores: Index(8B+2B) + Fragment(8B+2B)
         var rcFile = new RcFile
         {
             Version = 1,
             FileFingerprint = fileFingerprint,
             IndexBlockMap = HexListFromSecondFlat(indexBlockFlat, idxBlockCount),
+            Index2B = HexListFromFirstFlat(indexBlockFlat, idxBlockCount),
             FragmentBlockMaps = fragmentBlockFlats.Select(f => HexListFromSecondFlat(f, EtnBlockMap.BlockCount(f))).ToList(),
+            Fragment2B = fragmentBlockFlats.Select(f => HexListFromFirstFlat(f, EtnBlockMap.BlockCount(f))).ToList(),
             CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         };
         byte[] rcBytes = rcFile.ToCborBytes();
         byte[] rcBlockFlat = EtnBlockMap.Build(rcBytes, bs);
         int rcBlockCount = EtnBlockMap.BlockCount(rcBlockFlat);
 
+        // B trailer stores: Index(2B+8B) + RC(2B+8B)
         for (int i = 0; i < fragments.Count; i++)
         {
             int rawLen = fragments[i].Length;
-            int fragCount = EtnBlockMap.BlockCount(fragmentBlockFlats[i]);
             byte[] trailer = EtnTrailer.Build(
-                fragmentBlockFlats[i], fragCount,
                 indexBlockFlat, idxBlockCount,
                 rcBlockFlat, rcBlockCount,
                 rawLen);
@@ -94,6 +89,7 @@ public class Fss6Etn : IFssStrategy
             fragments[i] = withTrailer;
         }
 
+        // A (Index) stores: Fragment(8B+2B) + RC(8B+2B)
         byte[] updatedIndexBytes = AddFss6FieldsToIndex(indexBytes, fragmentBlockFlats, rcBlockFlat);
         return (fragments, updatedIndexBytes, rcBytes);
     }
@@ -107,12 +103,15 @@ public class Fss6Etn : IFssStrategy
 
         int rcBlockCount = EtnBlockMap.BlockCount(rcBlockFlat);
         index.Fss6RcBlockMap = HexListFromSecondFlat(rcBlockFlat, rcBlockCount);
+        index.Fss6Rc2B = HexListFromFirstFlat(rcBlockFlat, rcBlockCount);
 
         index.Fss6FragmentBlockMaps = new List<List<string>>();
+        index.Fss6Fragment2B = new List<List<string>>();
         for (int i = 0; i < fragmentBlockFlats.Length; i++)
         {
             int fc = EtnBlockMap.BlockCount(fragmentBlockFlats[i]);
             index.Fss6FragmentBlockMaps.Add(HexListFromSecondFlat(fragmentBlockFlats[i], fc));
+            index.Fss6Fragment2B.Add(HexListFromFirstFlat(fragmentBlockFlats[i], fc));
         }
 
         return IndexManager.SerializeIndex(index);
@@ -130,6 +129,14 @@ public class Fss6Etn : IFssStrategy
         var list = new List<string>(blockCount);
         for (int i = 0; i < blockCount; i++)
             list.Add(EtnBlockMap.HashToBase64(EtnBlockMap.TruncateSecond(flat, i)));
+        return list;
+    }
+
+    private static List<string> HexListFromFirstFlat(byte[] flat, int blockCount)
+    {
+        var list = new List<string>(blockCount);
+        for (int i = 0; i < blockCount; i++)
+            list.Add(EtnBlockMap.HashToBase64(EtnBlockMap.TruncateFirst(flat, i)));
         return list;
     }
 }
