@@ -813,11 +813,16 @@ public class RestoreOrchestrator : IDisposable
     private static byte[] StripAnyTrailer(byte[] frag)
     {
         var (raw62, _, _, _, _) = FSS.Fss62RepairTrailer.Parse(frag);
-        if (raw62.Length < frag.Length) return raw62;
+        if (raw62.Length < frag.Length) return StripEtnOnly(raw62);
         var (raw61, _, _, _, _) = FSS.Fss61RepairTrailer.Parse(frag);
-        if (raw61.Length < frag.Length) return raw61;
-        var (rawEtn, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
-        return rawEtn;
+        if (raw61.Length < frag.Length) return StripEtnOnly(raw61);
+        return StripEtnOnly(frag);
+    }
+
+    private static byte[] StripEtnOnly(byte[] frag)
+    {
+        var (raw, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
+        return raw;
     }
 
     // ── Strip FSS Encoding ──
@@ -898,9 +903,8 @@ public class RestoreOrchestrator : IDisposable
                     byte[] encrypted = await _storage.ReadFragmentAsync(
                         Frags.FragmentFilename(filePrefix, i), ct).ConfigureAwait(false);
                     byte[] decrypted = EncryptionLayer.DecryptAndStripFragment(encrypted, _aesKey);
-                    if (etn != null && index.FssStrategy != Constants.FssLevel61
-                        && index.FssStrategy != Constants.FssLevel62)
-                        decrypted = etn.Strip(decrypted);
+                    if (etn != null)
+                        decrypted = StripAnyTrailer(decrypted);
                     await channel.Writer.WriteAsync((i, decrypted), ct).ConfigureAwait(false);
                 }
                 channel.Writer.Complete();

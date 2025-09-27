@@ -292,12 +292,11 @@ public class BackupOrchestrator : IDisposable
                     var fb = new List<byte[]>();
                     foreach (var frag in fragments)
                     {
-                        var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(frag);
-                        for (int off = 0; off < rawData.Length; off += bs)
+                        for (int off = 0; off < frag.Length; off += bs)
                         {
-                            int len = Math.Min(bs, rawData.Length - off);
+                            int len = Math.Min(bs, frag.Length - off);
                             byte[] blk = new byte[bs];
-                            Buffer.BlockCopy(rawData, off, blk, 0, len);
+                            Buffer.BlockCopy(frag, off, blk, 0, len);
                             fb.Add(blk);
                         }
                     }
@@ -339,14 +338,13 @@ public class BackupOrchestrator : IDisposable
                 if (repairB != null) { rcFile.RepairB = repairB; indexObj.Fss61RepairB = repairB; }
                 if (repairC != null) indexObj.Fss61RepairC = repairC;
 
-                // D: replace trailers (depends on A + C)
+                // D: append FSS6.1 repair trailer after ETN trailer
                 if (repairA != null && repairC != null)
                 {
                     string fp = filePrefix ?? fileFingerprint;
                     for (int i = 0; i < fragments.Count; i++)
                     {
-                        var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(fragments[i]);
-                        fragments[i] = Fss61RepairTrailer.Build(rawData, fp, fp, repairA, repairC);
+                        fragments[i] = Fss61RepairTrailer.Build(fragments[i], fp, fp, repairA, repairC);
                     }
                 }
 
@@ -383,19 +381,14 @@ public class BackupOrchestrator : IDisposable
 
                 var task62B = Task.Run(() =>
                 {
-                    // Pre-parse fragment trailers once (cache for D stage)
-                    var rawDataCache = new (byte[] data, int len)[fragments.Count];
                     var fb = new List<byte[]>();
                     for (int i = 0; i < fragments.Count; i++)
                     {
-                        var parsed = EtnTrailer.Parse(fragments[i]);
-                        byte[] rawData = parsed.Item1;
-                        rawDataCache[i] = (rawData, rawData.Length);
-                        for (int off = 0; off < rawData.Length; off += bs)
+                        for (int off = 0; off < fragments[i].Length; off += bs)
                         {
-                            int len = Math.Min(bs, rawData.Length - off);
+                            int len = Math.Min(bs, fragments[i].Length - off);
                             byte[] block = new byte[bs];
-                            Buffer.BlockCopy(rawData, off, block, 0, len);
+                            Buffer.BlockCopy(fragments[i], off, block, 0, len);
                             fb.Add(block);
                         }
                     }
@@ -403,13 +396,13 @@ public class BackupOrchestrator : IDisposable
                     {
                         var allFrags = fb.ToArray();
                         var (sym, entropy, seed) = DuipCode.Encode(allFrags, bs);
-                        return (new Fss62RepairData
+                        return new Fss62RepairData
                         {
                             Seed = seed, BlockCount = allFrags.Length, BlockSize = bs,
                             Data = FlattenSymbols(sym, bs), EntropySamples = entropy,
-                        }, rawDataCache);
+                        };
                     }
-                    return ((Fss62RepairData?)null, rawDataCache);
+                    return (Fss62RepairData?)null;
                 });
 
                 var task62C = Task.Run(() =>
@@ -430,9 +423,7 @@ public class BackupOrchestrator : IDisposable
                 Task.WaitAll(task62A, task62B, task62C);
 
                 var repair62A = task62A.Result;
-                var task62BResult = task62B.Result;
-                var repair62B = task62BResult.Item1;
-                var rawDataCache = task62BResult.Item2;
+                var repair62B = task62B.Result;
                 var repair62C = task62C.Result;
 
                 if (repair62A != null) rcFile62.Repair62A = repair62A;
@@ -443,14 +434,13 @@ public class BackupOrchestrator : IDisposable
                 }
                 if (repair62C != null) indexObj62.Fss62RepairC = repair62C;
 
-                // D: replace trailers (uses cached parse results from B)
+                // D: append FSS6.2 repair trailer after ETN trailer
                 if (repair62A != null && repair62C != null)
                 {
                     string fp = filePrefix ?? fileFingerprint;
                     for (int i = 0; i < fragments.Count; i++)
                     {
-                        var (rawData, _) = rawDataCache[i];
-                        fragments[i] = Fss62RepairTrailer.Build(rawData, fp, fp,
+                        fragments[i] = Fss62RepairTrailer.Build(fragments[i], fp, fp,
                             repair62A, repair62C);
                     }
                 }
@@ -681,8 +671,7 @@ public class BackupOrchestrator : IDisposable
                 {
                     for (int i = 0; i < fragments.Count; i++)
                     {
-                        var (rawData, _, _, _, _, _, _) = EtnTrailer.Parse(fragments[i]);
-                        fragments[i] = Fss61RepairTrailer.Build(rawData, filePrefix, filePrefix,
+                        fragments[i] = Fss61RepairTrailer.Build(fragments[i], filePrefix, filePrefix,
                             rcFile.RepairA, indexObj.Fss61RepairC);
                     }
                 }
