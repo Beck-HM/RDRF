@@ -99,48 +99,32 @@ public static class EtnPrecision
         byte[][] trailerIdx2B, int[] trailerIdx2BCounts,
         byte[][] trailerIdx8B)
     {
-        // Tier 1: 8B from RC (C) vs 2B from trailer consensus (B)
-        bool rc8BMatch = rc8B.Count > 0 &&
-            EtnBlockMap.DiffTrimmed(actualIndexFlat, actualIndexCount, rc8B).Count == 0;
-        var trailer2BConsensus = TrailerConsensusFlat(trailerIdx2B, trailerIdx2BCounts);
-        bool trailer2BMatch = trailer2BConsensus != null &&
-            EtnBlockMap.DiffTrimmed(actualIndexFlat, actualIndexCount, trailer2BConsensus).Count == 0;
+        var idx2BConsensus = TrailerConsensusFlat(trailerIdx2B, trailerIdx2BCounts);
+        if (idx2BConsensus == null && trailerIdx2B.Length > 0)
+            idx2BConsensus = ToListOfBytes2B(trailerIdx2B[0], trailerIdx2BCounts[0]);
 
-        // All three agree: OK
-        if (rc8BMatch && trailer2BMatch) return;
+        bool has8BTrailer = trailerIdx8B.Length > 0 && trailerIdx8B[0].Length > 0;
 
-        var suspicious = new List<int>();
-        if (!trailer2BMatch && trailer2BConsensus != null)
-            suspicious = EtnBlockMap.DiffTrimmed(trailer2BConsensus, actualIndexFlat, actualIndexCount);
-
-        if (suspicious.Count == 0 && !rc8BMatch)
+        for (int b = 0; b < actualIndexCount; b++)
         {
-            for (int b = 0; b < actualIndexCount; b++) suspicious.Add(b);
-        }
+            // Tier 1: 2B → pass or suspicious
+            if (b < idx2BConsensus.Count && idx2BConsensus[b].Length >= 2 &&
+                actualIndexFlat[b * 32] == idx2BConsensus[b][0] &&
+                actualIndexFlat[b * 32 + 1] == idx2BConsensus[b][1])
+                continue;
 
-        if (suspicious.Count == 0) return;
+            // Tier 2: 8B → collision or corrupted
+            bool b8BOk = (has8BTrailer && b < trailerIdx2BCounts[0] &&
+                Is8BMatch(actualIndexFlat, b,
+                    trailerIdx8B[0].AsSpan(b * 8, 8).ToArray()));
+            b8BOk = b8BOk || (b < rc8B.Count &&
+                Is8BMatch(actualIndexFlat, b, rc8B[b]));
 
-        // Tier 2: confirm suspicious with 8B from trailer (B) + 8B from RC (C)
-        var corrupted = new List<int>();
-        foreach (int b in suspicious)
-        {
-            // 8B from trailer
-            bool trailer8BOk = trailerIdx8B.Length > 0 && trailerIdx8B[0].Length > 0 &&
-                b < trailerIdx2BCounts[0] &&
-                EtnBlockMap.IsSecondPassMatch(actualIndexFlat, b,
-                    trailerIdx8B[0].AsSpan(b * EtnBlockMap.SecondHashLen, EtnBlockMap.SecondHashLen).ToArray());
-            // 8B from RC CBOR
-            bool rc8BOk = b < rc8B.Count &&
-                EtnBlockMap.IsSecondPassMatch(actualIndexFlat, b, rc8B[b]);
-
-            if (!trailer8BOk && !rc8BOk)
-                corrupted.Add(b);
-        }
-
-        if (corrupted.Count > 0)
-        {
-            result.IndexCorrupted = true;
-            result.IndexCorruptedBlocks = corrupted;
+            if (!b8BOk)
+            {
+                result.IndexCorrupted = true;
+                result.IndexCorruptedBlocks.Add(b);
+            }
         }
     }
 
@@ -152,46 +136,35 @@ public static class EtnPrecision
         byte[][] trailerRc2B, int[] trailerRc2BCounts,
         byte[][] trailerRc8B)
     {
-        bool index8BMatch = index8B.Count > 0 &&
-            EtnBlockMap.DiffTrimmed(actualRcFlat, actualRcCount, index8B).Count == 0;
-        var trailer2BConsensus = TrailerConsensusFlat(trailerRc2B, trailerRc2BCounts);
-        bool trailer2BMatch = trailer2BConsensus != null &&
-            EtnBlockMap.DiffTrimmed(actualRcFlat, actualRcCount, trailer2BConsensus).Count == 0;
+        var rc2BConsensus = TrailerConsensusFlat(trailerRc2B, trailerRc2BCounts);
+        if (rc2BConsensus == null && trailerRc2B.Length > 0)
+            rc2BConsensus = ToListOfBytes2B(trailerRc2B[0], trailerRc2BCounts[0]);
 
-        if (index8BMatch && trailer2BMatch) return;
+        bool has8BTrailer = trailerRc8B.Length > 0 && trailerRc8B[0].Length > 0;
 
-        var suspicious = new List<int>();
-        if (!trailer2BMatch && trailer2BConsensus != null)
-            suspicious = EtnBlockMap.DiffTrimmed(trailer2BConsensus, actualRcFlat, actualRcCount);
-
-        if (suspicious.Count == 0 && !index8BMatch)
+        for (int b = 0; b < actualRcCount; b++)
         {
-            for (int b = 0; b < actualRcCount; b++) suspicious.Add(b);
-        }
+            if (b < rc2BConsensus.Count && rc2BConsensus[b].Length >= 2 &&
+                actualRcFlat[b * 32] == rc2BConsensus[b][0] &&
+                actualRcFlat[b * 32 + 1] == rc2BConsensus[b][1])
+                continue;
 
-        if (suspicious.Count == 0) return;
+            bool b8BOk = (has8BTrailer && b < trailerRc2BCounts[0] &&
+                Is8BMatch(actualRcFlat, b,
+                    trailerRc8B[0].AsSpan(b * 8, 8).ToArray()));
+            b8BOk = b8BOk || (b < index8B.Count &&
+                Is8BMatch(actualRcFlat, b, index8B[b]));
 
-        // Tier 2: 8B from trailer (B) + 8B from Index (A)
-        var corrupted = new List<int>();
-        foreach (int b in suspicious)
-        {
-            bool trailer8BOk = trailerRc8B.Length > 0 && trailerRc8B[0].Length > 0 &&
-                b < trailerRc2BCounts[0] &&
-                EtnBlockMap.IsSecondPassMatch(actualRcFlat, b,
-                    trailerRc8B[0].AsSpan(b * EtnBlockMap.SecondHashLen, EtnBlockMap.SecondHashLen).ToArray());
-            bool idx8BOk = b < index8B.Count &&
-                EtnBlockMap.IsSecondPassMatch(actualRcFlat, b, index8B[b]);
-
-            if (!trailer8BOk && !idx8BOk)
-                corrupted.Add(b);
-        }
-
-        if (corrupted.Count > 0)
-        {
-            result.RcCorrupted = true;
-            result.RcCorruptedBlocks = corrupted;
+            if (!b8BOk)
+            {
+                result.RcCorrupted = true;
+                result.RcCorruptedBlocks.Add(b);
+            }
         }
     }
+
+    private static bool Is8BMatch(byte[] actualFlat, int blockIndex, byte[] stored8B)
+        => EtnBlockMap.IsSecondPassMatch(actualFlat, blockIndex, stored8B);
 
     private static void CheckFragments(
         PrecisionResult result,
