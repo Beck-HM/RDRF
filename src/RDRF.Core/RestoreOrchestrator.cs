@@ -251,6 +251,7 @@ public class RestoreOrchestrator : IDisposable
             // ETN cross-validation (only if BM data available in the Index)
             // Must run BEFORE stripping trailers, as cross-validation needs them
             var etnActual = false;
+            Console.Error.WriteLine($"  [DICT] hasFss6={hasFss6} fragCount={decryptedFragments.Count} BM={index.Fss6FragmentBlockMaps?.Count} RcBM={index.Fss6RcBlockMap?.Count}");
             if (hasFss6)
             {
                 ct.ThrowIfCancellationRequested();
@@ -335,7 +336,7 @@ public class RestoreOrchestrator : IDisposable
         {
             return true;
         }
-        Debug.WriteLine($"  Integrity check FAILED");
+        Console.Error.WriteLine($"  [RESTORE FAIL] hash={restoredHash} expected={index.OriginalHash} size={outSize}");
         return false;
     }
 
@@ -436,10 +437,13 @@ public class RestoreOrchestrator : IDisposable
         RdrfIndex index, Dictionary<int, byte[]> decryptedFragments,
         string fileFingerprint, CancellationToken ct)
     {
+        Console.Error.WriteLine($"  [ETN] entered fp={fileFingerprint.Substring(0, 16)}...");
         bool validationActual = false;
         try
         {
-            if (await _storage.RcExistsAsync(fileFingerprint, ct).ConfigureAwait(false))
+            bool rcExists = await _storage.RcExistsAsync(fileFingerprint, ct).ConfigureAwait(false);
+            Console.Error.WriteLine($"  [ETN] rcExists={rcExists}");
+            if (rcExists)
             {
                 byte[] encryptedRc = await _storage.ReadRcAsync(fileFingerprint, ct).ConfigureAwait(false);
                 byte[] rcBytes = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, _aesKey);
@@ -449,6 +453,10 @@ public class RestoreOrchestrator : IDisposable
                     indexBytes,
                     decryptedFragments.OrderBy(k => k.Key).Select(k => k.Value).ToList(),
                     rcBytes);
+
+                int totalCvBlocks = 0;
+                foreach (var kv in cvResult.CorruptedFragmentBlocks) totalCvBlocks += kv.Value.Count;
+                Console.Error.WriteLine($"  [CV] IsValid={cvResult.IsValid} BadFrags={cvResult.CorruptedFragments.Count} BadBlocks={totalCvBlocks} IndexBad={cvResult.IndexCorrupted} RcBad={cvResult.RcCorrupted}");
 
                 if (!cvResult.IsValid)
                 {
@@ -488,6 +496,7 @@ public class RestoreOrchestrator : IDisposable
     private bool TryFss61TripleRepair(RdrfIndex index, ref byte[] rcBytes,
         Dictionary<int, byte[]> decryptedFragments, FSS.CrossValidationResult cvResult)
     {
+        Console.Error.WriteLine($"  [TRY FSS61] CorruptedFrags={cvResult.CorruptedFragments.Count} IndexBad={cvResult.IndexCorrupted} RcBad={cvResult.RcCorrupted} FragBlocks={cvResult.CorruptedFragmentBlocks.Count}");
         try
         {
             var rcFile = RcFile.FromCbor(rcBytes);
@@ -641,6 +650,7 @@ public class RestoreOrchestrator : IDisposable
     private bool TryFss62TripleRepair(RdrfIndex index, ref byte[] rcBytes,
         Dictionary<int, byte[]> decryptedFragments, FSS.CrossValidationResult cvResult)
     {
+        Console.Error.WriteLine($"  [TRY FSS62] CorruptedFrags={cvResult.CorruptedFragments.Count} IndexBad={cvResult.IndexCorrupted} RcBad={cvResult.RcCorrupted} FragBlocks={cvResult.CorruptedFragmentBlocks.Count}");
         try
         {
             var rcFile = RcFile.FromCbor(rcBytes);
@@ -813,7 +823,10 @@ public class RestoreOrchestrator : IDisposable
     private static byte[] StripAnyTrailer(byte[] frag)
     {
         var (raw62, _, _, _, _) = FSS.Fss62RepairTrailer.Parse(frag);
-        if (raw62.Length < frag.Length) return StripEtnOnly(raw62);
+        if (raw62.Length < frag.Length) {
+            var (raw61b, _, _, _, _) = FSS.Fss61RepairTrailer.Parse(raw62);
+            return raw61b.Length < raw62.Length ? StripEtnOnly(raw61b) : StripEtnOnly(raw62);
+        }
         var (raw61, _, _, _, _) = FSS.Fss61RepairTrailer.Parse(frag);
         if (raw61.Length < frag.Length) return StripEtnOnly(raw61);
         return StripEtnOnly(frag);
