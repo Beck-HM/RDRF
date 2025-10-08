@@ -1,4 +1,4 @@
-namespace RDRF.Dssa;
+namespace RDRF.Core.Dssa;
 
 public enum StorageProgressStage
 {

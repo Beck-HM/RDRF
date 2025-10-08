@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace RDRF.Dssa;
+namespace RDRF.Core.Dssa;
 
 public class StorageOrchestrator
 {
