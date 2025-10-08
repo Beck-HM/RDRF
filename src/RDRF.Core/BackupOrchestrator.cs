@@ -266,92 +266,23 @@ public class BackupOrchestrator : IDisposable
         {
             try
             {
-                var rcFile = RcFile.FromCbor(rcBytes);
-                var indexObj = IndexManager.DeserializeIndex(serializedIndex);
                 int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
+                var (repairA, repairB, repairC) = FssRepairService.Generate61(
+                    serializedIndex, fragments, rcBytes, bs);
 
-                // A/B/C: parallel FSS6.1 three-node repair generation
-                var taskA = Task.Run(() =>
-                {
-                    var ib = SplitToBlocks(serializedIndex, bs);
-                    if (ib.Length > 0)
-                    {
-                        int symCount = Math.Max(1, (int)(ib.Length * LtCode.RepairRatio));
-                        var (sym, seed) = LtCode.Encode(ib, symCount, bs);
-                        return new Fss61RepairData
-                        {
-                            Seed = seed, BlockCount = ib.Length, BlockSize = bs,
-                            Data = FlattenSymbols(sym, bs),
-                        };
-                    }
-                    return null;
-                });
+                var rcFile61 = RcFile.FromCbor(rcBytes);
+                var indexObj61 = IndexManager.DeserializeIndex(serializedIndex);
+                if (repairA != null) rcFile61.RepairA = repairA;
+                if (repairB != null) { rcFile61.RepairB = repairB; indexObj61.Fss61RepairB = repairB; }
+                if (repairC != null) indexObj61.Fss61RepairC = repairC;
 
-                var taskB = Task.Run(() =>
-                {
-                    var fb = new List<byte[]>();
-                    foreach (var frag in fragments)
-                    {
-                        for (int off = 0; off < frag.Length; off += bs)
-                        {
-                            int len = Math.Min(bs, frag.Length - off);
-                            byte[] blk = new byte[bs];
-                            Buffer.BlockCopy(frag, off, blk, 0, len);
-                            fb.Add(blk);
-                        }
-                    }
-                    if (fb.Count > 0)
-                    {
-                        var allFrags = fb.ToArray();
-                        int symCount = Math.Max(1, (int)(allFrags.Length * LtCode.RepairRatio));
-                        var (sym, seed) = LtCode.Encode(allFrags, symCount, bs);
-                        return new Fss61RepairData
-                        {
-                            Seed = seed, BlockCount = allFrags.Length, BlockSize = bs,
-                            Data = FlattenSymbols(sym, bs),
-                        };
-                    }
-                    return null;
-                });
+                string fp61 = filePrefix ?? fileFingerprint;
+                FssRepairService.Append61Trailers(fragments, fp61, repairA, repairC);
 
-                var taskC = Task.Run(() =>
-                {
-                    var rb = SplitToBlocks(rcBytes, bs);
-                    if (rb.Length > 0)
-                    {
-                        int symCount = Math.Max(1, (int)(rb.Length * LtCode.RepairRatio));
-                        var (sym, seed) = LtCode.Encode(rb, symCount, bs);
-                        return new Fss61RepairData
-                        {
-                            Seed = seed, BlockCount = rb.Length, BlockSize = bs,
-                            Data = FlattenSymbols(sym, bs),
-                        };
-                    }
-                    return null;
-                });
-
-                var repairA = await taskA.ConfigureAwait(false);
-                var repairB = await taskB.ConfigureAwait(false);
-                var repairC = await taskC.ConfigureAwait(false);
-
-                if (repairA != null) rcFile.RepairA = repairA;
-                if (repairB != null) { rcFile.RepairB = repairB; indexObj.Fss61RepairB = repairB; }
-                if (repairC != null) indexObj.Fss61RepairC = repairC;
-
-                // D: append FSS6.1 repair trailer after ETN trailer
-                if (repairA != null && repairC != null)
-                {
-                    string fp = filePrefix ?? fileFingerprint;
-                    for (int i = 0; i < fragments.Count; i++)
-                    {
-                        fragments[i] = Fss61RepairTrailer.Build(fragments[i], fp, fp, repairA, repairC);
-                    }
-                }
-
-                rcBytes = rcFile.ToCborBytes();
-                serializedIndex = IndexManager.SerializeIndex(indexObj);
+                rcBytes = rcFile61.ToCborBytes();
+                serializedIndex = IndexManager.SerializeIndex(indexObj61);
             }
-            catch (Exception ex) { Debug.WriteLine($"FSS6.1 triple repair generation failed: {ex.Message}"); }
+            catch (Exception ex) { Debug.WriteLine($"FSS6.1 repair generation failed: {ex.Message}"); }
         }
 
         // FSS6.2: three-node independent Duip repair generation
@@ -359,91 +290,18 @@ public class BackupOrchestrator : IDisposable
         {
             try
             {
+                int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
+                var (repair62A, repair62B, repair62C) = FssRepairService.Generate62(
+                    serializedIndex, fragments, rcBytes, bs);
+
                 var rcFile62 = RcFile.FromCbor(rcBytes);
                 var indexObj62 = IndexManager.DeserializeIndex(serializedIndex);
-                int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
-
-                // A/B/C: parallel FSS6.2 three-node Duip repair generation
-                var task62A = Task.Run(() =>
-                {
-                    var ib = SplitToBlocks(serializedIndex, bs);
-                    if (ib.Length > 0)
-                    {
-                        var (sym, entropy, seed) = DuipCode.Encode(ib, bs);
-                        return new Fss62RepairData
-                        {
-                            Seed = seed, BlockCount = ib.Length, BlockSize = bs,
-                            Data = FlattenSymbols(sym, bs), EntropySamples = entropy,
-                        };
-                    }
-                    return null;
-                });
-
-                var task62B = Task.Run(() =>
-                {
-                    var fb = new List<byte[]>();
-                    for (int i = 0; i < fragments.Count; i++)
-                    {
-                        for (int off = 0; off < fragments[i].Length; off += bs)
-                        {
-                            int len = Math.Min(bs, fragments[i].Length - off);
-                            byte[] block = new byte[bs];
-                            Buffer.BlockCopy(fragments[i], off, block, 0, len);
-                            fb.Add(block);
-                        }
-                    }
-                    if (fb.Count > 0)
-                    {
-                        var allFrags = fb.ToArray();
-                        var (sym, entropy, seed) = DuipCode.Encode(allFrags, bs);
-                        return new Fss62RepairData
-                        {
-                            Seed = seed, BlockCount = allFrags.Length, BlockSize = bs,
-                            Data = FlattenSymbols(sym, bs), EntropySamples = entropy,
-                        };
-                    }
-                    return (Fss62RepairData?)null;
-                });
-
-                var task62C = Task.Run(() =>
-                {
-                    var rb = SplitToBlocks(rcBytes, bs);
-                    if (rb.Length > 0)
-                    {
-                        var (sym, entropy, seed) = DuipCode.Encode(rb, bs);
-                        return new Fss62RepairData
-                        {
-                            Seed = seed, BlockCount = rb.Length, BlockSize = bs,
-                            Data = FlattenSymbols(sym, bs), EntropySamples = entropy,
-                        };
-                    }
-                    return null;
-                });
-
-                Task.WaitAll(task62A, task62B, task62C);
-
-                var repair62A = task62A.Result;
-                var repair62B = task62B.Result;
-                var repair62C = task62C.Result;
-
                 if (repair62A != null) rcFile62.Repair62A = repair62A;
-                if (repair62B != null)
-                {
-                    rcFile62.Repair62B = repair62B;
-                    indexObj62.Fss62RepairB = repair62B;
-                }
+                if (repair62B != null) { rcFile62.Repair62B = repair62B; indexObj62.Fss62RepairB = repair62B; }
                 if (repair62C != null) indexObj62.Fss62RepairC = repair62C;
 
-                // D: append FSS6.2 repair trailer after ETN trailer
-                if (repair62A != null && repair62C != null)
-                {
-                    string fp = filePrefix ?? fileFingerprint;
-                    for (int i = 0; i < fragments.Count; i++)
-                    {
-                        fragments[i] = Fss62RepairTrailer.Build(fragments[i], fp, fp,
-                            repair62A, repair62C);
-                    }
-                }
+                string fp62 = filePrefix ?? fileFingerprint;
+                FssRepairService.Append62Trailers(fragments, fp62, repair62A, repair62C);
 
                 rcBytes = rcFile62.ToCborBytes();
                 serializedIndex = IndexManager.SerializeIndex(indexObj62);
@@ -614,70 +472,20 @@ public class BackupOrchestrator : IDisposable
         {
             try
             {
-                var rcFile = RcFile.FromCbor(rcBytes);
-                var indexObj = IndexManager.DeserializeIndex(serializedIndex);
                 int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
+                var (repairA, repairB, repairC) = FssRepairService.Generate61(
+                    serializedIndex, fragments, rcBytes, bs);
 
-                var indexBlocks = SplitToBlocks(serializedIndex, bs);
-                if (indexBlocks.Length > 0)
-                {
-                    int symCount = Math.Max(1, (int)(indexBlocks.Length * LtCode.RepairRatio));
-                    var (sym, seed) = LtCode.Encode(indexBlocks, symCount, bs);
-                    rcFile.RepairA = new Fss61RepairData
-                    {
-                        Seed = seed, BlockCount = indexBlocks.Length, BlockSize = bs,
-                        Data = FlattenSymbols(sym, bs),
-                    };
-                }
+                var rcFile61 = RcFile.FromCbor(rcBytes);
+                var indexObj61 = IndexManager.DeserializeIndex(serializedIndex);
+                if (repairA != null) rcFile61.RepairA = repairA;
+                if (repairB != null) { rcFile61.RepairB = repairB; indexObj61.Fss61RepairB = repairB; }
+                if (repairC != null) indexObj61.Fss61RepairC = repairC;
 
-                var fragBlocks = new List<byte[]>();
-                foreach (var frag in fragments)
-                {
-                    var rawData = EtnTrailer.Parse(frag).RawData;
-                    for (int off = 0; off < rawData.Length; off += bs)
-                    {
-                        int len = Math.Min(bs, rawData.Length - off);
-                        byte[] block = new byte[bs];
-                        Buffer.BlockCopy(rawData, off, block, 0, len);
-                        fragBlocks.Add(block);
-                    }
-                }
-                if (fragBlocks.Count > 0)
-                {
-                    var allFrags = fragBlocks.ToArray();
-                    int symCount = Math.Max(1, (int)(allFrags.Length * LtCode.RepairRatio));
-                    var (sym, seed) = LtCode.Encode(allFrags, symCount, bs);
-                    rcFile.RepairB = new Fss61RepairData
-                    {
-                        Seed = seed, BlockCount = allFrags.Length, BlockSize = bs,
-                        Data = FlattenSymbols(sym, bs),
-                    };
-                    indexObj.Fss61RepairB = rcFile.RepairB;
-                }
+                FssRepairService.Append61Trailers(fragments, filePrefix, repairA, repairC);
 
-                var rcBlocks = SplitToBlocks(rcBytes, bs);
-                if (rcBlocks.Length > 0)
-                {
-                    int symCount = Math.Max(1, (int)(rcBlocks.Length * LtCode.RepairRatio));
-                    var (sym, seed) = LtCode.Encode(rcBlocks, symCount, bs);
-                    indexObj.Fss61RepairC = new Fss61RepairData
-                    {
-                        Seed = seed, BlockCount = rcBlocks.Length, BlockSize = bs,
-                        Data = FlattenSymbols(sym, bs),
-                    };
-                }
-
-                if (rcFile.RepairA != null && indexObj.Fss61RepairC != null)
-                {
-                    for (int i = 0; i < fragments.Count; i++)
-                    {
-                        fragments[i] = Fss61RepairTrailer.Build(fragments[i], filePrefix, filePrefix,
-                            rcFile.RepairA, indexObj.Fss61RepairC);
-                    }
-                }
-
-                rcBytes = rcFile.ToCborBytes();
-                serializedIndex = IndexManager.SerializeIndex(indexObj);
+                rcBytes = rcFile61.ToCborBytes();
+                serializedIndex = IndexManager.SerializeIndex(indexObj61);
             }
             catch (Exception ex) { Debug.WriteLine($"FSS6.1 repair generation failed: {ex.Message}"); }
         }
@@ -778,25 +586,4 @@ public class BackupOrchestrator : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private static byte[][] SplitToBlocks(byte[] data, int blockSize)
-    {
-        int count = (data.Length + blockSize - 1) / blockSize;
-        var blocks = new byte[count][];
-        for (int i = 0; i < count; i++)
-        {
-            int off = i * blockSize;
-            int len = Math.Min(blockSize, data.Length - off);
-            blocks[i] = new byte[blockSize];
-            Buffer.BlockCopy(data, off, blocks[i], 0, len);
-        }
-        return blocks;
-    }
-
-    private static byte[] FlattenSymbols(List<byte[]> symbols, int blockSize)
-    {
-        var data = new byte[symbols.Count * blockSize];
-        for (int i = 0; i < symbols.Count; i++)
-            Buffer.BlockCopy(symbols[i], 0, data, i * blockSize, blockSize);
-        return data;
-    }
 }

@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 
-namespace RDRF.Dssa;
+namespace RDRF.Core.Dssa;
 
 public static class PluginLoader
 {

@@ -5,7 +5,7 @@ using RDRF.Core.FragmentEngine;
 using RDRF.Core.Index;
 using RDRF.Core.Versioning;
 
-namespace RDRF.Dssa;
+namespace RDRF.Core.Dssa;
 
 public static class PullService
 {

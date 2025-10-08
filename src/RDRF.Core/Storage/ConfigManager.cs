@@ -1,7 +1,7 @@
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace RDRF.Dssa;
+namespace RDRF.Core.Dssa;
 
 public static class ConfigManager
 {
