@@ -84,7 +84,7 @@ public static class LtCode
                 dest[i] ^= src[i];
         }
     }
-    public static double RepairRatio { get; set; } = 1.0;
+    public static double RepairRatio { get; set; } = 0.7;
 
     private static readonly ConcurrentDictionary<(int K, int symbolCount, int seed), (int[] deg, short[][] idx)> _symCache = new();
 
