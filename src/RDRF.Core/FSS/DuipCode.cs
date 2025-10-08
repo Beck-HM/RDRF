@@ -21,13 +21,13 @@ public static class DuipCode
     // Symbol index cache �?degree and lowEntropyOnly are PRNG-driven (not entropy-driven),
     // so the key (K, faceSize, entropyBits, seed) is fully data-independent.
     // A/B/C/Decode all share the same symbol indices �?K-scan runs once total.
-    private static readonly ConcurrentDictionary<(int K, int faceSize, int entropyBits, int seed),
+    private static readonly ConcurrentDictionary<(int R, int K, int faceSize, int entropyBits, int seed),
         (int[] deg, int[][] idx)> _symCache = new();
 
     private static (int[] deg, int[][] idx) GetOrBuildSymbols(
         int R, int K, int faceSize, int entropyBits, int seed)
     {
-        var key = (K, faceSize, entropyBits, seed);
+        var key = (R, K, faceSize, entropyBits, seed);
         if (_symCache.TryGetValue(key, out var cached))
             return cached;
 

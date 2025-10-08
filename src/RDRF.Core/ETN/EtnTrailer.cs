@@ -34,7 +34,7 @@ public static class EtnTrailer
         int idx8Size = indexCount * Trailer8BHashLen;
         int rc2Size = rcCount * Trailer2BHashLen;
         int rc8Size = rcCount * Trailer8BHashLen;
-        int trailerSize = 4 + 4 + idx2Size + 4 + idx8Size + 4 + rc2Size + 4 + rc8Size + 4;
+        int trailerSize = 4 + 4 + idx2Size + idx8Size + 4 + rc2Size + rc8Size + 4;
         byte[] trailer = new byte[trailerSize];
         int offset = 0;
         Buffer.BlockCopy(BitConverter.GetBytes(rawSize), 0, trailer, offset, 4); offset += 4;

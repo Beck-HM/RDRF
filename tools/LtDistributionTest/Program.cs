@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using RDRF.Core;
 using RDRF.Core.Encryption;
+using RDRF.Core.ETN;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using RDRF.Core.Dssa;
@@ -16,22 +17,34 @@ byte[] originalHash = SHA256.HashData(File.ReadAllBytes(testFile));
 int fragSize = 256 * 1024;
 
 string[] strategies = { "FSS6.1", "FSS6.2" };
+double[] ratios = { 0.5, 1.0, 2.0 };
 
-foreach (string strategy in strategies)
+// Parse -r flag
+for (int ai = 0; ai < args.Length; ai++)
+    if ((args[ai] == "-r" || args[ai] == "--ratio") && ai + 1 < args.Length)
+        ratios = args[++ai].Split(',', StringSplitOptions.TrimEntries)
+            .Select(double.Parse).ToArray();
+
+foreach (double ratio in ratios)
 {
-    string pwd = strategy == "FSS6.1" ? "fss61_test" : "fss62_test";
-    byte[] rcMaster = Encoding.UTF8.GetBytes(pwd);
+    LtCode.RepairRatio = ratio;
+    DuipCode.RepairRatio = ratio;
 
-    string resultDir = Path.Combine(@"F:\RDRF\RDRF.NET\tests\RDRF_TestOutput",
-        $"lt_{strategy.Replace(".", "_")}_{Guid.NewGuid():N}");
-    Directory.CreateDirectory(resultDir);
-    Console.WriteLine($"\nResult dir: {resultDir}");
+    foreach (string strategy in strategies)
+    {
+        string pwd = strategy == "FSS6.1" ? "fss61_test" : "fss62_test";
+        byte[] rcMaster = Encoding.UTF8.GetBytes(pwd);
 
-    // ──── Backup ────
-    var storage = new LocalDssaAdapter(resultDir);
-    string fingerprint;
-    using (var engine = new RDRFEngine(rcMaster, storage))
-        fingerprint = engine.BackupFile(testFile, strategy, fragmentSize: fragSize);
+        string resultDir = Path.Combine(@"F:\RDRF\RDRF.NET\tests\RDRF_TestOutput",
+            $"lt_{strategy.Replace(".", "_")}_r{ratio:F1}_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(resultDir);
+        // Don't print resultDir per test, we'll aggregate
+
+        // ──── Backup ────
+        var storage = new LocalDssaAdapter(resultDir);
+        string fingerprint;
+        using (var engine = new RDRFEngine(rcMaster, storage))
+            fingerprint = engine.BackupFile(testFile, strategy, fragmentSize: fragSize);
 
     byte[] encIndex = storage.ReadIndex(fingerprint);
     var (aesKey, idxCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encIndex, rcMaster);
@@ -67,7 +80,6 @@ foreach (string strategy in strategies)
     int[] blocksPerFrag = new int[totalFrags];
     int totalBlocks = 0;
     int[] fragDataStart = new int[totalFrags];
-    int[] rawDataLen = new int[totalFrags];
 
     for (int i = 0; i < totalFrags; i++)
     {
@@ -76,22 +88,8 @@ foreach (string strategy in strategies)
         byte[] decrypted = EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, hdrSize, aesKey);
         int idxLen = BitConverter.ToInt32(decrypted.AsSpan(0, 4));
 
-        byte[] fulldata = new byte[decrypted.Length - 4 - idxLen];
-        Buffer.BlockCopy(decrypted, 4 + idxLen, fulldata, 0, fulldata.Length);
-
-        int rawLen;
-        if (is62)
-        {
-            var (raw, _, _, _, _) = Fss62RepairTrailer.Parse(fulldata);
-            rawLen = raw.Length;
-        }
-        else
-        {
-            var (raw, _, _, _, _) = Fss61RepairTrailer.Parse(fulldata);
-            rawLen = raw.Length;
-        }
-        rawDataLen[i] = rawLen;
-        blocksPerFrag[i] = (rawLen + blockSize - 1) / blockSize;
+        // Raw data starts after the embedded index; its length is always fragSize(262144)
+        blocksPerFrag[i] = (fragSize + blockSize - 1) / blockSize;
         totalBlocks += blocksPerFrag[i];
         fragDataStart[i] = hdrSize + 12 + 4 + idxLen;
     }
@@ -133,6 +131,7 @@ foreach (string strategy in strategies)
             while (badBlocks.Count < blocksToCorrupt)
                 badBlocks.Add(rng.Next(totalBlocks));
 
+            var fragCorrupt = new Dictionary<int, byte[]>();
             foreach (int bi in badBlocks)
             {
                 int fi = 0;
@@ -140,8 +139,9 @@ foreach (string strategy in strategies)
                 int localBlock = bi - cumBlocks[fi];
                 int fragByteOff = localBlock * blockSize;
 
-                byte[] fragEnc = allFragBytes[fi];
-                byte[] corruptCopy = (byte[])fragEnc.Clone();
+                if (!fragCorrupt.ContainsKey(fi))
+                    fragCorrupt[fi] = (byte[])allFragBytes[fi].Clone();
+                byte[] corruptCopy = fragCorrupt[fi];
                 int fileOff = fragDataStart[fi] + fragByteOff;
 
                 if (fileOff < corruptCopy.Length)
@@ -150,9 +150,9 @@ foreach (string strategy in strategies)
                     int xorOff = rng.Next(maxOff);
                     corruptCopy[fileOff + xorOff] ^= (byte)(1 + rng.Next(254));
                 }
-
-                File.WriteAllBytes(Path.Combine(trialDir, $"{prefix}_{fi}.rdrf"), corruptCopy);
             }
+            foreach (var kv in fragCorrupt)
+                File.WriteAllBytes(Path.Combine(trialDir, $"{prefix}_{kv.Key}.rdrf"), kv.Value);
 
             var trialStorage = new LocalDssaAdapter(trialDir);
             string outPath = Path.Combine(trialDir, "restored.bin");
@@ -179,7 +179,8 @@ foreach (string strategy in strategies)
 
             bool shaOk = recovered && File.Exists(outPath) && VerifySha(outPath, originalHash);
             bool ok = recovered && shaOk;
-            Console.Error.WriteLine($"  [TIME] {cpct}% corrupt: {sw.ElapsedMilliseconds}ms  ok={ok}");
+            long outSize = File.Exists(outPath) ? new FileInfo(outPath).Length : -1;
+            Console.Error.WriteLine($"  [TIME] {cpct}% corrupt: {sw.ElapsedMilliseconds}ms  ok={ok} rcvd={recovered} shaOk={shaOk} outSize={outSize} expected={new FileInfo(testFile).Length}");
 
             csv.Add($"{strategy},{cpct},{blocksToCorrupt},{totalBlocks},{t},{ok},{shaOk},{sw.ElapsedMilliseconds}");
             if (ok && cpct > maxSurvived) maxSurvived = cpct;
@@ -234,8 +235,15 @@ foreach (string strategy in strategies)
     Console.WriteLine($"Legend: 3/3= {trials}/{trials}");
     Console.WriteLine($"Threshold: <={maxSurvived}% OK, >={minFailed}% FAIL");
 
-    try { Directory.Delete(resultDir, true); Console.WriteLine($"Cleaned: {resultDir}"); }
+    // Collect file sizes before cleanup
+    var f0 = new FileInfo(Path.Combine(resultDir, $"{prefix}_0.rdrf"));
+    var idx = new FileInfo(Path.Combine(resultDir, $"{prefix}.indrdrf"));
+    var rc = new FileInfo(Path.Combine(resultDir, $"{prefix}.rdrc"));
+    Console.WriteLine($"Size: frag={f0.Length,10:N0} idx={idx.Length,10:N0} rc={rc.Length,10:N0}");
+
+    try { Directory.Delete(resultDir, true); }
     catch (Exception ex) { Console.Error.WriteLine($"Cleanup failed: {ex.Message}"); }
+}
 }
 Console.WriteLine("\nDone.");
 return 0;

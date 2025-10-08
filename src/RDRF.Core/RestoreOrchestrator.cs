@@ -526,7 +526,8 @@ public class RestoreOrchestrator : IDisposable
                     for (int i = 0; i < cvResult.IndexCorruptedBlocks.Count && i < blocks.Length; i++)
                         isBad[cvResult.IndexCorruptedBlocks[i]] = true;
 
-                    bool ok = FSS.LtCode.Decode(blocks, isBad, ra.BlockCount, ra.Seed,
+                    bool ok = FSS.LtCode.Decode(blocks, isBad,
+                        ra.Data.Length / bs, ra.Seed,
                         ra.Data, blocks.Length, bs);
                     if (ok)
                     {
@@ -581,7 +582,8 @@ public class RestoreOrchestrator : IDisposable
                             }
                         }
 
-                        bool ok = FSS.LtCode.Decode(allBlocks, isBad, rb.BlockCount,
+                        bool ok = FSS.LtCode.Decode(allBlocks, isBad,
+                            rb.Data.Length / bs,
                             rb.Seed, rb.Data, totalBlocks, bs);
                         if (ok)
                         {
@@ -625,7 +627,8 @@ public class RestoreOrchestrator : IDisposable
                     for (int i = 0; i < cvResult.RcCorruptedBlocks.Count && i < blocks.Length; i++)
                         isBad[cvResult.RcCorruptedBlocks[i]] = true;
 
-                    bool ok = FSS.LtCode.Decode(blocks, isBad, rc.BlockCount, rc.Seed,
+                    bool ok = FSS.LtCode.Decode(blocks, isBad,
+                        rc.Data.Length / bs, rc.Seed,
                         rc.Data, blocks.Length, bs);
                     if (ok)
                     {

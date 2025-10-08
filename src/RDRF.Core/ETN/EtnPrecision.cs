@@ -304,7 +304,12 @@ public static class EtnPrecision
     {
         var (raw62, _, _, _, _) = Fss62RepairTrailer.Parse(fragmentData);
         if (raw62.Length < fragmentData.Length)
+        {
+            var (raw61b, _, _, _, _) = Fss61RepairTrailer.Parse(raw62);
+            if (raw61b.Length < raw62.Length)
+                return EtnTrailer.Parse(raw61b);
             return EtnTrailer.Parse(raw62);
+        }
         var (raw61, _, _, _, _) = Fss61RepairTrailer.Parse(fragmentData);
         if (raw61.Length < fragmentData.Length)
             return EtnTrailer.Parse(raw61);
