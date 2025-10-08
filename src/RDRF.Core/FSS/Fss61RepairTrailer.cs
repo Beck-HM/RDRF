@@ -39,7 +39,6 @@ public static class Fss61RepairTrailer
         if (trailerStart < 0)
             return (fileData, "", "", null, null);
 
-        // Minimum trailer: 32+32 + 2*16 + 4 + 4 = 104 bytes
         if (trailerSize < 104)
             return (fileData, "", "", null, null);
 

@@ -181,16 +181,7 @@ public static class EtnBlockMap
     }
 
     public static byte[] HashFromString(string encoded)
-    {
-        // Auto-detect: hex (only 0-9a-f) or base64url
-        for (int i = 0; i < encoded.Length; i++)
-        {
-            char c = encoded[i];
-            if (!(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f'))
-                return Base64ToHash(encoded);
-        }
-        return Convert.FromHexString(encoded);
-    }
+        => Base64ToHash(encoded);
 
     public static string HashToBase64(byte[] hash)
         => Convert.ToBase64String(hash).TrimEnd('=').Replace('+', '-').Replace('/', '_');
