@@ -16,7 +16,7 @@ public static class DuipCode
     public const int DefaultEntropyBits = 8;
     public const int DefaultBlockSize = 256;
 
-    public static double RepairRatio { get; set; } = 0.5;
+    public static double RepairRatio { get; set; } = 0.6;
 
     // Symbol index cache �?degree and lowEntropyOnly are PRNG-driven (not entropy-driven),
     // so the key (K, faceSize, entropyBits, seed) is fully data-independent.
