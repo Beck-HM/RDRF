@@ -32,13 +32,14 @@ public class RestoreOrchestrator : IDisposable
         DssaAdapter storage,
         FSSEngine? fssEngine = null,
         bool preDerived = false,
-        byte[]? recoveryCode = null)
+        byte[]? recoveryCode = null,
+        MetadataManager? metadata = null)
     {
         if (key == null || key.Length == 0)
             throw new ArgumentException("Key cannot be null or empty", nameof(key));
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _fss = fssEngine ?? new FSSEngine();
-        _metadata = MetadataManager.Default;
+        _metadata = metadata ?? new MetadataManager(null, skipLoad: true);
         _recoveryExecutor = new RecoveryExecutor(_fss);
         _preDerived = preDerived;
 

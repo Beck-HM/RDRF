@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using RDRF.Core.Compression;
 using RDRF.Core.Encryption;
 using RDRF.Core.ETN;
@@ -53,7 +53,7 @@ public class EtnEdgeCaseTests
                 byte[] fileBytes = storage.ReadFragment(fname);
                 var (_, data, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fileBytes, aesKey);
                 // Strip ETN trailer from fragment data
-                var (cleanData, _, _, _, _) = Fss6Etn.ParseTrailer(data);
+                var cleanData = Fss6Etn.ParseTrailer(data).RawData;
                 decrypted.Add(cleanData);
             }
 
@@ -110,9 +110,8 @@ public class EtnEdgeCaseTests
         {
             var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
-            // Strip trailer from first fragment
-            var (rawData, _, _, _, _) = Fss6Etn.ParseTrailer(fragments[0]);
-            fragments[0] = rawData; // no trailer
+            var t0 = Fss6Etn.ParseTrailer(fragments[0]);
+            fragments[0] = t0.RawData; // no trailer
 
             var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
             Assert.NotNull(result);
@@ -127,13 +126,13 @@ public class EtnEdgeCaseTests
     [Fact]
     public void EmptyTrailer_DoesNotBreakParse()
     {
-        var (data, _, _, _, _, _, _) = EtnTrailer.Parse(new byte[0]);
-        Assert.Empty(data);
+        var td = EtnTrailer.Parse([]);
+        Assert.Empty(td.RawData);
         _output.WriteLine("PASS: Empty trailer parse returns empty");
 
-        var (data2, _, _, _, _, _, _) = EtnTrailer.Parse(new byte[] { 1, 2, 3 });
-        Assert.Equal(3, data2.Length);
-        _output.WriteLine("PASS: Small data without trailer returns data as>is");
+        var td2 = EtnTrailer.Parse([1, 2, 3]);
+        Assert.Equal(3, td2.RawData.Length);
+        _output.WriteLine("PASS: Small data without trailer returns data as-is");
     }
 
     [Fact]
@@ -145,13 +144,13 @@ public class EtnEdgeCaseTests
         {
             var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
-            var (_, refIdxFlat, refIdxCnt, refRcFlat, refRcCnt) = Fss6Etn.ParseTrailer(fragments[0]);
+            var td0 = Fss6Etn.ParseTrailer(fragments[0]);
             for (int i = 1; i < fragments.Count; i++)
             {
-                var (_, idxFlat, idxCnt, rcFlat, rcCnt) = Fss6Etn.ParseTrailer(fragments[i]);
-                Assert.True(EtnBlockMap.DiffTrimmed(refIdxFlat, refIdxCnt, idxFlat, idxCnt, EtnBlockMap.TrailerHashLen).Count == 0,
+                var tdi = Fss6Etn.ParseTrailer(fragments[i]);
+                Assert.True(EtnBlockMap.DiffTrimmed(td0.Index2B, td0.Index2BCount, tdi.Index2B, tdi.Index2BCount, EtnBlockMap.TrailerHashLen).Count == 0,
                     $"Fragment {i} index BM differs from fragment 0");
-                Assert.True(EtnBlockMap.DiffTrimmed(refRcFlat, refRcCnt, rcFlat, rcCnt, EtnBlockMap.TrailerHashLen).Count == 0,
+                Assert.True(EtnBlockMap.DiffTrimmed(td0.Rc2B, td0.Rc2BCount, tdi.Rc2B, tdi.Rc2BCount, EtnBlockMap.TrailerHashLen).Count == 0,
                     $"Fragment {i} RC BM differs from fragment 0");
             }
             _output.WriteLine($"PASS: All {fragments.Count} fragments have consistent trailers");
@@ -162,3 +161,4 @@ public class EtnEdgeCaseTests
         }
     }
 }
+

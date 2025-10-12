@@ -18,17 +18,17 @@ public class DuipCodeTests
     }
 
     [Fact]
-    public void RepairRatio_Default_0_5()
+    public void RepairRatio_Default_0_6()
     {
-        Assert.Equal(0.5, DuipCode.RepairRatio);
+        Assert.Equal(0.6, DuipCode.RepairRatio);
     }
 
     [Fact]
-    public void Encode_SymbolCount_Ratio0_5()
+    public void Encode_SymbolCount_Ratio0_6()
     {
         var blocks = MakeBlocks(100, 256);
         var (symbols, _, _) = DuipCode.Encode(blocks, 256);
-        Assert.Equal(50, symbols.Count); // 100 * 0.5 = 50
+        Assert.Equal(60, symbols.Count); // 100 * 0.6 = 60
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public class DuipCodeTests
         var blocks = MakeBlocks(1, 64);
         var (symbols, entropy, _) = DuipCode.Encode(blocks, 64, faceSize: 8);
 
-        // R = max(1, 1 * 0.5) = 1
+        // R = max(1, 1 * 0.6) = 1
         Assert.Single(symbols);
         Assert.NotNull(entropy);
     }

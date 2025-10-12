@@ -97,10 +97,11 @@ public class LocalDssaAdapter : DssaAdapter
         await File.WriteAllBytesAsync(Path.Combine(_basePath, filename), data, ct).ConfigureAwait(false);
     }
 
-    public override async Task<bool> FragmentExistsAsync(string filename, CancellationToken ct = default)
+    public override Task<bool> FragmentExistsAsync(string filename, CancellationToken ct = default)
     {
         ValidateFilename(filename);
-        return await Task.Run(() => File.Exists(Path.Combine(_basePath, filename)), ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(File.Exists(Path.Combine(_basePath, filename)));
     }
 
     public override void DeleteFragment(string filename)

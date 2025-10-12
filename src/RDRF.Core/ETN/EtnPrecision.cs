@@ -274,10 +274,6 @@ public static class EtnPrecision
     internal static byte[] StripFss6RcFields(byte[] rcBytes)
     {
         var rc = RcFile.FromCbor(rcBytes);
-        rc.IndexBlockMap = [];
-        rc.Index2B = null;
-        rc.FragmentBlockMaps = [];
-        rc.Fragment2B = null;
         rc.RepairA = null;
         rc.RepairB = null;
         rc.Repair62A = null;

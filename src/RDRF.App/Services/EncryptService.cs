@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using RDRF.Core;
-using RDRF.Core.Encryption;
 using RDRF.Core.Dssa;
 
 namespace RDRF.App.Services;
@@ -8,24 +7,24 @@ namespace RDRF.App.Services;
 public class EncryptService : IDisposable
 {
     private readonly byte[] _rcCode;
+    private readonly DssaAdapter _storage;
     private bool _disposed;
 
-    public EncryptService(byte[] password)
+    public EncryptService(byte[] password, DssaAdapter storage)
     {
         _rcCode = (byte[])password.Clone();
+        _storage = storage;
     }
 
     public string BackupFile(
         string filePath,
-        string outputPath,
         string primaryStrategy,
         List<string>? auxiliary = null,
         int fragmentSize = 0,
         string? customName = null,
         IProgress<RdrfProgressReport>? progress = null)
     {
-        var storage = new LocalDssaAdapter(outputPath);
-        using var engine = new RDRFEngine(_rcCode, storage);
+        using var engine = new RDRFEngine(_rcCode, _storage);
         return engine.BackupFile(
             filePath,
             primaryStrategy,

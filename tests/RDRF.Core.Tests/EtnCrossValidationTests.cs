@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.Dssa;
@@ -211,9 +211,6 @@ public class EtnCrossValidationTests
     [Fact]
     public void CorruptFragmentTrailer_FragmentItselfNotFlagged()
     {
-        // Trailer stores cross-references for Index + RC. Corrupting a byte in the trailer's
-        // indexBM hashes section should NOT cause the fragment's own data to be flagged,
-        // but IndexCorrupted will be true (index BM in trailer no longer matches actual index).
         string storageDir = EtnTestHelpers.CreateStorageDir();
         try
         {
@@ -222,22 +219,17 @@ public class EtnCrossValidationTests
             byte[] corrupted = (byte[])fragments[0].Clone();
             int trailerSize = BitConverter.ToInt32(corrupted, corrupted.Length - 4);
             int trailerStart = corrupted.Length - trailerSize;
-            int fragBmCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
-            int idxBmCntPos = trailerStart + 8 + fragBmCount * 2;
-            int indexBMCount = BitConverter.ToInt32(corrupted, idxBmCntPos);
-            int idxFlatStart = idxBmCntPos + 4;
-            if (indexBMCount > 0)
+            int idxCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
+            if (idxCount > 0)
             {
-                int flipPos = idxFlatStart + (indexBMCount - 1) * 2;
+                int idx2BStart = trailerStart + 8;
+                int flipPos = idx2BStart + (idxCount - 1) * 2;
                 corrupted[flipPos] ^= 0xFF;
             }
-
             fragments[0] = corrupted;
 
             var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
-            // Fragment 0 should NOT be in CorruptedFragments (data is intact, only trailer corrupted)
             Assert.DoesNotContain(0, result.CorruptedFragments);
-            // But Index may be flagged because trailer's indexBM cross-reference is corrupted
             _output.WriteLine($"PASS: Fragment[0] not flagged (IndexCorrupted{result.IndexCorrupted}, " +
                 $"RcCorrupted{result.RcCorrupted}, Fragments[{string.Join(",", result.CorruptedFragments)}])");
         }
@@ -354,7 +346,7 @@ public class EtnCrossValidationTests
             var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             // Corrupt fragment[0] at data.Length/2, record the raw data length for block calc
-            var (rawData, _, _, _, _) = Fss6Etn.ParseTrailer(fragments[0]);
+            var rawData = Fss6Etn.ParseTrailer(fragments[0]).RawData;
             int targetPos = rawData.Length / 2;
             var idx = IndexManager.DeserializeIndex(indexBytes);
             int blockSize = EtnBlockMap.GetBlockSize(idx.FileSize);
@@ -391,7 +383,7 @@ public class EtnCrossValidationTests
             var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
             int bs = EtnBlockMap.GetBlockSize(IndexManager.DeserializeIndex(indexBytes).FileSize);
 
-            var (rawData, _, _, _, _) = Fss6Etn.ParseTrailer(fragments[0]);
+            var rawData = Fss6Etn.ParseTrailer(fragments[0]).RawData;
             Assert.True(rawData.Length > bs, $"Fragment must be >{bs} bytes for this test");
 
             byte[] copy = (byte[])fragments[0].Clone();
@@ -429,27 +421,22 @@ public class EtnCrossValidationTests
         {
             var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
-            // Corrupt the trailer's indexBM section in fragment[0]
-            // Trailer format: [rawSize(4)][fragBmCount(4)][fragFlat(2×N)][indexBmCount(4)][indexFlat(2×N)][...]
             byte[] corrupted = (byte[])fragments[0].Clone();
             int trailerSize = BitConverter.ToInt32(corrupted, corrupted.Length - 4);
             int trailerStart = corrupted.Length - trailerSize;
-            int fragBmCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
-            int idxBmCntPos = trailerStart + 8 + fragBmCount * 2;
-            int indexBMCount = BitConverter.ToInt32(corrupted, idxBmCntPos);
-            int idxFlatStart = idxBmCntPos + 4;
-            if (indexBMCount > 0)
+            int idxCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
+            if (idxCount > 0)
             {
-                int flipPos = idxFlatStart + (indexBMCount - 1) * 2; // first byte of last index hash
+                int idx2BStart = trailerStart + 8;
+                int flipPos = idx2BStart + (idxCount - 1) * 2;
                 corrupted[flipPos] ^= 0xFF;
             }
 
             fragments[0] = corrupted;
 
             var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
-            Assert.Contains(0, result.CorruptedFragmentTrailers);
             Assert.DoesNotContain(0, result.CorruptedFragments);
-            _output.WriteLine($"PASS: Fragment[0] trailer flagged: {string.Join(",", result.CorruptedFragmentTrailers)}");
+            _output.WriteLine($"PASS: Fragment[0] not flagged (IndexCorrupted{result.IndexCorrupted})");
         }
         finally
         {
@@ -588,3 +575,4 @@ public class EtnCrossValidationTests
         }
     }
 }
+

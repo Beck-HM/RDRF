@@ -5,11 +5,7 @@ namespace RDRF.Core.Metadata;
 
 public class MetadataManager
 {
-    private static readonly Lazy<MetadataManager> _default = new(() =>
-        new MetadataManager(null, skipLoad: true));
     private static readonly object _fileLock = new();
-
-    public static MetadataManager Default => _default.Value;
 
     private readonly string _filePath;
     private MetadataStore _store;
@@ -19,7 +15,7 @@ public class MetadataManager
 
     public MetadataManager(string? filePath = null) : this(filePath, skipLoad: false) { }
 
-    private MetadataManager(string? filePath, bool skipLoad)
+    internal MetadataManager(string? filePath, bool skipLoad)
     {
         _filePath = filePath ?? Path.Combine(Directory.GetCurrentDirectory(), "rdrf_metadata.json");
         _store = new MetadataStore();

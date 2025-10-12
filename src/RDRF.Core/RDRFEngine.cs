@@ -119,20 +119,6 @@ public class RDRFEngine : IDisposable
 
     public bool FileExists(string fileFingerprint) => _storage.IndexExists(fileFingerprint);
 
-    // ── Metadata helpers for UI layer ──
-
-    public static RdrfIndex DecryptIndex(byte[] encryptedIndex, byte[] rcCode)
-        => IndexManager.DecryptIndex(encryptedIndex, rcCode);
-
-    public static RdrfIndex DecryptIndexWithKey(byte[] encryptedIndex, byte[] aesKey)
-        => IndexManager.DecryptIndexWithKey(encryptedIndex, aesKey);
-
-    public static (byte[]? embeddedIndex, byte[] fragmentData, byte[]? salt) DecryptFragment(byte[] encryptedFrag, byte[] aesKey)
-        => FragmentFileHeader.DecryptWithEmbeddedIndex(encryptedFrag, aesKey);
-
-    public static RdrfIndex DeserializeIndex(byte[] indexBytes)
-        => IndexManager.DeserializeIndex(indexBytes);
-
     // ── Dispose ──
 
     public void Dispose()
