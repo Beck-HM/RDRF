@@ -13,7 +13,7 @@ public static class VersionedBackup
 {
     public static async Task<string> BackupAsync(
         string filePath,
-        string storageDir,
+        DssaAdapter storage,
         byte[] password,
         string userMessage,
         string fssStrategy = "FSS3",
@@ -23,7 +23,6 @@ public static class VersionedBackup
         IProgress<RdrfProgressReport>? progress = null,
         CancellationToken ct = default)
     {
-        var storage = new LocalDssaAdapter(storageDir);
         string? existingFingerprint = FindExistingIndex(storage);
 
         if (existingFingerprint == null)

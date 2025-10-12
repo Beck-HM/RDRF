@@ -86,7 +86,7 @@ public class NextCommand : Command
             var diffResult = new RDRF.Core.Diff.DiffEngine().ComputeDiff(oldBytes, newBytes, oldIndex.OriginalName);
 
             if (diffResult.IsBinary)
-                AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} ï¿?{newBytes.Length} bytes");
+                AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} ï¿½?{newBytes.Length} bytes");
             else
                 AnsiConsole.MarkupLine($"[yellow]Changes:[/] +{diffResult.AddedLines} -{diffResult.RemovedLines} lines (+{diffResult.AddedBytes} bytes)");
 
@@ -94,7 +94,7 @@ public class NextCommand : Command
             await ProgressReporter.Run($"Incrementing {oldIndex.OriginalName}", async progress =>
             {
                 newFp = await VersionedBackup.BackupAsync(
-                    source.FullName, storagePath, password, msg,
+                    source.FullName, new LocalDssaAdapter(storagePath), password, msg,
                     oldIndex.FssStrategy, progress: progress);
             });
 

@@ -213,9 +213,10 @@ public class HistoryViewModel : ViewModelBase
             {
                 try
                 {
+                    var adapter = new RDRF.Core.Dssa.LocalDssaAdapter(_storagePath!);
                     string fp = VersionedBackup.BackupAsync(
                         _incrementalFilePath!,
-                        _storagePath!,
+                        adapter,
                         _password!,
                         _commitMessage
                     ).GetAwaiter().GetResult();

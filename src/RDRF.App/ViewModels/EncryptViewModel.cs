@@ -8,7 +8,6 @@ using System.Text;
 using System.Windows.Input;
 using RDRF.App.Services;
 using RDRF.Core;
-using RDRF.Core.Dssa;
 
 namespace RDRF.App.ViewModels;
 
@@ -343,7 +342,8 @@ public class EncryptViewModel : ViewModelBase
         {
             try
             {
-                using var service = new EncryptService(password);
+                var adapter = new RDRF.Core.Dssa.LocalDssaAdapter(outputPath);
+                using var service = new EncryptService(password, adapter);
 
                 string primaryStrategy = strategy;
                 List<string>? auxiliary = null;
@@ -356,7 +356,6 @@ public class EncryptViewModel : ViewModelBase
 
                 string fingerprint = service.BackupFile(
                     filePath,
-                    outputPath,
                     primaryStrategy,
                     auxiliary,
                     fragmentSize: fragSize,

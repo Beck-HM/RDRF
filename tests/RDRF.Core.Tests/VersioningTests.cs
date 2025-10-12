@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using RDRF.Core.Diff;
 using RDRF.Core.Dssa;
 using Xunit;
@@ -49,7 +49,7 @@ public class VersioningTests
             File.WriteAllText(testFile, content);
 
             string fp = await Versioning.VersionedBackup.BackupAsync(
-                testFile, storageDir, password, "Initial", "FSS1");
+                testFile, new LocalDssaAdapter(storageDir), password, "Initial", "FSS1");
 
             string indexFile = Path.Combine(storageDir, fp + ".indrdrf");
             Assert.True(File.Exists(indexFile));
@@ -81,13 +81,13 @@ public class VersioningTests
             File.WriteAllText(testFile, v1);
 
             string fp1 = await Versioning.VersionedBackup.BackupAsync(
-                testFile, storageDir, password, "V1", "FSS1");
+                testFile, new LocalDssaAdapter(storageDir), password, "V1", "FSS1");
 
             string v2 = "Line one.\nLine two modified.\nLine three new.\n";
             File.WriteAllText(testFile, v2);
 
             string fp2 = await Versioning.VersionedBackup.BackupAsync(
-                testFile, storageDir, password, "V2: changes", "FSS1");
+                testFile, new LocalDssaAdapter(storageDir), password, "V2: changes", "FSS1");
 
             Assert.NotEqual(fp1, fp2);
 
@@ -159,3 +159,4 @@ public class VersioningTests
         Assert.Equal(0, result.RemovedBytes);
     }
 }
+

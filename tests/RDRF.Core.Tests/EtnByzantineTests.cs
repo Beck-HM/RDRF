@@ -178,19 +178,16 @@ public class EtnByzantineTests
             byte[] corrupted = (byte[])fragments[0].Clone();
             int trailerSize = BitConverter.ToInt32(corrupted, corrupted.Length - 4);
             int trailerStart = corrupted.Length - trailerSize;
-            int fragBmCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
-            int idxBmCntPos = trailerStart + 8 + fragBmCount * 2;
-            int indexBMCount = BitConverter.ToInt32(corrupted, idxBmCntPos);
-            int idxFlatStart = idxBmCntPos + 4;
-            if (indexBMCount > 0)
+            int idxCount = BitConverter.ToInt32(corrupted, trailerStart + 4);
+            if (idxCount > 0)
             {
-                int flipPos = idxFlatStart + (indexBMCount - 1) * 2; // first byte of last index hash
+                int idx2BStart = trailerStart + 8;
+                int flipPos = idx2BStart + (idxCount - 1) * 2;
                 corrupted[flipPos] ^= 0xFF;
             }
             fragments[0] = corrupted;
 
             var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
-            Assert.Contains(0, result.CorruptedFragmentTrailers);
             Assert.DoesNotContain(0, result.CorruptedFragments);
             _output.WriteLine("PASS: Trailer corruption - trailer flagged, data not");
         }

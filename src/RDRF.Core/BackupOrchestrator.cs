@@ -41,14 +41,15 @@ public class BackupOrchestrator : IDisposable
         DssaAdapter storage,
         FSSEngine? fssEngine = null,
         bool preDerived = false,
-        byte[]? recoveryCode = null)
+        byte[]? recoveryCode = null,
+        MetadataManager? metadata = null)
     {
         if (key == null || key.Length == 0)
             throw new ArgumentException("Key cannot be null or empty", nameof(key));
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _fss = fssEngine ?? new FSSEngine();
         _fsa = new FsaEngine();
-        _metadata = MetadataManager.Default;
+        _metadata = metadata ?? new MetadataManager(null, skipLoad: true);
         _preDerived = preDerived;
 
         if (preDerived)
@@ -69,7 +70,8 @@ public class BackupOrchestrator : IDisposable
         byte[] key,
         byte[] salt,
         DssaAdapter storage,
-        FSSEngine? fssEngine = null)
+        FSSEngine? fssEngine = null,
+        MetadataManager? metadata = null)
     {
         _rcCode = key?.Clone() as byte[] ?? throw new ArgumentNullException(nameof(key));
         _salt = salt ?? throw new ArgumentNullException(nameof(salt));
@@ -77,10 +79,11 @@ public class BackupOrchestrator : IDisposable
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _fss = fssEngine ?? new FSSEngine();
         _fsa = new FsaEngine();
-        _metadata = MetadataManager.Default;
+        _metadata = metadata ?? new MetadataManager(null, skipLoad: true);
         _preDerived = false;
     }
 
+    [Obsolete("Use BackupFileAsync instead")]
     public string BackupFile(
         string filePath,
         string fssStrategy = "FSS1",
@@ -94,6 +97,7 @@ public class BackupOrchestrator : IDisposable
         return BackupCoreAsync(filePath, fssStrategy, auxiliaryStrategies, originalFilename, fragmentSize, customName, progress, CancellationToken.None).GetAwaiter().GetResult();
     }
 
+    [Obsolete("Use BackupFileAsync instead")]
     public string BackupFile(
         FileInfo filePath,
         string fssStrategy = "FSS1",
@@ -209,12 +213,13 @@ public class BackupOrchestrator : IDisposable
 
         var fragmentHashes = new string[fragments.Count];
         var nonces = new string[fragments.Count];
-        Parallel.For(0, fragments.Count, i =>
+        await Parallel.ForEachAsync(Enumerable.Range(0, fragments.Count),
+            new ParallelOptions { CancellationToken = cancellationToken }, (i, ct) =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
             fragmentHashes[i] = IntegrityChecker.HashBytes(fragments[i]);
             nonces[i] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(Constants.NonceLength));
-        });
+            return ValueTask.CompletedTask;
+        }).ConfigureAwait(false);
 
         var embeddedIndex = IndexManager.BuildIndex(
             fileFingerprint: fileFingerprint,

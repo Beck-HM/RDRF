@@ -110,7 +110,7 @@ public class BackupCommand : Command
                 string mode = enableNode ? "node" : "versioned";
                 await ProgressReporter.Run($"Backing up {nf.Name}", async prog =>
                 {
-                    fp = await VersionedBackup.BackupAsync(nf.FullName, storagePath, password,
+                    fp = await VersionedBackup.BackupAsync(nf.FullName, new LocalDssaAdapter(storagePath), password,
                         "Initial backup", strategy, fragmentSize, customName, auxiliary, prog);
                 });
                 Console.WriteLine($"Fingerprint: {fp}");
