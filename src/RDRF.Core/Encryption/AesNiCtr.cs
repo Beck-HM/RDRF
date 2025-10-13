@@ -41,6 +41,7 @@ public static class AesNiCtr
         {
             var rk = ExpandKey256(aesKey);
             var counter = BuildCounter(nonce);
+            const int KeyBlockLen = 4096; // 256 AES blocks × 16 bytes
             byte[] buffer = new byte[bufferSize];
 
             while (true)
@@ -48,29 +49,19 @@ public static class AesNiCtr
                 int bytesRead = input.Read(buffer, 0, buffer.Length);
                 if (bytesRead == 0) break;
 
+                Span<byte> keyBlock = stackalloc byte[KeyBlockLen];
                 int offset = 0;
                 while (offset < bytesRead)
                 {
-                    int chunk = Math.Min(16, bytesRead - offset);
-                    if (chunk == 16)
+                    int chunk = Math.Min(KeyBlockLen, bytesRead - offset);
+                    for (int k = 0; k < chunk; k += 16)
                     {
-                        var keyStream = AesEncryptBlock(counter, rk);
-                        ref byte bufRef = ref MemoryMarshal.GetReference(buffer.AsSpan(offset));
-                        var src = Vector128.LoadUnsafe(ref bufRef);
-                        Vector128.Xor(keyStream, src).CopyTo(buffer.AsSpan(offset));
+                        AesEncryptBlock(counter, rk).CopyTo(keyBlock.Slice(k, 16));
                         counter = IncrementCounter(counter);
                     }
-                    else
-                    {
-                        Span<byte> ks = stackalloc byte[16];
-                        AesEncryptBlock(counter, rk).CopyTo(ks);
-                        for (int j = 0; j < chunk; j++)
-                            buffer[offset + j] ^= ks[j];
-                        counter = IncrementCounter(counter);
-                    }
+                    XorSpan(buffer.AsSpan(offset, chunk), keyBlock.Slice(0, chunk));
                     offset += chunk;
                 }
-
                 output.Write(buffer, 0, bytesRead);
             }
         }

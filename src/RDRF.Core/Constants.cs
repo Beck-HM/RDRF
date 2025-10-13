@@ -52,7 +52,7 @@ public static class Constants
     public const string CompressionLz4 = "lz4";
 
     // Parallelism
-    public const int DefaultParallelism = 4;
+    public static readonly int DefaultParallelism = Math.Max(1, Environment.ProcessorCount / 2);
 
     public static readonly HashSet<string> FssLevels = new()
     {
