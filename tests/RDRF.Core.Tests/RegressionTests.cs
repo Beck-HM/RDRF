@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using RDRF.Core;
 using RDRF.Core.Encryption;
@@ -164,7 +164,7 @@ public class RegressionTests
     {
         // Arrange: derive a key, then pass it as pre-derived
         byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
-        byte[] preDerivedKey = EncryptionLayer.DeriveKey(rcCode);
+        byte[] preDerivedKey = EncryptionLayer.DeriveKeyLegacy(rcCode);
         string testContent = "Pre-derived key test data for round-trip verification.";
         string testFile = Path.Combine(Path.GetTempPath(), $"RDRF_preDerived_{Guid.NewGuid():N}.txt");
         string storageDir = Path.Combine(Path.GetTempPath(), $"RDRF_preDerived_storage_{Guid.NewGuid():N}");
@@ -201,7 +201,7 @@ public class RegressionTests
         // Verify that pre-derived backup CANNOT be decrypted with non-pre-derived engine
         // (because the key is used directly vs. being derived from rcCode)
         byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
-        byte[] preDerivedKey = EncryptionLayer.DeriveKey(rcCode);
+        byte[] preDerivedKey = EncryptionLayer.DeriveKeyLegacy(rcCode);
         string testContent = "Cross-derivation mismatch test.";
         string testFile = Path.Combine(Path.GetTempPath(), $"RDRF_cross_{Guid.NewGuid():N}.txt");
         string storageDir = Path.Combine(Path.GetTempPath(), $"RDRF_cross_storage_{Guid.NewGuid():N}");
@@ -428,14 +428,13 @@ public class RegressionTests
     {
         // Simulate an old index without salt field
         byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
-        byte[] aesKey = EncryptionLayer.DeriveKey(rcCode);
+        byte[] aesKey = EncryptionLayer.DeriveKeyLegacy(rcCode);
 
         var index = IndexManager.BuildIndex(
             fileFingerprint: "testfp",
             originalFilename: "oldbackup.txt",
             originalSize: 100,
             fragmentHashes: new List<string> { "h1" },
-            fragmentNonces: new List<string> { "" },
             originalHash: "orig_hash",
             fssStrategy: "FSS1",
             originalFragmentSizes: new List<int> { 100 },
@@ -468,7 +467,7 @@ public class RegressionTests
         byte[] explicitSalt = new byte[32];
         RandomNumberGenerator.Fill(explicitSalt);
 
-        byte[] keyDefault = EncryptionLayer.DeriveKey(rcCode); // fixed salt
+        byte[] keyDefault = EncryptionLayer.DeriveKeyLegacy(rcCode); // fixed salt
         byte[] keyExplicit = EncryptionLayer.DeriveKey(rcCode, explicitSalt);
 
         Assert.NotEqual(keyDefault, keyExplicit);
@@ -489,7 +488,7 @@ public class RegressionTests
         Assert.Equal(key1, key2);
     }
 
-    // ── CBOR round-trip tests ──
+    // 鈹€鈹€ CBOR round-trip tests 鈹€鈹€
 
     [Fact]
     public void RcFile_ToCborBytes_FromCbor_RoundTrip()
@@ -529,7 +528,6 @@ public class RegressionTests
             originalFilename: "secret.doc",
             originalSize: 999_888,
             fragmentHashes: ["h0", "h1", "h2", "h3"],
-            fragmentNonces: ["n0", "n1", "n2", "n3"],
             originalHash: "sha256-original-hash",
             fssStrategy: "FSS6",
             originalFragmentSizes: [250_000, 250_000, 250_000, 249_888],
@@ -582,7 +580,6 @@ public class RegressionTests
             Assert.Equal(original.Fragments[i].Index, restored.Fragments[i].Index);
             Assert.Equal(original.Fragments[i].Size, restored.Fragments[i].Size);
             Assert.Equal(original.Fragments[i].Hash, restored.Fragments[i].Hash);
-            Assert.Equal(original.Fragments[i].Nonce, restored.Fragments[i].Nonce);
             Assert.Equal(original.Fragments[i].Filename, restored.Fragments[i].Filename);
         }
 
@@ -591,3 +588,5 @@ public class RegressionTests
         Assert.True(restored.FssParams.ContainsKey("plan"));
     }
 }
+
+

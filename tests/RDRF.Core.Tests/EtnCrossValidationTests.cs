@@ -534,7 +534,7 @@ public class EtnCrossValidationTests
         {
             var (indexBytes, fragments, rcBytes, fingerprint, rcCode) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
-            byte[] aesKey = EncryptionLayer.DeriveKey(rcCode);
+            byte[] aesKey = EncryptionLayer.DeriveKeyLegacy(rcCode);
             var storage = new LocalDssaAdapter(storageDir);
             byte[] encryptedRc = storage.ReadRc(fingerprint);
 
@@ -575,4 +575,6 @@ public class EtnCrossValidationTests
         }
     }
 }
+
+
 

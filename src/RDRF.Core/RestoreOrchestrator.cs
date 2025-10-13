@@ -51,7 +51,7 @@ public class RestoreOrchestrator : IDisposable
         else
         {
             _rcCode = key?.Clone() as byte[] ?? throw new ArgumentNullException(nameof(key));
-            _aesKey = EncryptionLayer.DeriveKey(key);
+            _aesKey = EncryptionLayer.DeriveKeyLegacy(key);
         }
     }
 

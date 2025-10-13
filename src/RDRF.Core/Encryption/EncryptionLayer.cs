@@ -1,31 +1,23 @@
 using RDRF.Core.Dssa;
 using System.Buffers;
-using System.Collections.Concurrent;
 using System.Formats.Cbor;
 using System.Security.Cryptography;
-using System.Text;
 
 namespace RDRF.Core.Encryption;
 
 public static class EncryptionLayer
 {
-    private static readonly ConcurrentDictionary<string, byte[]> _keyCache = new();
-    public static readonly byte[] PasswordSalt = Encoding.UTF8.GetBytes("RDRF.NET-PBKDF2-SALT-v1");
-
     private const int Pbkdf2Iterations = 600_000;
     private const int MinNewFormatSize = Constants.SaltPrefixLength + Constants.NonceLength + 1;
 
-    public static byte[] DeriveKey(byte[] rcCode, byte[]? salt = null)
+    public static byte[] DeriveKey(byte[] rcCode, byte[] salt)
     {
-        if (salt == null)
-            return SHA256.HashData(rcCode);
-        string cacheKey = Convert.ToHexString(rcCode) + Convert.ToHexString(salt);
-        return (byte[])_keyCache.GetOrAdd(cacheKey, _ =>
-        {
-            using var pbkdf2 = new Rfc2898DeriveBytes(rcCode, salt, Pbkdf2Iterations, HashAlgorithmName.SHA256);
-            return pbkdf2.GetBytes(32);
-        }).Clone();
+        using var pbkdf2 = new Rfc2898DeriveBytes(rcCode, salt, Pbkdf2Iterations, HashAlgorithmName.SHA256);
+        return pbkdf2.GetBytes(32);
     }
+
+    public static byte[] DeriveKeyLegacy(byte[] rcCode)
+        => SHA256.HashData(rcCode);
 
     public static byte[] GenerateRcCode(int length = 64)
         => RandomNumberGenerator.GetBytes(length);
@@ -66,7 +58,7 @@ public static class EncryptionLayer
     }
 
     private static byte[] CtrCrypt(byte[] data, byte[] rcCode, byte[] nonce)
-        => CtrCryptWithKey(data, DeriveKey(rcCode), nonce);
+        => CtrCryptWithKey(data, DeriveKeyLegacy(rcCode), nonce);
 
     public static void CtrTransformStream(Stream input, Stream output, byte[] aesKey, byte[] nonce)
     {
@@ -89,7 +81,7 @@ public static class EncryptionLayer
     }
 
     public static byte[] EncryptFragmentCtr(byte[] plaintext, byte[] rcCode)
-        => EncryptFragmentCtrWithKey(plaintext, DeriveKey(rcCode));
+        => EncryptFragmentCtrWithKey(plaintext, DeriveKeyLegacy(rcCode));
 
     public static byte[] DecryptFragmentCtrWithKey(byte[] encryptedData, byte[] aesKey)
         => DecryptFragmentCtrWithKey(encryptedData, 0, aesKey);
@@ -110,7 +102,7 @@ public static class EncryptionLayer
     }
 
     public static byte[] DecryptFragmentCtr(byte[] encryptedData, byte[] rcCode)
-        => DecryptFragmentCtrWithKey(encryptedData, DeriveKey(rcCode));
+        => DecryptFragmentCtrWithKey(encryptedData, DeriveKeyLegacy(rcCode));
 
     /// <summary>
     /// Decrypt a fragment (with optional 0xFF01 header) and strip the embedded index.
@@ -154,8 +146,8 @@ public static class EncryptionLayer
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(ciphertext);
-            ArrayPool<byte>.Shared.Return(output);
+            ArrayPool<byte>.Shared.Return(ciphertext, clearArray: true);
+            ArrayPool<byte>.Shared.Return(output, clearArray: true);
         }
     }
 
@@ -163,13 +155,13 @@ public static class EncryptionLayer
         => EncryptFragmentWithKey(indexData, aesKey);
 
     public static byte[] EncryptIndex(byte[] indexData, byte[] rcCode)
-        => EncryptIndexWithKey(indexData, DeriveKey(rcCode));
+        => EncryptIndexWithKey(indexData, DeriveKeyLegacy(rcCode));
 
     public static byte[] DecryptIndexWithKey(byte[] encryptedIndex, byte[] aesKey)
         => DecryptFragmentWithKey(encryptedIndex, aesKey);
 
     public static byte[] DecryptIndex(byte[] encryptedIndex, byte[] rcCode)
-        => DecryptIndexWithKey(encryptedIndex, DeriveKey(rcCode));
+        => DecryptIndexWithKey(encryptedIndex, DeriveKeyLegacy(rcCode));
 
     // ── Salt-prefixed index format (new) ──
 
@@ -218,7 +210,7 @@ public static class EncryptionLayer
                 return (aesKey, cbor);
         }
 
-        byte[] legacyKey = DeriveKey(password);
+        byte[] legacyKey = DeriveKeyLegacy(password);
         byte[] legacyCbor = DecryptIndexWithKey(data, legacyKey);
         if (IsValidCbor(legacyCbor))
             return (legacyKey, legacyCbor);

@@ -13,7 +13,6 @@ public static class IndexManager
         string originalFilename,
         long originalSize,
         List<string> fragmentHashes,
-        List<string> fragmentNonces,
         string originalHash,
         string fssStrategy,
         List<int>? originalFragmentSizes = null,
@@ -43,7 +42,6 @@ public static class IndexManager
             {
                 Index = i,
                 Hash = fragmentHashes[i],
-                Nonce = fragmentNonces[i],
             });
         }
         index.Fragments = fragments;
@@ -142,7 +140,7 @@ public static class IndexManager
     }
 
     public static byte[] EncryptIndex(RdrfIndex index, byte[] rcCode)
-        => EncryptIndexWithKey(index, EncryptionLayer.DeriveKey(rcCode));
+        => EncryptIndexWithKey(index, EncryptionLayer.DeriveKeyLegacy(rcCode));
 
     public static RdrfIndex DecryptIndexWithKey(byte[] encryptedIndex, byte[] aesKey)
     {
@@ -151,7 +149,7 @@ public static class IndexManager
     }
 
     public static RdrfIndex DecryptIndex(byte[] encryptedIndex, byte[] rcCode)
-        => DecryptIndexWithKey(encryptedIndex, EncryptionLayer.DeriveKey(rcCode));
+        => DecryptIndexWithKey(encryptedIndex, EncryptionLayer.DeriveKeyLegacy(rcCode));
 
     public static FragmentInfo? GetFragmentInfo(RdrfIndex index, int fragmentIndex)
         => index.Fragments?.FirstOrDefault(f => f.Index == fragmentIndex);
@@ -253,7 +251,7 @@ public static class IndexManager
             w.WriteTextString("index");    w.WriteInt32(f.Index);
             w.WriteTextString("size");     w.WriteInt32(f.Size);
             w.WriteTextString("hash");     w.WriteTextString(f.Hash);
-            w.WriteTextString("nonce");    w.WriteTextString(f.Nonce);
+
             if (f.Filename != null) { w.WriteTextString("filename"); w.WriteTextString(f.Filename); }
             if (f.SourceVersion != null) { w.WriteTextString("source_version"); w.WriteTextString(f.SourceVersion); }
             w.WriteEndMap();
@@ -383,7 +381,7 @@ public static class IndexManager
                     case "index":    f.Index = r.ReadInt32(); break;
                     case "size":     f.Size = r.ReadInt32(); break;
                     case "hash":     f.Hash = r.ReadTextString(); break;
-                    case "nonce":    f.Nonce = r.ReadTextString(); break;
+                    case "nonce":    r.SkipValue(); break;
                     case "filename": f.Filename = r.ReadTextString(); break;
                     case "source_version": f.SourceVersion = r.ReadTextString(); break;
                     default:         r.SkipValue(); break;
@@ -597,9 +595,6 @@ public class FragmentInfo
     public int Index { get; set; }
     public int Size { get; set; }
     public string Hash { get; set; } = string.Empty;
-
-    [Obsolete("Nonce is stored in the index for backward compatibility but never read during restore.")]
-    public string Nonce { get; set; } = string.Empty;
     public string? Filename { get; set; }
     public string? SourceVersion { get; set; }
 }

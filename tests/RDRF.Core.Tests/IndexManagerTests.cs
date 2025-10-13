@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using Xunit;
@@ -10,13 +10,11 @@ public class IndexManagerTests
     private static RdrfIndex MakeIndex()
     {
         var hashes = new List<string> { "hash0", "hash1", "hash2" };
-        var nonces = new List<string> { "nonce0", "nonce1", "nonce2" };
         return IndexManager.BuildIndex(
             fileFingerprint: "fp123",
             originalFilename: "test.bin",
             originalSize: 1000,
             fragmentHashes: hashes,
-            fragmentNonces: nonces,
             originalHash: "orig_hash_abc",
             fssStrategy: "FSS1",
             originalFragmentSizes: new List<int> { 500, 500, 200 },
@@ -168,3 +166,4 @@ public class IndexManagerTests
         Assert.Null(info);
     }
 }
+

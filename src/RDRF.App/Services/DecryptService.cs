@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Index;
@@ -43,7 +43,7 @@ public class DecryptService : IDisposable
         if (password == null || password.Length == 0)
             throw new ArgumentException("Password is required", nameof(password));
         _rcCode = (byte[])password.Clone();
-        _aesKey = EncryptionLayer.DeriveKey(_rcCode);
+        _aesKey = EncryptionLayer.DeriveKeyLegacy(_rcCode);
     }
 
     public BackupLoadResult LoadFromIndex(string storagePath, string indexPath)
@@ -196,3 +196,5 @@ public class DecryptService : IDisposable
         GC.SuppressFinalize(this);
     }
 }
+
+

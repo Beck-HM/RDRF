@@ -52,63 +52,62 @@ public class LocalDssaAdapter : DssaAdapter
         Directory.CreateDirectory(_basePath);
     }
 
-    private static void ValidateFilename(string filename)
+    private static string ResolvePath(string basePath, string filename)
     {
         if (string.IsNullOrEmpty(filename))
             throw new ArgumentException("Filename must not be null or empty.", nameof(filename));
-        if (filename.Contains(".."))
-            throw new ArgumentException("Filename must not contain '..' (path traversal).", nameof(filename));
         if (filename.Contains('/') || filename.Contains('\\'))
             throw new ArgumentException("Filename must not contain directory separators.", nameof(filename));
         if (filename.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
             throw new ArgumentException("Filename contains invalid characters.", nameof(filename));
+
+        string full = Path.GetFullPath(Path.Combine(basePath, filename));
+        string baseFull = Path.GetFullPath(basePath) + Path.DirectorySeparatorChar;
+        if (!full.StartsWith(baseFull, StringComparison.Ordinal))
+            throw new ArgumentException("Path traversal detected.", nameof(filename));
+        return full;
     }
 
     public override byte[] ReadFragment(string filename)
     {
-        ValidateFilename(filename);
-        return File.ReadAllBytes(Path.Combine(_basePath, filename));
+        return File.ReadAllBytes(ResolvePath(_basePath, filename));
     }
 
     public override void WriteFragment(string filename, byte[] data)
     {
-        ValidateFilename(filename);
-        string path = Path.Combine(_basePath, filename);
-        string tmp = path + ".tmp";
-        File.WriteAllBytes(tmp, data);
-        File.Move(tmp, path, overwrite: true);
+        string path = ResolvePath(_basePath, filename);
+        string tmp = Path.Combine(_basePath, Path.GetRandomFileName());
+        try
+        {
+            File.WriteAllBytes(tmp, data);
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch
+        {
+            try { File.Delete(tmp); } catch { }
+            throw;
+        }
     }
 
     public override bool FragmentExists(string filename)
-    {
-        ValidateFilename(filename);
-        return File.Exists(Path.Combine(_basePath, filename));
-    }
+        => File.Exists(ResolvePath(_basePath, filename));
 
     public override async Task<byte[]> ReadFragmentAsync(string filename, CancellationToken ct = default)
-    {
-        ValidateFilename(filename);
-        return await File.ReadAllBytesAsync(Path.Combine(_basePath, filename), ct).ConfigureAwait(false);
-    }
+        => await File.ReadAllBytesAsync(ResolvePath(_basePath, filename), ct).ConfigureAwait(false);
 
     public override async Task WriteFragmentAsync(string filename, byte[] data, CancellationToken ct = default)
-    {
-        ValidateFilename(filename);
-        await File.WriteAllBytesAsync(Path.Combine(_basePath, filename), data, ct).ConfigureAwait(false);
-    }
+        => await File.WriteAllBytesAsync(ResolvePath(_basePath, filename), data, ct).ConfigureAwait(false);
 
     public override Task<bool> FragmentExistsAsync(string filename, CancellationToken ct = default)
     {
-        ValidateFilename(filename);
         ct.ThrowIfCancellationRequested();
-        return Task.FromResult(File.Exists(Path.Combine(_basePath, filename)));
+        return Task.FromResult(File.Exists(ResolvePath(_basePath, filename)));
     }
 
     public override void DeleteFragment(string filename)
     {
-        ValidateFilename(filename);
-        string path = Path.Combine(_basePath, filename);
-        if (File.Exists(path)) File.Delete(path);
+        string full = ResolvePath(_basePath, filename);
+        if (File.Exists(full)) File.Delete(full);
     }
 
     public override List<string> ListFragments()
@@ -122,87 +121,44 @@ public class LocalDssaAdapter : DssaAdapter
     }
 
     public override byte[] ReadIndex(string fileFingerprint)
-    {
-        string filename = fileFingerprint + Constants.IndexFileSuffix;
-        ValidateFilename(filename);
-        return File.ReadAllBytes(Path.Combine(_basePath, filename));
-    }
+        => File.ReadAllBytes(ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix));
 
     public override void WriteIndex(string fileFingerprint, byte[] data)
-    {
-        string filename = fileFingerprint + Constants.IndexFileSuffix;
-        ValidateFilename(filename);
-        File.WriteAllBytes(Path.Combine(_basePath, filename), data);
-    }
+        => File.WriteAllBytes(ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix), data);
 
     public override bool IndexExists(string fileFingerprint)
-    {
-        string filename = fileFingerprint + Constants.IndexFileSuffix;
-        ValidateFilename(filename);
-        return File.Exists(Path.Combine(_basePath, filename));
-    }
+        => File.Exists(ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix));
 
     public override async Task<byte[]> ReadIndexAsync(string fileFingerprint, CancellationToken ct = default)
-    {
-        string filename = fileFingerprint + Constants.IndexFileSuffix;
-        ValidateFilename(filename);
-        string path = Path.Combine(_basePath, filename);
-        return await File.ReadAllBytesAsync(path, ct).ConfigureAwait(false);
-    }
+        => await File.ReadAllBytesAsync(ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix), ct).ConfigureAwait(false);
 
     public override async Task WriteIndexAsync(string fileFingerprint, byte[] data, CancellationToken ct = default)
-    {
-        string filename = fileFingerprint + Constants.IndexFileSuffix;
-        ValidateFilename(filename);
-        string path = Path.Combine(_basePath, filename);
-        await File.WriteAllBytesAsync(path, data, ct).ConfigureAwait(false);
-    }
+        => await File.WriteAllBytesAsync(ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix), data, ct).ConfigureAwait(false);
 
     public override Task<bool> IndexExistsAsync(string fileFingerprint, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        string filename = fileFingerprint + Constants.IndexFileSuffix;
-        ValidateFilename(filename);
-        string path = Path.Combine(_basePath, filename);
-        return Task.FromResult(File.Exists(path));
+        return Task.FromResult(File.Exists(ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix)));
     }
 
     // ── RC (cross-validation) file methods ──
 
     public override byte[] ReadRc(string fileFingerprint)
-    {
-        string filename = fileFingerprint + Constants.RcFileSuffix;
-        ValidateFilename(filename);
-        return File.ReadAllBytes(Path.Combine(_basePath, filename));
-    }
+        => File.ReadAllBytes(ResolvePath(_basePath, fileFingerprint + Constants.RcFileSuffix));
 
     public override void WriteRc(string fileFingerprint, byte[] data)
-    {
-        string filename = fileFingerprint + Constants.RcFileSuffix;
-        ValidateFilename(filename);
-        File.WriteAllBytes(Path.Combine(_basePath, filename), data);
-    }
+        => File.WriteAllBytes(ResolvePath(_basePath, fileFingerprint + Constants.RcFileSuffix), data);
 
     public override bool RcExists(string fileFingerprint)
-    {
-        string filename = fileFingerprint + Constants.RcFileSuffix;
-        ValidateFilename(filename);
-        return File.Exists(Path.Combine(_basePath, filename));
-    }
+        => File.Exists(ResolvePath(_basePath, fileFingerprint + Constants.RcFileSuffix));
 
     // ── Stream-based overrides ──
 
     public override Stream OpenReadFragment(string filename)
-    {
-        ValidateFilename(filename);
-        return File.OpenRead(Path.Combine(_basePath, filename));
-    }
+        => File.OpenRead(ResolvePath(_basePath, filename));
 
     public override Stream OpenWriteFragment(string filename)
-    {
-        ValidateFilename(filename);
-        return File.OpenWrite(Path.Combine(_basePath, filename));
-    }
+        => File.OpenWrite(ResolvePath(_basePath, filename));
 
     public string GetBasePath() => _basePath;
 }
