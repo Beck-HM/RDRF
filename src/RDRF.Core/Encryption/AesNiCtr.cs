@@ -21,6 +21,8 @@ public static class AesNiCtr
 
     internal static void CtrCrypt(ReadOnlySpan<byte> src, Span<byte> dst, byte[] aesKey, byte[] nonce)
     {
+        if (src.Length > 68_719_476_736) // 64 GiB = max safe CTR before counter wraps
+            throw new ArgumentOutOfRangeException(nameof(src), "Data exceeds 64 GiB CTR safety limit.");
         var counter = BuildCounter(nonce);
         if (Aes.IsSupported)
         {
@@ -119,8 +121,8 @@ public static class AesNiCtr
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(counters);
-                ArrayPool<byte>.Shared.Return(keystream);
+                ArrayPool<byte>.Shared.Return(counters, clearArray: true);
+                ArrayPool<byte>.Shared.Return(keystream, clearArray: true);
             }
 
             output.Write(buffer, 0, bytesRead);
@@ -355,8 +357,8 @@ public static class AesNiCtr
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(counters);
-            ArrayPool<byte>.Shared.Return(keystream);
+            ArrayPool<byte>.Shared.Return(counters, clearArray: true);
+            ArrayPool<byte>.Shared.Return(keystream, clearArray: true);
         }
     }
 }

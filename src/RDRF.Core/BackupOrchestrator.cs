@@ -212,12 +212,10 @@ public class BackupOrchestrator : IDisposable
         string filePrefix = customName ?? fileFingerprint;
 
         var fragmentHashes = new string[fragments.Count];
-        var nonces = new string[fragments.Count];
         await Parallel.ForEachAsync(Enumerable.Range(0, fragments.Count),
             new ParallelOptions { CancellationToken = cancellationToken }, (i, ct) =>
         {
             fragmentHashes[i] = IntegrityChecker.HashBytes(fragments[i]);
-            nonces[i] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(Constants.NonceLength));
             return ValueTask.CompletedTask;
         }).ConfigureAwait(false);
 
@@ -226,7 +224,6 @@ public class BackupOrchestrator : IDisposable
             originalFilename: filename,
             originalSize: fileSize,
             fragmentHashes: fragmentHashes.ToList(),
-            fragmentNonces: nonces.ToList(),
             originalHash: originalHash,
             fssStrategy: plan.EffectivePrimary,
             originalFragmentSizes: originalFragmentSizes,
@@ -434,9 +431,6 @@ public class BackupOrchestrator : IDisposable
             originalFilename: originalFilename,
             originalSize: fileSize,
             fragmentHashes: fragmentHashes,
-            fragmentNonces: Enumerable.Range(0, fragments.Count)
-                .Select(_ => Convert.ToBase64String(RandomNumberGenerator.GetBytes(Constants.NonceLength)))
-                .ToList(),
             originalHash: originalHash,
             fssStrategy: plan.EffectivePrimary,
             originalFragmentSizes: originalFragmentSizes,

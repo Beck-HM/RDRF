@@ -18,7 +18,7 @@ public class EncryptionTests
     public void DeriveKey_ShouldReturn32Bytes()
     {
         byte[] rc = EncryptionLayer.GenerateRcCode(64);
-        byte[] key = EncryptionLayer.DeriveKey(rc);
+        byte[] key = EncryptionLayer.DeriveKeyLegacy(rc);
         Assert.Equal(32, key.Length);
     }
 
@@ -103,3 +103,5 @@ public class EncryptionTests
         Assert.Equal(plaintext, result);
     }
 }
+
+

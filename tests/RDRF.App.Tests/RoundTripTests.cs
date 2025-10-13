@@ -76,7 +76,7 @@ public class RoundTripTests
     {
         using var dir = new Fixtures.TempDir();
         byte[] password = RandomNumberGenerator.GetBytes(32);
-        byte[] aesKey = EncryptionLayer.DeriveKey(password);
+        byte[] aesKey = EncryptionLayer.DeriveKeyLegacy(password);
         var storage = new LocalDssaAdapter(dir.Path);
 
         using var engine = new RDRFEngine(aesKey, storage, preDerived: true, recoveryCode: password);

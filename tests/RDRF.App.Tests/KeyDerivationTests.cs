@@ -22,7 +22,7 @@ public class KeyDerivationTests
     public void DeriveKey_WithoutSalt_ReturnsSha256()
     {
         var password = RandomNumberGenerator.GetBytes(32);
-        var legacy = EncryptionLayer.DeriveKey(password);
+        var legacy = EncryptionLayer.DeriveKeyLegacy(password);
         byte[] expected = System.Security.Cryptography.SHA256.HashData(password);
         Assert.Equal(expected, legacy);
     }
