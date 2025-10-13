@@ -365,17 +365,18 @@ public class RestoreOrchestrator : IDisposable
         var result = new ConcurrentDictionary<int, byte[]>();
         int decryptErrors = 0;
 
-        // Pre-read all unique SourceVersion index files for salt (avoids sequential per-fragment reads)
-        var sourceSalts = new Dictionary<string, byte[]>();
+        // Pre-read all unique SourceVersion index files for salt + derive keys once per version
+        var sourceKeys = new Dictionary<string, byte[]>();
         if (index?.Fragments != null)
         {
             for (int i = 0; i < fragmentCount && i < index.Fragments.Count; i++)
             {
                 string? sv = index.Fragments[i].SourceVersion;
-                if (sv != null && !sourceSalts.ContainsKey(sv))
+                if (sv != null && !sourceKeys.ContainsKey(sv))
                 {
                     byte[] srcIdx = await _storage.ReadIndexAsync(sv, ct).ConfigureAwait(false);
-                    sourceSalts[sv] = srcIdx.AsSpan(0, Constants.SaltPrefixLength).ToArray();
+                    byte[] salt = srcIdx.AsSpan(0, Constants.SaltPrefixLength).ToArray();
+                    sourceKeys[sv] = EncryptionLayer.DeriveKey(_rcCode, salt);
                 }
             }
         }
@@ -392,22 +393,12 @@ public class RestoreOrchestrator : IDisposable
                     string sourcePrefix = filePrefix;
                     byte[] key = _aesKey;
 
-                    if (sourceSalts.TryGetValue(sourceFp, out var cachedSalt))
-                    {
-                        key = EncryptionLayer.DeriveKey(_rcCode, cachedSalt);
-                    }
-                    else if (index?.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
+                    if (index?.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
                     {
                         sourceFp = index.Fragments[i].SourceVersion;
                         sourcePrefix = sourceFp;
-                        if (!sourceSalts.TryGetValue(sourceFp, out cachedSalt))
-                        {
-                            byte[] srcIdx = await _storage.ReadIndexAsync(sourceFp, ct2)
-                                .ConfigureAwait(false);
-                            cachedSalt = srcIdx.AsSpan(0, Constants.SaltPrefixLength).ToArray();
-                            sourceSalts[sourceFp] = cachedSalt;
-                        }
-                        key = EncryptionLayer.DeriveKey(_rcCode, cachedSalt);
+                        if (sourceKeys.TryGetValue(sourceFp, out var cachedKey))
+                            key = cachedKey;
                     }
 
                     string fname = Frags.FragmentFilename(sourcePrefix, i);

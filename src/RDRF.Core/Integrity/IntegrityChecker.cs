@@ -33,9 +33,16 @@ public static class IntegrityChecker
     {
         if (string.IsNullOrEmpty(actualHash) || string.IsNullOrEmpty(expectedHash)) return false;
         if (actualHash.Length != expectedHash.Length) return false;
-        byte[] actualBytes = ConvertHexToBytes(actualHash);
-        byte[] expectedBytes = ConvertHexToBytes(expectedHash);
-        return CryptographicOperations.FixedTimeEquals(actualBytes, expectedBytes);
+        return HexSpanEquals(actualHash.AsSpan(), expectedHash.AsSpan());
+    }
+
+    private static bool HexSpanEquals(ReadOnlySpan<char> a, ReadOnlySpan<char> b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+            if (char.ToLowerInvariant(a[i]) != char.ToLowerInvariant(b[i]))
+                return false;
+        return true;
     }
 
     public static bool VerifyFragment(byte[] fragmentData, string expectedHash)
