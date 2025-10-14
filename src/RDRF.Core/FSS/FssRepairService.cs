@@ -1,3 +1,4 @@
+using System.Buffers;
 using RDRF.Core.Dssa;
 using RDRF.Core.ETN;
 using RDRF.Core.Index;
@@ -315,95 +316,57 @@ internal static class RepairRunner
     private static bool RebuildFragments61(Dictionary<int, byte[]> fragments,
         Fss61RepairData rb, CrossValidationResult cvResult)
     {
-        int bs = rb.BlockSize;
-        var sorted = fragments.OrderBy(k => k.Key).ToList();
-        int totalBlocks = 0;
-        var rawLengths = new List<int>();
-        foreach (var kvp in sorted)
-        {
-            var (rawData, _, _, _, _) = Fss61RepairTrailer.Parse(kvp.Value);
-            rawLengths.Add(rawData.Length);
-            totalBlocks += (rawData.Length + bs - 1) / bs;
-        }
-        if (totalBlocks != rb.BlockCount) return false;
-
-        var allBlocks = new byte[totalBlocks][];
-        var isBad = new bool[totalBlocks];
-        int gIdx = 0;
-        for (int fi = 0; fi < sorted.Count; fi++)
-        {
-            var (rawData, _, _, _, _) = Fss61RepairTrailer.Parse(sorted[fi].Value);
-            cvResult.CorruptedFragmentBlocks.TryGetValue(fi, out var badBlocks);
-            for (int off = 0; off < rawData.Length; off += bs)
-            {
-                int len = Math.Min(bs, rawData.Length - off);
-                allBlocks[gIdx] = new byte[bs];
-                Buffer.BlockCopy(rawData, off, allBlocks[gIdx], 0, len);
-                if (badBlocks != null && badBlocks.Contains(off / bs))
-                    isBad[gIdx] = true;
-                gIdx++;
-            }
-        }
-
-        bool ok = LtCode.Decode(allBlocks, isBad, rb.Data.Length / bs,
-            rb.Seed, rb.Data, totalBlocks, bs);
-        if (!ok) return false;
-
-        gIdx = 0;
-        for (int fi = 0; fi < sorted.Count; fi++)
-        {
-            byte[] frag = sorted[fi].Value;
-            int rawLen = rawLengths[fi];
-            cvResult.CorruptedFragmentBlocks.TryGetValue(fi, out var badBlocks);
-            for (int off = 0; off < rawLen; off += bs)
-            {
-                int localIdx = off / bs;
-                if (badBlocks != null && badBlocks.Contains(localIdx))
-                {
-                    int len = Math.Min(bs, rawLen - off);
-                    Buffer.BlockCopy(allBlocks[gIdx], 0, frag, off, len);
-                }
-                gIdx++;
-            }
-        }
-        return true;
+        return RebuildCore(fragments, rb.BlockSize, rb.BlockCount, cvResult,
+            (kv) => Fss61RepairTrailer.Parse(kv).Item1,
+            (blocks, isBad, total) => LtCode.Decode(blocks, isBad,
+                rb.Data.Length / rb.BlockSize, rb.Seed, rb.Data, total, rb.BlockSize));
     }
 
     private static bool RebuildFragments62(Dictionary<int, byte[]> fragments,
         Fss62RepairData rb, CrossValidationResult cvResult)
     {
-        int bs = rb.BlockSize;
+        return RebuildCore(fragments, rb.BlockSize, rb.BlockCount, cvResult,
+            (kv) => Fss62RepairTrailer.Parse(kv).Item1,
+            (blocks, isBad, total) => DuipCode.Decode(blocks, isBad,
+                rb.Data, rb.EntropySamples, total, rb.BlockSize,
+                DuipCode.DefaultFaceSize, DuipCode.DefaultEntropyBits) > 0);
+    }
+
+    private static bool RebuildCore(Dictionary<int, byte[]> fragments,
+        int blockSize, int blockCount, CrossValidationResult cvResult,
+        Func<byte[], byte[]> parseRaw,
+        Func<byte[][], bool[], int, bool> decode)
+    {
         var sorted = fragments.OrderBy(k => k.Key).ToList();
         int totalBlocks = 0;
         var rawLengths = new List<int>();
         foreach (var kvp in sorted)
         {
-            var (rawData, _, _, _, _) = Fss62RepairTrailer.Parse(kvp.Value);
+            var rawData = parseRaw(kvp.Value);
             rawLengths.Add(rawData.Length);
-            totalBlocks += (rawData.Length + bs - 1) / bs;
+            totalBlocks += (rawData.Length + blockSize - 1) / blockSize;
         }
+        if (totalBlocks != blockCount) return false;
 
         var allBlocks = new byte[totalBlocks][];
         var isBad = new bool[totalBlocks];
         int gIdx = 0;
         for (int fi = 0; fi < sorted.Count; fi++)
         {
-            var (rawData, _, _, _, _) = Fss62RepairTrailer.Parse(sorted[fi].Value);
+            var rawData = parseRaw(sorted[fi].Value);
             cvResult.CorruptedFragmentBlocks.TryGetValue(fi, out var badBlocks);
-            for (int off = 0; off < rawData.Length; off += bs)
+            for (int off = 0; off < rawData.Length; off += blockSize)
             {
-                int len = Math.Min(bs, rawData.Length - off);
-                allBlocks[gIdx] = new byte[bs];
+                int len = Math.Min(blockSize, rawData.Length - off);
+                allBlocks[gIdx] = new byte[blockSize];
                 Buffer.BlockCopy(rawData, off, allBlocks[gIdx], 0, len);
-                if (badBlocks != null && badBlocks.Contains(off / bs))
+                if (badBlocks != null && badBlocks.Contains(off / blockSize))
                     isBad[gIdx] = true;
                 gIdx++;
             }
         }
 
-        int recovered = DuipCode.Decode(allBlocks, isBad, rb.Data, rb.EntropySamples,
-            totalBlocks, bs, DuipCode.DefaultFaceSize, DuipCode.DefaultEntropyBits);
-        if (recovered <= 0) return false;
+        if (!decode(allBlocks, isBad, totalBlocks)) return false;
 
         gIdx = 0;
         for (int fi = 0; fi < sorted.Count; fi++)
@@ -411,12 +374,12 @@ internal static class RepairRunner
             byte[] frag = sorted[fi].Value;
             int rawLen = rawLengths[fi];
             cvResult.CorruptedFragmentBlocks.TryGetValue(fi, out var badBlocks);
-            for (int off = 0; off < rawLen; off += bs)
+            for (int off = 0; off < rawLen; off += blockSize)
             {
-                int localIdx = off / bs;
+                int localIdx = off / blockSize;
                 if (badBlocks != null && badBlocks.Contains(localIdx))
                 {
-                    int len = Math.Min(bs, rawLen - off);
+                    int len = Math.Min(blockSize, rawLen - off);
                     Buffer.BlockCopy(allBlocks[gIdx], 0, frag, off, len);
                 }
                 gIdx++;

@@ -16,15 +16,6 @@ using RDRF.Core.Dssa;
 
 namespace RDRF.Core;
 
-public class RdrfProgressReport
-{
-    public string Stage { get; set; } = string.Empty;
-    public int CurrentItem { get; set; }
-    public int TotalItems { get; set; }
-    public long CurrentBytes { get; set; }
-    public long TotalBytes { get; set; }
-}
-
 public class BackupOrchestrator : IDisposable
 {
     private readonly byte[] _rcCode;
@@ -94,7 +85,9 @@ public class BackupOrchestrator : IDisposable
         IProgress<RdrfProgressReport>? progress = null)
     {
         var fileInfo = new FileInfo(filePath);
-        return BackupCoreAsync(filePath, fssStrategy, auxiliaryStrategies, originalFilename, fragmentSize, customName, progress, CancellationToken.None).GetAwaiter().GetResult();
+        return Task.Run(() => BackupCoreAsync(filePath, fssStrategy, auxiliaryStrategies,
+            originalFilename, fragmentSize, customName, progress, CancellationToken.None))
+            .GetAwaiter().GetResult();
     }
 
     [Obsolete("Use BackupFileAsync instead")]
