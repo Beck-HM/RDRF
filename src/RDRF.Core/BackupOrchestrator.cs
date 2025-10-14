@@ -152,33 +152,21 @@ public class BackupOrchestrator : IDisposable
 
         var plan = _fsa.Compute(fssStrategy, auxiliaryStrategies);
 
-        // Phase 1: Stream-read file, hash incrementally, buffer for compression
-        byte[] fileBytes;
-        using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536))
+        // Phase 1: Read file, hash incrementally, compress
+        // TODO: True streaming via LZ4EncoderStream when K4os.Compression.LZ4.Streams is available
+        byte[] rawFileData;
         using (var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
         {
-            long len = fs.Length;
-            byte[] buf = ArrayPool<byte>.Shared.Rent(65536);
-            try
-            {
-                using var ms = new MemoryStream((int)Math.Min(len, int.MaxValue));
-                int read;
-                while ((read = await fs.ReadAsync(buf.AsMemory(0, buf.Length), cancellationToken)
-                    .ConfigureAwait(false)) > 0)
-                {
-                    hasher.AppendData(buf.AsSpan(0, read));
-                    ms.Write(buf, 0, read);
-                }
-                fileBytes = ms.ToArray();
-            }
-            finally { ArrayPool<byte>.Shared.Return(buf, clearArray: true); }
+            rawFileData = await File.ReadAllBytesAsync(filePath, cancellationToken)
+                .ConfigureAwait(false);
+            hasher.AppendData(rawFileData);
             fileFingerprint = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
         }
         originalHash = fileFingerprint;
 
-        byte[] compressedData = Compressor.Compress(fileBytes, compressionMethod);
-        bool dataCompressed = compressedData.Length < fileBytes.Length;
-        fileBytes = null;
+        byte[] compressedData = Compressor.Compress(rawFileData, compressionMethod);
+        bool dataCompressed = compressedData.Length < rawFileData.Length;
+        rawFileData = null; // allow GC to reclaim raw data early
         int dataLenForOverPad = compressedData.Length;
 
         // Pad compressed data to fragSize boundary so all fragments have equal data size
