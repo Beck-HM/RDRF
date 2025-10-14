@@ -70,8 +70,11 @@ public static class IndexManager
         WriteField(writer, "compression", index.Compression);
         WriteFssParams(writer, index.FssParams);
         WriteField(writer, "fss6_fragment_block_maps", index.Fss6FragmentBlockMaps);
+        WriteField(writer, "fss6_fragment_flat", index.Fss6FragmentBlockMapsFlat);
         WriteField(writer, "fss6_fragment_2b", index.Fss6Fragment2B);
         WriteField(writer, "fss6_rc_block_map", index.Fss6RcBlockMap);
+        if (index.Fss6RcBlockMapFlat != null)
+            WriteField(writer, "fss6_rc_flat", new List<byte[]> { index.Fss6RcBlockMapFlat });
         WriteField(writer, "fss6_rc_2b", index.Fss6Rc2B);
         WriteField(writer, "raw_fragment_hashes", index.RawFragmentHashes);
         WriteField(writer, "salt", index.Salt);
@@ -112,8 +115,10 @@ public static class IndexManager
                 case "compression":                  index.Compression = reader.ReadTextString(); break;
                 case "fss_params":                  index.FssParams = ReadFssParams(reader); break;
                 case "fss6_fragment_block_maps":    index.Fss6FragmentBlockMaps = ReadNestedStringList(reader); break;
+                case "fss6_fragment_flat":          index.Fss6FragmentBlockMapsFlat = ReadByteArrayList(reader); break;
                 case "fss6_fragment_2b":            index.Fss6Fragment2B = ReadNestedStringList(reader); break;
                 case "fss6_rc_block_map":           index.Fss6RcBlockMap = ReadStringList(reader); break;
+                case "fss6_rc_flat":                { var list = ReadByteArrayList(reader); if (list?.Count > 0) index.Fss6RcBlockMapFlat = list[0]; } break;
                 case "fss6_rc_2b":                  index.Fss6Rc2B = ReadStringList(reader); break;
                 case "raw_fragment_hashes":          index.RawFragmentHashes = ReadByteArrayList(reader); break;
                 case "salt":                        index.Salt = reader.ReadTextString(); break;
@@ -574,8 +579,10 @@ public class RdrfIndex
     public string? Compression { get; set; }
     public Dictionary<string, object>? FssParams { get; set; }
     public List<List<string>>? Fss6FragmentBlockMaps { get; set; }
+    public List<byte[]>? Fss6FragmentBlockMapsFlat { get; set; }
     public List<List<string>>? Fss6Fragment2B { get; set; }
     public List<string>? Fss6RcBlockMap { get; set; }
+    public byte[]? Fss6RcBlockMapFlat { get; set; }
     public List<string>? Fss6Rc2B { get; set; }
     public List<byte[]>? RawFragmentHashes { get; set; }
     public string? Salt { get; set; }

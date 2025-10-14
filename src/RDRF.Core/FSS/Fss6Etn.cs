@@ -105,12 +105,16 @@ public class Fss6Etn : IFssStrategy
         index.Fss6RcBlockMap = HexListFromSecondFlat(rcBlockFlat, rcBlockCount);
         index.Fss6Rc2B = HexListFromFirstFlat(rcBlockFlat, rcBlockCount);
 
+        index.Fss6RcBlockMapFlat = (byte[])rcBlockFlat.Clone();
+
         index.Fss6FragmentBlockMaps = new List<List<string>>();
+        index.Fss6FragmentBlockMapsFlat = new List<byte[]>();
         index.Fss6Fragment2B = new List<List<string>>();
         for (int i = 0; i < fragmentBlockFlats.Length; i++)
         {
             int fc = EtnBlockMap.BlockCount(fragmentBlockFlats[i]);
             index.Fss6FragmentBlockMaps.Add(HexListFromSecondFlat(fragmentBlockFlats[i], fc));
+            index.Fss6FragmentBlockMapsFlat.Add((byte[])fragmentBlockFlats[i].Clone());
             index.Fss6Fragment2B.Add(HexListFromFirstFlat(fragmentBlockFlats[i], fc));
         }
 

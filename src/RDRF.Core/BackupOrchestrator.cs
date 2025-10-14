@@ -150,21 +150,35 @@ public class BackupOrchestrator : IDisposable
         string originalHash;
         string fileFingerprint;
 
-        // Phase 1: Read entire file, hash, compress as single frame, split into fragments
         var plan = _fsa.Compute(fssStrategy, auxiliaryStrategies);
 
-        byte[] rawFileData = await File.ReadAllBytesAsync(filePath, cancellationToken)
-            .ConfigureAwait(false);
-
+        // Phase 1: Stream-read file, hash incrementally, buffer for compression
+        byte[] fileBytes;
+        using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536))
         using (var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
         {
-            hasher.AppendData(rawFileData);
+            long len = fs.Length;
+            byte[] buf = ArrayPool<byte>.Shared.Rent(65536);
+            try
+            {
+                using var ms = new MemoryStream((int)Math.Min(len, int.MaxValue));
+                int read;
+                while ((read = await fs.ReadAsync(buf.AsMemory(0, buf.Length), cancellationToken)
+                    .ConfigureAwait(false)) > 0)
+                {
+                    hasher.AppendData(buf.AsSpan(0, read));
+                    ms.Write(buf, 0, read);
+                }
+                fileBytes = ms.ToArray();
+            }
+            finally { ArrayPool<byte>.Shared.Return(buf, clearArray: true); }
             fileFingerprint = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
         }
         originalHash = fileFingerprint;
 
-        byte[] compressedData = Compressor.Compress(rawFileData, compressionMethod);
-        bool dataCompressed = compressedData.Length < rawFileData.Length;
+        byte[] compressedData = Compressor.Compress(fileBytes, compressionMethod);
+        bool dataCompressed = compressedData.Length < fileBytes.Length;
+        fileBytes = null;
         int dataLenForOverPad = compressedData.Length;
 
         // Pad compressed data to fragSize boundary so all fragments have equal data size

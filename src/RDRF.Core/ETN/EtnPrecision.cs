@@ -69,13 +69,36 @@ public static class EtnPrecision
             trailerRc8B[i] = t.Rc8B;
         });
 
-        var indexStoredRcBm = index?.Fss6RcBlockMap?.Select(EtnBlockMap.HashFromString).ToList() ?? [];
-        var indexStoredRc2B = index?.Fss6Rc2B?.Select(EtnBlockMap.HashFromString).ToList();
-        var indexStoredFragmentBms = index?.Fss6FragmentBlockMaps
-            ?.Select(list => list.Select(EtnBlockMap.HashFromString).ToList()).ToList()
-            ?? [];
-        var indexStoredFragment2B = index?.Fss6Fragment2B
-            ?.Select(list => list.Select(EtnBlockMap.HashFromString).ToList()).ToList();
+        List<byte[]>? indexStoredRcBm;
+        if (index?.Fss6RcBlockMapFlat != null)
+            indexStoredRcBm = SplitFlat(index.Fss6RcBlockMapFlat, EtnBlockMap.SecondHashLen);
+        else
+            indexStoredRcBm = index?.Fss6RcBlockMap?.Select(EtnBlockMap.HashFromString).ToList();
+
+        List<byte[]>? indexStoredRc2B;
+        if (index?.Fss6RcBlockMapFlat != null)
+            indexStoredRc2B = SplitFlat(index.Fss6RcBlockMapFlat, EtnBlockMap.TrailerHashLen);
+        else
+            indexStoredRc2B = index?.Fss6Rc2B?.Select(EtnBlockMap.HashFromString).ToList();
+
+        var indexStoredFragmentBms = new List<List<byte[]>>();
+        var indexStoredFragment2B = new List<List<byte[]>>();
+        if (index?.Fss6FragmentBlockMapsFlat != null)
+        {
+            foreach (var flat in index.Fss6FragmentBlockMapsFlat)
+            {
+                indexStoredFragmentBms.Add(SplitFlat(flat, EtnBlockMap.SecondHashLen));
+                indexStoredFragment2B.Add(SplitFlat(flat, EtnBlockMap.TrailerHashLen));
+            }
+        }
+        else if (index?.Fss6FragmentBlockMaps != null)
+        {
+            foreach (var list in index.Fss6FragmentBlockMaps)
+                indexStoredFragmentBms.Add(list.Select(EtnBlockMap.HashFromString).ToList());
+            if (index?.Fss6Fragment2B != null)
+                foreach (var list in index.Fss6Fragment2B)
+                    indexStoredFragment2B.Add(list.Select(EtnBlockMap.HashFromString).ToList());
+        }
 
         CheckIndex(result, actualIndexFlat, actualIndexCount,
             rcStoredIndexBm, rcStoredIndex2B,
@@ -286,14 +309,29 @@ public static class EtnPrecision
         var index = IndexManager.DeserializeIndex(indexBytes);
         if (index == null) return indexBytes;
         index.Fss6FragmentBlockMaps = null;
+        index.Fss6FragmentBlockMapsFlat = null;
         index.Fss6Fragment2B = null;
         index.Fss6RcBlockMap = null;
+        index.Fss6RcBlockMapFlat = null;
         index.Fss6Rc2B = null;
         index.Fss61RepairB = null;
         index.Fss61RepairC = null;
         index.Fss62RepairB = null;
         index.Fss62RepairC = null;
         return IndexManager.SerializeIndex(index);
+    }
+
+    private static List<byte[]> SplitFlat(byte[] flat, int hashLen)
+    {
+        int count = flat.Length / hashLen;
+        var list = new List<byte[]>(count);
+        for (int i = 0; i < count; i++)
+        {
+            byte[] h = new byte[hashLen];
+            Buffer.BlockCopy(flat, i * hashLen, h, 0, hashLen);
+            list.Add(h);
+        }
+        return list;
     }
 
     private static EtnTrailerData ParseAnyTrailer(byte[] fragmentData)
