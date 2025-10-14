@@ -25,53 +25,38 @@ public class BackupOrchestrator : IDisposable
     private readonly FSSEngine _fss;
     private readonly FsaEngine _fsa;
     private readonly MetadataManager _metadata;
-    private readonly bool _preDerived;
-
     public BackupOrchestrator(
-        byte[] key,
+        byte[] aesKey,
+        byte[] rcCode,
         DssaAdapter storage,
         FSSEngine? fssEngine = null,
-        bool preDerived = false,
-        byte[]? recoveryCode = null,
         MetadataManager? metadata = null)
     {
-        if (key == null || key.Length == 0)
-            throw new ArgumentException("Key cannot be null or empty", nameof(key));
+        _aesKey = aesKey?.Clone() as byte[] ?? throw new ArgumentNullException("AES key required");
+        _rcCode = rcCode?.Clone() as byte[] ?? [];
+        _salt = [];
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _fss = fssEngine ?? new FSSEngine();
         _fsa = new FsaEngine();
         _metadata = metadata ?? new MetadataManager(null, skipLoad: true);
-        _preDerived = preDerived;
-
-        if (preDerived)
-        {
-            _rcCode = recoveryCode?.Clone() as byte[] ?? [];
-            _salt = _rcCode.Length > 0 ? RandomNumberGenerator.GetBytes(32) : [];
-            _aesKey = key?.Clone() as byte[] ?? throw new ArgumentNullException(nameof(key));
-        }
-        else
-        {
-            _rcCode = key?.Clone() as byte[] ?? throw new ArgumentNullException(nameof(key));
-            _salt = RandomNumberGenerator.GetBytes(32);
-            _aesKey = EncryptionLayer.DeriveKey(key, _salt);
-        }
     }
 
     public BackupOrchestrator(
-        byte[] key,
-        byte[] salt,
+        byte[] rcCode,
         DssaAdapter storage,
+        byte[] salt,
         FSSEngine? fssEngine = null,
         MetadataManager? metadata = null)
     {
-        _rcCode = key?.Clone() as byte[] ?? throw new ArgumentNullException(nameof(key));
+        if (rcCode == null || rcCode.Length == 0)
+            throw new ArgumentException("RC code cannot be null or empty", nameof(rcCode));
+        _rcCode = (byte[])rcCode.Clone();
         _salt = salt ?? throw new ArgumentNullException(nameof(salt));
-        _aesKey = EncryptionLayer.DeriveKey(key, _salt);
+        _aesKey = EncryptionLayer.DeriveKey(rcCode, salt);
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _fss = fssEngine ?? new FSSEngine();
         _fsa = new FsaEngine();
         _metadata = metadata ?? new MetadataManager(null, skipLoad: true);
-        _preDerived = false;
     }
 
     [Obsolete("Use BackupFileAsync instead")]
@@ -320,7 +305,7 @@ public class BackupOrchestrator : IDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             byte[] fileData = FragmentFileHeader.EncryptWithEmbeddedIndex(
-                fragments[i], embeddedIndexBytes, _aesKey, _preDerived ? null : _salt);
+                fragments[i], embeddedIndexBytes, _aesKey, _salt.Length > 0 ? _salt : null);
             string fname = Frags.FragmentFilename(filePrefix, i);
             writeBatch.Add((fname, fileData));
             fragments[i] = null!;
@@ -333,7 +318,9 @@ public class BackupOrchestrator : IDisposable
                     CancellationToken = cancellationToken
                 }, async (item, ct) =>
                 {
-                    await _storage.WriteFragmentAsync(item.path, item.data, ct).ConfigureAwait(false);
+                    for (int retry = 0; ; retry++)
+                        try { await _storage.WriteFragmentAsync(item.path, item.data, ct).ConfigureAwait(false); break; }
+                        catch when (retry < 2) { await Task.Delay(100 * (retry + 1), ct).ConfigureAwait(false); }
                 }).ConfigureAwait(false);
                 writeBatch.Clear();
             }
@@ -354,7 +341,7 @@ public class BackupOrchestrator : IDisposable
         }
 
         byte[] indexBytes = serializedIndex;
-        if (!_preDerived && _salt.Length > 0)
+        if (_salt.Length > 0)
         {
                 byte[] salted = EncryptionLayer.EncryptIndexWithSaltPrefix(indexBytes, _rcCode, _salt);
             await _storage.WriteIndexAsync(filePrefix, salted, cancellationToken).ConfigureAwait(false);

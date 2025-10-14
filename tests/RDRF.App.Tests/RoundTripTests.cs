@@ -79,11 +79,11 @@ public class RoundTripTests
         byte[] aesKey = EncryptionLayer.DeriveKeyLegacy(password);
         var storage = new LocalDssaAdapter(dir.Path);
 
-        using var engine = new RDRFEngine(aesKey, storage, preDerived: true, recoveryCode: password);
+        using var engine = new RDRFEngine(aesKey, password, storage);
         string input = dir.CreateTextFile("test.txt", "Pre-derived round-trip test.");
         string fp = engine.BackupFile(input, "FSS1");
 
-        using var restoreEngine = new RDRFEngine(aesKey, storage, preDerived: true, recoveryCode: password);
+        using var restoreEngine = new RDRFEngine(aesKey, password, storage);
         string output = dir["restored.bin"];
         bool ok = restoreEngine.RestoreFile(fp, output);
         Assert.True(ok);

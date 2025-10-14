@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO.Hashing;
 using System.Security.Cryptography;
 using RDRF.Core.Diff;
@@ -54,7 +54,7 @@ public static class VersionedBackup
         List<string>? auxiliaryStrategies = null)
     {
         byte[] salt = RandomNumberGenerator.GetBytes(Constants.SaltPrefixLength);
-        using var orchestrator = new BackupOrchestrator((byte[])password.Clone(), (byte[])salt.Clone(), storage);
+        using var orchestrator = new BackupOrchestrator((byte[])password.Clone(), storage, (byte[])salt.Clone());
         string fingerprint = await orchestrator.BackupFileAsync(filePath, fssStrategy,
             fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliaryStrategies,
             progress: progress, cancellationToken: ct).ConfigureAwait(false);
@@ -102,7 +102,7 @@ private static async Task<string> IncrementalBackupAsync(
         fileFingerprint = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
     }
 
-    // Same fingerprint → file unchanged → just update commit message
+    // Same fingerprint 鈫?file unchanged 鈫?just update commit message
     if (prevRawHashes != null && fileFingerprint == prevFingerprint)
     {
         var newIndex = new RdrfIndex { FileFingerprint = fileFingerprint };
@@ -172,7 +172,7 @@ private static async Task<string> IncrementalBackupAsync(
         string filePrefix = customName ?? actualFingerprint;
         var (aesKey, cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(prevIndexBytes, password);
 
-        using var orchestrator = new BackupOrchestrator((byte[])password.Clone(), (byte[])salt.Clone(), storage);
+        using var orchestrator = new BackupOrchestrator((byte[])password.Clone(), storage, (byte[])salt.Clone());
 
         // Select only changed raw fragments for processing
         var changedRaw = new List<byte[]>();
@@ -204,7 +204,7 @@ private static async Task<string> IncrementalBackupAsync(
     {
         // Cross-encoding strategies: full pipeline (old behavior)
         string actualFingerprint;
-        using (var orchestrator = new BackupOrchestrator((byte[])password.Clone(), (byte[])salt.Clone(), storage))
+        using (var orchestrator = new BackupOrchestrator((byte[])password.Clone(), storage, (byte[])salt.Clone()))
         {
             actualFingerprint = await orchestrator.BackupFileAsync(filePath, fssStrategy,
                 auxiliaryStrategies, Path.GetFileName(filePath), fragmentSize, customName,
@@ -344,3 +344,4 @@ private static void DedupPostProcessing(DssaAdapter storage, string actualFinger
         catch (Exception ex) { Debug.WriteLine($"Fragment cleanup failed: {ex.Message}"); }
     }
 }
+

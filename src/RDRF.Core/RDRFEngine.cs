@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Core.Dssa;
 
@@ -11,24 +12,22 @@ public class RDRFEngine : IDisposable
     private readonly DssaAdapter _storage;
     private readonly byte[] _rcCode;
 
-    public RDRFEngine(byte[] key, DssaAdapter storage, FSS.FSSEngine? fssEngine = null)
+    public RDRFEngine(byte[] rcCode, DssaAdapter storage, FSS.FSSEngine? fssEngine = null)
     {
-        if (key == null || key.Length == 0)
-            throw new ArgumentException("Key cannot be null or empty", nameof(key));
-        _rcCode = (byte[])key.Clone();
+        _rcCode = (byte[])rcCode.Clone();
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
-        _backup = new BackupOrchestrator(_rcCode, storage, fssEngine);
-        _restore = new RestoreOrchestrator(_rcCode, storage, fssEngine);
+        byte[] aesKey = EncryptionLayer.DeriveKeyLegacy(rcCode);
+        _backup = new BackupOrchestrator(aesKey, _rcCode, storage, fssEngine);
+        _restore = new RestoreOrchestrator(aesKey, _rcCode, storage, fssEngine);
     }
 
-    public RDRFEngine(byte[] key, DssaAdapter storage, bool preDerived, byte[]? recoveryCode, FSS.FSSEngine? fssEngine = null)
+
+    public RDRFEngine(byte[] aesKey, byte[] rcCode, DssaAdapter storage, FSS.FSSEngine? fssEngine = null)
     {
-        if ((key == null || key.Length == 0) && (recoveryCode == null || recoveryCode.Length == 0))
-            throw new ArgumentException("Key cannot be null or empty", nameof(key));
-        _rcCode = (recoveryCode ?? key)?.Clone() as byte[] ?? throw new ArgumentNullException(nameof(key));
-        _storage = storage;
-        _backup = new BackupOrchestrator(key, storage, fssEngine, preDerived, _rcCode);
-        _restore = new RestoreOrchestrator(key, storage, fssEngine, preDerived, _rcCode);
+        _rcCode = (byte[])rcCode.Clone();
+        _storage = storage ?? throw new ArgumentNullException(nameof(storage));
+        _backup = new BackupOrchestrator(aesKey, _rcCode, storage, fssEngine);
+        _restore = new RestoreOrchestrator(aesKey, _rcCode, storage, fssEngine);
     }
 
     // ── Backup ──

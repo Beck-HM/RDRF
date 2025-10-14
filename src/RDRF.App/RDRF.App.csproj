@@ -1,8 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
     <RootNamespace>RDRF.App</RootNamespace>
     <AssemblyName>RDRF.App</AssemblyName>
     <Nullable>enable</Nullable>
@@ -18,3 +19,4 @@
   </ItemGroup>
 
 </Project>
+
