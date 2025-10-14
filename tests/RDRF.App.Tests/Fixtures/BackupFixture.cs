@@ -61,7 +61,7 @@ public static class BackupHelpers
         string strategy = "FSS1", int? fragmentSize = null)
     {
         var storage = new LocalDssaAdapter(storageDir);
-        using var engine = new BackupOrchestrator(password, salt, storage);
+        using var engine = new BackupOrchestrator(password, storage, salt);
         return engine.BackupFile(inputFile, strategy,
             fragmentSize: fragmentSize ?? 256 * 1024);
     }

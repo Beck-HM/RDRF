@@ -100,7 +100,7 @@ public class RestoreCommand : Command
             Console.Error.WriteLine("Error: restore failed (data may be corrupted)");
             return 1;
         }
-        catch (AuthenticationTagMismatchException)
+        catch (CryptographicException)
         {
             Console.Error.WriteLine("Error: wrong password or corrupt index file");
             return 1;

@@ -35,7 +35,7 @@ public class KeyDerivationTests
         byte[] salt = RandomNumberGenerator.GetBytes(32);
         var storage = new LocalDssaAdapter(dir.Path);
 
-        using var orchestrator = new BackupOrchestrator(password, salt, storage);
+        using var orchestrator = new BackupOrchestrator(password, storage, salt);
         string input = dir.CreateTextFile("test.txt", "Auto-detect new format test content.");
         string fp = orchestrator.BackupFile(input, "FSS1");
 
@@ -88,17 +88,17 @@ public class KeyDerivationTests
     public void AutoDetect_KnownSalt_MatchesDeriveKey()
     {
         using var dir = new Fixtures.TempDir();
-        byte[] password = RandomNumberGenerator.GetBytes(32);
+        byte[] rcCode = RandomNumberGenerator.GetBytes(32);
         byte[] salt = RandomNumberGenerator.GetBytes(32);
         var storage = new LocalDssaAdapter(dir.Path);
 
-        using var orchestrator = new BackupOrchestrator(password, salt, storage);
+        using var orchestrator = new BackupOrchestrator(rcCode, storage, salt);
         string input = dir.CreateTextFile("test.txt", "Salt match test.");
         string fp = orchestrator.BackupFile(input, "FSS1");
 
         byte[] encIdx = storage.ReadIndex(fp);
         byte[] saltFromPrefix = encIdx.AsSpan(0, 32).ToArray();
-        byte[] aesKey = EncryptionLayer.DeriveKey(password, saltFromPrefix);
+        byte[] aesKey = EncryptionLayer.DeriveKey(rcCode, saltFromPrefix);
 
         // Decrypt with the derived key directly (without auto-detect)
         byte[] encrypted = encIdx[32..];

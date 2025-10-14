@@ -378,11 +378,8 @@ public class Fss61Tests
             Assert.False(string.IsNullOrEmpty(fingerprint));
             Assert.True(storage.RcExists(fingerprint), "RC file should exist after FSS6.1 backup");
 
-            // Derive correct AES key from salt (first 32 bytes of encrypted index)
-            byte[] encryptedIndex = storage.ReadIndex(fingerprint);
-            byte[] salt = new byte[32];
-            Buffer.BlockCopy(encryptedIndex, 0, salt, 0, 32);
-            byte[] aesKey = EncryptionLayer.DeriveKey(rcCode, salt);
+            // Derive legacy AES key (no salt — RDRFEngine(rcCode, storage) constructor)
+            byte[] aesKey = EncryptionLayer.DeriveKeyLegacy(rcCode);
 
             // Check RC file repair data
             byte[] encryptedRc = storage.ReadRc(fingerprint);
@@ -398,6 +395,7 @@ public class Fss61Tests
             Assert.True(rcFile.RepairB.Data.Length > 0);
 
             // Check Index repair data
+            byte[] encryptedIndex = storage.ReadIndex(fingerprint);
             (_, byte[] indexCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcCode);
             var index = IndexManager.DeserializeIndex(indexCbor);
 
@@ -436,16 +434,12 @@ public class Fss61Tests
                 fingerprint = engine.BackupFile(EtnTestHelpers.TestFile, "FSS6.1");
             }
 
-            // Corrupt Index: decrypt, modify original_name, re-encrypt
             byte[] encryptedIndex = storage.ReadIndex(fingerprint);
-            byte[] salt = new byte[32];
-            Buffer.BlockCopy(encryptedIndex, 0, salt, 0, 32);
             (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcCode);
             var idx = IndexManager.DeserializeIndex(cbor);
             idx.OriginalName = idx.OriginalName + "_CORRUPTED";
             byte[] newCbor = IndexManager.SerializeIndex(idx);
-            byte[] newEncrypted = EncryptionLayer.EncryptIndexWithSaltPrefix(newCbor, rcCode, salt);
-            storage.WriteIndex(fingerprint, newEncrypted);
+            storage.WriteIndex(fingerprint, EncryptionLayer.EncryptIndexWithKey(newCbor, aesKey));
 
             // Restore should repair Index from RC.RepairA
             using (var engine = new RDRFEngine((byte[])rcCode.Clone(), storage))
@@ -484,13 +478,9 @@ public class Fss61Tests
                 fingerprint = engine.BackupFile(EtnTestHelpers.TestFile, "FSS6.1");
             }
 
-            // Derive AES key from salt for RC encryption
             byte[] encryptedIndex = storage.ReadIndex(fingerprint);
-            byte[] salt = new byte[32];
-            Buffer.BlockCopy(encryptedIndex, 0, salt, 0, 32);
-            byte[] aesKey = EncryptionLayer.DeriveKey(rcCode, salt);
+            byte[] aesKey = EncryptionLayer.DeriveKeyLegacy(rcCode);
 
-            // Corrupt RC: decrypt, modify FileFingerprint, re-encrypt
             byte[] encryptedRc = storage.ReadRc(fingerprint);
             byte[] rcBytes = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, aesKey);
             var rcFile = RcFile.FromCbor(rcBytes);
@@ -538,18 +528,12 @@ public class Fss61Tests
             }
 
             byte[] encryptedIndex = storage.ReadIndex(fingerprint);
-            byte[] salt = new byte[32];
-            Buffer.BlockCopy(encryptedIndex, 0, salt, 0, 32);
-            byte[] aesKey = EncryptionLayer.DeriveKey(rcClone, salt);
-
-            // Corrupt Index
-            (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcClone);
+            (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcClone);
             var idx = IndexManager.DeserializeIndex(cbor);
             idx.OriginalName = idx.OriginalName + "_CORRUPTED";
             byte[] newCbor = IndexManager.SerializeIndex(idx);
-            storage.WriteIndex(fingerprint, EncryptionLayer.EncryptIndexWithSaltPrefix(newCbor, rcClone, salt));
+            storage.WriteIndex(fingerprint, EncryptionLayer.EncryptIndexWithKey(newCbor, aesKey));
 
-            // Corrupt RC too
             byte[] encryptedRc = storage.ReadRc(fingerprint);
             byte[] rcBytes = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, aesKey);
             var rcf = RcFile.FromCbor(rcBytes);

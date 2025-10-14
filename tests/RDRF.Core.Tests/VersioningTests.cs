@@ -20,7 +20,7 @@ public class VersioningTests
             byte[] salt = RandomNumberGenerator.GetBytes(32);
             var storage = new LocalDssaAdapter(storageDir);
 
-            using var orchestrator = new BackupOrchestrator(password, salt, storage);
+            using var orchestrator = new BackupOrchestrator(password, storage, salt);
             string fingerprint = await orchestrator.BackupFileAsync(testFile, "FSS1");
 
             byte[] encIdx = storage.ReadIndex(fingerprint);

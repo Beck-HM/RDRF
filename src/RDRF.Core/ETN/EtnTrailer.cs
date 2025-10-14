@@ -21,6 +21,14 @@ public readonly struct EtnTrailerData
         Rc2B = rc2B; Rc2BCount = rc2Cnt;
         Rc8B = rc8B; Rc8BCount = rc8Cnt;
     }
+
+    public void Deconstruct(out byte[] rawData, out byte[] idx2B, out int idx2Cnt,
+        out byte[] rc2B, out int rc2Cnt)
+    {
+        rawData = RawData;
+        idx2B = Index2B; idx2Cnt = Index2BCount;
+        rc2B = Rc2B; rc2Cnt = Rc2BCount;
+    }
 }
 
 public static class EtnTrailer

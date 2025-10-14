@@ -72,7 +72,7 @@ public class DecryptTests
         string prefix = index.CustomName ?? fp;
 
         // Recreate engine with preDerived key (like DecryptService does)
-        using var restoreEngine = new RDRFEngine(aesKey, storage, preDerived: true, recoveryCode: password);
+        using var restoreEngine = new RDRFEngine(aesKey, password, storage);
 
         string output = dir["restored.bin"];
         bool ok = restoreEngine.RestoreFileFromIndexData(encIdx, prefix, output);
@@ -115,7 +115,7 @@ public class DecryptTests
         if (storage.FragmentExists(frag0))
             storage.DeleteFragment(frag0);
 
-        using var restoreEngine = new RDRFEngine(aesKey, storage, preDerived: true, recoveryCode: password);
+        using var restoreEngine = new RDRFEngine(aesKey, password, storage);
         string output = dir["restored_fail.bin"];
         bool ok = restoreEngine.RestoreFileFromIndexData(encIdx, prefix, output, allowFssRecovery: false);
         Assert.False(ok);

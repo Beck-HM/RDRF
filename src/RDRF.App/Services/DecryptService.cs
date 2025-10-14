@@ -151,7 +151,7 @@ public class DecryptService : IDisposable
             throw new InvalidOperationException("Storage path not set.");
 
         var storage = new LocalDssaAdapter(_storagePath);
-        var engine = new RDRFEngine(_aesKey, storage, preDerived: true, recoveryCode: _rcCode);
+        var engine = new RDRFEngine(_aesKey, _rcCode, storage);
 
         if (IsFragmentMode)
         {

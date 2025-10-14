@@ -176,7 +176,7 @@ public class RegressionTests
 
             // Backup with preDerived=true
         var storage = new LocalDssaAdapter(storageDir);
-            using var engine = new RDRFEngine(preDerivedKey, storage, preDerived: true, recoveryCode: rcCode);
+            using var engine = new RDRFEngine(preDerivedKey, rcCode, storage);
             string fingerprint = engine.BackupFile(testFile, "FSS1");
             Assert.False(string.IsNullOrEmpty(fingerprint));
 
@@ -212,7 +212,7 @@ public class RegressionTests
             File.WriteAllText(testFile, testContent);
 
             var storage = new LocalDssaAdapter(storageDir);
-            using var enginePre = new RDRFEngine(preDerivedKey, storage, preDerived: true, recoveryCode: rcCode);
+            using var enginePre = new RDRFEngine(preDerivedKey, rcCode, storage);
             string fingerprint = enginePre.BackupFile(testFile, "FSS1");
 
             // Try restore WITHOUT preDerived should fail because engine treats preDerivedKey
@@ -242,8 +242,9 @@ public class RegressionTests
             File.WriteAllText(testFile, testContent);
 
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
+            byte[] testSalt = EncryptionLayer.GenerateRcCode(Constants.SaltPrefixLength);
             var storage = new LocalDssaAdapter(storageDir);
-            using var engine = new RDRFEngine(rcCode, storage);
+            using var engine = new BackupOrchestrator(rcCode, storage, testSalt);
             string fingerprint = engine.BackupFile(testFile, "FSS1");
 
             // Read the index directly
@@ -444,7 +445,8 @@ public class RegressionTests
 
         // Create orchestrator and call the internal salt derivation
         var storage = new LocalDssaAdapter(Path.GetTempPath());
-        using var orchestrator = new RestoreOrchestrator(rcCode, storage);
+        byte[] aesKeyForTest = EncryptionLayer.DeriveKeyLegacy(rcCode);
+        using var orchestrator = new RestoreOrchestrator(aesKeyForTest, rcCode, storage);
 
         // The salt field is null - ApplyFragmentKeyFromIndex should fall back to _aesKey
         // We verify by checking that _aesKey equals _fragmentKey after fallback
