@@ -301,24 +301,28 @@ public class RestoreOrchestrator : IDisposable
             }
 
             int origCount2 = originalCount ?? fragmentCount;
-            StripFssEncodingToStream(decryptedFragments, fssStrategy, originalSizes, origCount2, outputPath);
-        }
-
-        // Decompress if the backup was compressed
-        try
-        {
-            if (index.Compression == Constants.CompressionLz4)
+            bool compressed = index.Compression == Constants.CompressionLz4;
+            if (compressed)
             {
-                byte[] onDisk = File.ReadAllBytes(outputPath);
-                byte[] decompressed = RDRF.Core.Compression.Compressor.Decompress(onDisk, index.Compression);
-                File.WriteAllBytes(outputPath, decompressed);
+                using var ms = new MemoryStream(1024 * 1024);
+                StripFssEncodingToStream(decryptedFragments, fssStrategy, originalSizes, origCount2, ms);
+                byte[] restored = ms.ToArray();
+                try
+                {
+                    byte[] decompressed = RDRF.Core.Compression.Compressor.Decompress(restored, index.Compression);
+                    File.WriteAllBytes(outputPath, decompressed);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"  Decompression failed: {ex.Message}");
+                    if (File.Exists(outputPath)) File.Delete(outputPath);
+                    return false;
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"  Decompression failed: {ex.Message}");
-            if (File.Exists(outputPath)) File.Delete(outputPath);
-            return false;
+            else
+            {
+                StripFssEncodingToStream(decryptedFragments, fssStrategy, originalSizes, origCount2, outputPath);
+            }
         }
 
         // Trim restored file to original size (removes FSS1 padding zeros)
@@ -516,20 +520,27 @@ public class RestoreOrchestrator : IDisposable
         List<int>? originalSizes, int originalCount,
         string outputPath)
     {
+        using var fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
+        StripFssEncodingToStream(decryptedFragments, fssStrategy, originalSizes, originalCount, fs);
+    }
+
+    private void StripFssEncodingToStream(
+        Dictionary<int, byte[]> decryptedFragments,
+        string fssStrategy,
+        List<int>? originalSizes, int originalCount,
+        Stream output)
+    {
         var strategy = _fss.GetStrategy(fssStrategy);
 
-        // FSS1/FSS2 rearrange data across fragments - StripSingle cannot recover independently
         if (fssStrategy is Constants.FssLevel1 or Constants.FssLevel2)
         {
             var stripped = strategy.Strip(decryptedFragments, originalCount, originalSizes);
-            using var fssOut = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
             foreach (var frag in stripped)
-                fssOut.Write(frag, 0, frag.Length);
+                output.Write(frag, 0, frag.Length);
             return;
         }
 
         bool alreadyStripped = fssStrategy is Constants.FssLevel61 or Constants.FssLevel62;
-        using var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
         for (int i = 0; i < originalCount; i++)
         {
             if (!decryptedFragments.TryGetValue(i, out var data)) continue;
