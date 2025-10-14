@@ -201,7 +201,8 @@ public class RestoreOrchestrator : IDisposable
         bool allowFssRecovery = true,
         IProgress<RdrfProgressReport>? progress = null)
     {
-        return RestoreCoreAsync(index, filePrefix, outputPath, allowFssRecovery, progress, CancellationToken.None)
+        return Task.Run(() => RestoreCoreAsync(index, filePrefix, outputPath,
+            allowFssRecovery, progress, CancellationToken.None))
             .GetAwaiter().GetResult();
     }
 
@@ -357,7 +358,8 @@ public class RestoreOrchestrator : IDisposable
         string filePrefix, int fragmentCount, string fileFingerprint,
         IProgress<RdrfProgressReport>? progress)
     {
-        return DownloadAndDecryptFragmentsAsync(filePrefix, fragmentCount, fileFingerprint, progress, CancellationToken.None, null)
+        return Task.Run(() => DownloadAndDecryptFragmentsAsync(filePrefix, fragmentCount,
+            fileFingerprint, progress, CancellationToken.None, null))
             .GetAwaiter().GetResult();
     }
 
