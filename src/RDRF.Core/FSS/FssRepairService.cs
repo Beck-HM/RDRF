@@ -104,25 +104,28 @@ public static class FssRepairService
 
     private static Fss61RepairData? GenLt(List<byte[]> fragments, int bs)
     {
-        var fb = new List<byte[]>();
+        int totalBlocks = 0;
         foreach (var frag in fragments)
-            for (int off = 0; off < frag.Length; off += bs)
+            totalBlocks += (frag.Length + bs - 1) / bs;
+        if (totalBlocks <= 0) return null;
+
+        var all = new byte[totalBlocks][];
+        int idx = 0;
+        foreach (var frag in fragments)
+            for (int off = 0; off < frag.Length; off += bs, idx++)
             {
-                int len = Math.Min(bs, frag.Length - off);
-                byte[] blk = new byte[bs];
-                Buffer.BlockCopy(frag, off, blk, 0, len);
-                fb.Add(blk);
+                all[idx] = new byte[bs];
+                Buffer.BlockCopy(frag, off, all[idx], 0, Math.Min(bs, frag.Length - off));
             }
-        if (fb.Count <= 0) return null;
-        var all = fb.ToArray();
-        int symCount = Math.Max(1, (int)(all.Length * LtCode.RepairRatio));
+
+        int symCount = Math.Max(1, (int)(totalBlocks * LtCode.RepairRatio));
         var (sym, seed) = LtCode.Encode(all, symCount, bs);
         var data = new byte[sym.Count * bs];
         for (int i = 0; i < sym.Count; i++)
             Buffer.BlockCopy(sym[i], 0, data, i * bs, bs);
         return new Fss61RepairData
         {
-            Seed = seed, BlockCount = all.Length, BlockSize = bs, Data = data,
+            Seed = seed, BlockCount = totalBlocks, BlockSize = bs, Data = data,
         };
     }
 
@@ -143,24 +146,27 @@ public static class FssRepairService
 
     private static Fss62RepairData? GenDuip(List<byte[]> fragments, int bs)
     {
-        var fb = new List<byte[]>();
+        int totalBlocks = 0;
         foreach (var frag in fragments)
-            for (int off = 0; off < frag.Length; off += bs)
+            totalBlocks += (frag.Length + bs - 1) / bs;
+        if (totalBlocks <= 0) return null;
+
+        var all = new byte[totalBlocks][];
+        int idx = 0;
+        foreach (var frag in fragments)
+            for (int off = 0; off < frag.Length; off += bs, idx++)
             {
-                int len = Math.Min(bs, frag.Length - off);
-                byte[] blk = new byte[bs];
-                Buffer.BlockCopy(frag, off, blk, 0, len);
-                fb.Add(blk);
+                all[idx] = new byte[bs];
+                Buffer.BlockCopy(frag, off, all[idx], 0, Math.Min(bs, frag.Length - off));
             }
-        if (fb.Count <= 0) return null;
-        var all = fb.ToArray();
+
         var (sym, entropy, seed) = DuipCode.Encode(all, bs);
         var data = new byte[sym.Count * bs];
         for (int i = 0; i < sym.Count; i++)
             Buffer.BlockCopy(sym[i], 0, data, i * bs, bs);
         return new Fss62RepairData
         {
-            Seed = seed, BlockCount = all.Length, BlockSize = bs,
+            Seed = seed, BlockCount = totalBlocks, BlockSize = bs,
             Data = data, EntropySamples = entropy,
         };
     }
