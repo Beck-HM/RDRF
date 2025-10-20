@@ -1,4 +1,6 @@
 using K4os.Compression.LZ4;
+using K4os.Compression.LZ4.Streams;
+using System.Buffers;
 
 namespace RDRF.Core.Compression;
 
@@ -15,13 +17,18 @@ public static class Compressor
     {
         if (method != Constants.CompressionLz4) return data;
         if (IsProbablyCompressed(data)) return data;
-        var compressed = LZ4Pickler.Pickle(data, LZ4Level.L00_FAST);
+        var writer = new ArrayBufferWriter<byte>();
+        LZ4Frame.Encode(data.AsSpan(), writer, LZ4Level.L00_FAST, 0);
+        var compressed = writer.WrittenSpan.ToArray();
         return compressed.Length < data.Length ? compressed : data;
     }
 
     public static byte[] Decompress(byte[] data, string? method)
     {
-        return method == Constants.CompressionLz4 ? LZ4Pickler.Unpickle(data) : data;
+        if (method != Constants.CompressionLz4) return data;
+        var writer = new ArrayBufferWriter<byte>();
+        LZ4Frame.Decode(data.AsSpan(), writer, 0);
+        return writer.WrittenSpan.ToArray();
     }
 
     private static bool IsProbablyCompressed(byte[] data)

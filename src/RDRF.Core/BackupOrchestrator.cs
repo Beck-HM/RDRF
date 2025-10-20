@@ -130,31 +130,38 @@ public class BackupOrchestrator : IDisposable
 
         var plan = _fsa.Compute(fssStrategy, auxiliaryStrategies);
 
-        // Phase 1: Stream-read, hash incrementally, buffer for compression
-        byte[] fileBytes;
+        // Phase 1: Stream-read, hash incrementally, LZ4-frame compress
+        byte[] compressedData;
         using (var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
         {
             using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536);
-            using var ms = new MemoryStream((int)fs.Length);
-            byte[] buf = ArrayPool<byte>.Shared.Rent(65536);
-            try
+            using var compressedStream = new MemoryStream((int)fs.Length);
+            var desc = K4os.Compression.LZ4.Streams.Extensions.CreateDescriptor(
+                new K4os.Compression.LZ4.Streams.LZ4EncoderSettings());
+            var encFactory = (K4os.Compression.LZ4.Streams.ILZ4Descriptor d)
+                => K4os.Compression.LZ4.Streams.Extensions.CreateEncoder(
+                    d, K4os.Compression.LZ4.LZ4Level.L00_FAST, 0);
+            using (var enc = new K4os.Compression.LZ4.Streams.LZ4EncoderStream(
+                compressedStream, desc, encFactory, leaveOpen: false))
             {
-                int read;
-                while ((read = await fs.ReadAsync(buf.AsMemory(0, buf.Length), cancellationToken)
-                    .ConfigureAwait(false)) > 0)
+                byte[] buf = ArrayPool<byte>.Shared.Rent(65536);
+                try
                 {
-                    hasher.AppendData(buf.AsSpan(0, read));
-                    ms.Write(buf, 0, read);
+                    int read;
+                    while ((read = await fs.ReadAsync(buf.AsMemory(0, buf.Length), cancellationToken)
+                        .ConfigureAwait(false)) > 0)
+                    {
+                        hasher.AppendData(buf.AsSpan(0, read));
+                        enc.Write(buf, 0, read);
+                    }
                 }
+                finally { ArrayPool<byte>.Shared.Return(buf); }
             }
-            finally { ArrayPool<byte>.Shared.Return(buf); }
-            fileBytes = ms.ToArray();
+            compressedData = compressedStream.ToArray();
             fileFingerprint = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
         }
         originalHash = fileFingerprint;
-
-        byte[] compressedData = Compressor.Compress(fileBytes, compressionMethod);
-        bool dataCompressed = compressedData.Length < fileBytes.Length;
+        bool dataCompressed = true; // always store in LZ4 frame format
         int dataLenForOverPad = compressedData.Length;
 
         // Pad compressed data to fragSize boundary so all fragments have equal data size
