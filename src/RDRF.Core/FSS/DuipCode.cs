@@ -107,6 +107,42 @@ public static class DuipCode
         int K, int blockSize, int faceSize, int entropyBits)
     {
         if (K == 0) return 0;
+        var known = new bool[K];
+        for (int i = 0; i < K; i++)
+            known[i] = !isCorrupted[i];
+        return DecodeInternal(allBlocks, known, allSymbolData, entropySamples,
+            K, blockSize, faceSize, entropyBits);
+    }
+
+    public static int DecodeMultiPass(
+        byte[][] allBlocks, bool[] isCorrupted,
+        byte[] allSymbolData, byte[] entropySamples,
+        int K, int blockSize, int faceSize, int entropyBits)
+    {
+        if (K == 0) return 0;
+        var known = new bool[K];
+        for (int i = 0; i < K; i++)
+            known[i] = !isCorrupted[i];
+
+        int prev = -1;
+        while (true)
+        {
+            int curr = DecodeInternal(allBlocks, known, allSymbolData, entropySamples,
+                K, blockSize, faceSize, entropyBits);
+            if (curr <= prev || curr >= K) break;
+            prev = curr;
+            for (int i = 0; i < K; i++)
+                if (known[i]) isCorrupted[i] = false;
+        }
+        return prev;
+    }
+
+    private static int DecodeInternal(
+        byte[][] allBlocks, bool[] known,
+        byte[] allSymbolData, byte[] entropySamples,
+        int K, int blockSize, int faceSize, int entropyBits)
+    {
+        if (K == 0) return 0;
         int R = allSymbolData.Length / blockSize;
         int faceCount = (K + faceSize - 1) / faceSize;
         int globalIdx = R - 1;
@@ -114,13 +150,9 @@ public static class DuipCode
         int stride = blockSize;
         int symStride = stride;
 
-        var known = new bool[K];
         int totalBad = 0;
         for (int i = 0; i < K; i++)
-        {
-            known[i] = !isCorrupted[i];
-            if (isCorrupted[i]) totalBad++;
-        }
+            if (!known[i]) totalBad++;
 
         if (totalBad == 0) return K;
 
@@ -312,7 +344,7 @@ public static class DuipCode
                 int rank = GaussianEliminate(mat, Mf, Nf);
                 if (rank < Nf) continue;
 
-                for (int col = 0; col < Nf; col++)
+                for (int col = Nf - 1; col >= 0; col--)
                 {
                     int pivotRow = -1;
                     for (int r = col; r < Mf; r++)
@@ -322,8 +354,8 @@ public static class DuipCode
                     if (pivotRow < 0) continue;
 
                     int srcBlock = unk[col];
-                    byte[] recBufArr = new byte[blockSize];
-                    Span<byte> recBuf = recBufArr;
+                    byte[] recBufArr = ArrayPool<byte>.Shared.Rent(blockSize);
+                    Span<byte> recBuf = recBufArr.AsSpan(0, blockSize);
                     rhsMat.AsSpan(pivotRow * blockSize, blockSize).CopyTo(recBuf);
 
                     for (int c = col + 1; c < Nf; c++)
@@ -333,6 +365,7 @@ public static class DuipCode
                     }
 
                     recBuf.CopyTo(allBlocks[srcBlock]);
+                    ArrayPool<byte>.Shared.Return(recBufArr);
                     known[srcBlock] = true;
                     recovered++;
                 }
