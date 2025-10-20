@@ -6,16 +6,9 @@ public static class Compressor
 {
     private static readonly HashSet<string> CompressedMagic = new(StringComparer.OrdinalIgnoreCase)
     {
-        "ffd8ffe0", "ffd8ffe1", "ffd8ffe2", "ffd8ffe3", "ffd8ffe8", // JPEG
-        "89504e47",                          // PNG
-        "47494638",                          // GIF
-        "504b0304", "504b0506", "504b0708",  // ZIP/DOCX
-        "1f8b08",                            // GZIP
-        "52617221",                          // RAR
-        "377abcaf271c",                      // 7z
-        "494433",                            // MP3 ID3v2
-        "664c6143",                          // FLAC
-        "4d546864",                          // MIDI
+        "ffd8ffe0", "ffd8ffe1", "ffd8ffe2", "ffd8ffe3", "ffd8ffe8",
+        "89504e47", "47494638", "504b0304", "504b0506", "504b0708",
+        "1f8b08", "52617221", "377abcaf271c", "494433", "664c6143", "4d546864",
     };
 
     public static byte[] Compress(byte[] data, string? method)
