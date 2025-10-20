@@ -264,7 +264,7 @@ public class BackupOrchestrator : IDisposable
                 rcBytes = rcFile61.ToCborBytes();
                 serializedIndex = IndexManager.SerializeIndex(indexObj61);
             }
-            catch (Exception ex) { Debug.WriteLine($"FSS6.1 repair generation failed: {ex.Message}"); }
+            catch (Exception ex) { Console.Error.WriteLine($"Warning: FSS6.1 repair generation failed — {ex.Message}"); }
         }
 
         // FSS6.2: three-node independent Duip repair generation
@@ -288,7 +288,7 @@ public class BackupOrchestrator : IDisposable
                 rcBytes = rcFile62.ToCborBytes();
                 serializedIndex = IndexManager.SerializeIndex(indexObj62);
             }
-            catch (Exception ex) { Debug.WriteLine($"FSS6.2 repair generation failed: {ex.Message}"); }
+            catch (Exception ex) { Console.Error.WriteLine($"Warning: FSS6.2 repair generation failed — {ex.Message}"); }
         }
 
         // Strip BM fields from the Index before embedding in fragment headers
