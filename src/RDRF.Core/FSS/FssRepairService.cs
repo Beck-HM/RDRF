@@ -66,10 +66,11 @@ public static class FssRepairService
         int count = (data.Length + blockSize - 1) / blockSize;
         var blocks = new byte[count][];
         for (int i = 0; i < count; i++)
+            blocks[i] = new byte[blockSize];
+        for (int i = 0; i < count; i++)
         {
             int off = i * blockSize;
             int len = Math.Min(blockSize, data.Length - off);
-            blocks[i] = new byte[blockSize];
             Buffer.BlockCopy(data, off, blocks[i], 0, len);
         }
         return blocks;
@@ -355,7 +356,10 @@ internal static class RepairRunner
         if (totalBlocks != blockCount) return false;
 
         var allBlocks = new byte[totalBlocks][];
+        for (int i = 0; i < totalBlocks; i++)
+            allBlocks[i] = new byte[blockSize];
         var isBad = new bool[totalBlocks];
+
         int gIdx = 0;
         for (int fi = 0; fi < sorted.Count; fi++)
         {
@@ -364,7 +368,6 @@ internal static class RepairRunner
             for (int off = 0; off < rawData.Length; off += blockSize)
             {
                 int len = Math.Min(blockSize, rawData.Length - off);
-                allBlocks[gIdx] = new byte[blockSize];
                 Buffer.BlockCopy(rawData, off, allBlocks[gIdx], 0, len);
                 if (badBlocks != null && badBlocks.Contains(off / blockSize))
                     isBad[gIdx] = true;

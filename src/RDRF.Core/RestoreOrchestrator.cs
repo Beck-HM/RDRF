@@ -566,35 +566,28 @@ public class RestoreOrchestrator : IDisposable
             using var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
             using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
-            var channel = Channel.CreateBounded<(int idx, byte[] data)>(4);
-
-            var producer = Task.Run(async () =>
-            {
-                for (int i = 0; i < fragmentCount; i++)
+            // Phase 1: Parallel download + decrypt + strip
+            var decrypted = new System.Collections.Concurrent.ConcurrentDictionary<int, byte[]>();
+            await Parallel.ForEachAsync(Enumerable.Range(0, fragmentCount),
+                new ParallelOptions { MaxDegreeOfParallelism = Constants.DefaultParallelism, CancellationToken = ct },
+                async (i, ct2) =>
                 {
-                    ct.ThrowIfCancellationRequested();
                     byte[] encrypted = await _storage.ReadFragmentAsync(
-                        Frags.FragmentFilename(filePrefix, i), ct).ConfigureAwait(false);
-                    byte[] decrypted = EncryptionLayer.DecryptAndStripFragment(encrypted, _aesKey);
+                        Frags.FragmentFilename(filePrefix, i), ct2).ConfigureAwait(false);
+                    byte[] data = EncryptionLayer.DecryptAndStripFragment(encrypted, _aesKey);
                     if (etn != null)
-                        decrypted = StripAnyTrailer(decrypted);
-                    await channel.Writer.WriteAsync((i, decrypted), ct).ConfigureAwait(false);
-                }
-                channel.Writer.Complete();
-            });
+                        data = StripAnyTrailer(data);
+                    decrypted[i] = data;
+                }).ConfigureAwait(false);
 
-            var consumer = Task.Run(async () =>
+            // Phase 2: Serial write + hash
+            for (int i = 0; i < fragmentCount; i++)
             {
-                await foreach (var (idx, decrypted) in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
-                {
-                    if (idx >= origCount) continue;
-                    byte[] original = strategy.StripSingle(decrypted, idx, index.OriginalFragmentSizes);
-                    output.Write(original, 0, original.Length);
-                    hasher.AppendData(original.AsSpan(0, original.Length));
-                }
-            });
-
-            await Task.WhenAll(producer, consumer).ConfigureAwait(false);
+                if (!decrypted.TryGetValue(i, out var data) || i >= origCount) continue;
+                byte[] original = strategy.StripSingle(data, i, index.OriginalFragmentSizes);
+                output.Write(original, 0, original.Length);
+                hasher.AppendData(original.AsSpan(0, original.Length));
+            }
 
             byte[] hashBytes = hasher.GetHashAndReset();
             string restoredHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
