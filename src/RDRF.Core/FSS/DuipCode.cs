@@ -124,17 +124,18 @@ public static class DuipCode
         for (int i = 0; i < K; i++)
             known[i] = !isCorrupted[i];
 
-        int prev = -1;
+        int total = 0;
         while (true)
         {
-            int curr = DecodeInternal(allBlocks, known, allSymbolData, entropySamples,
+            int added = DecodeInternal(allBlocks, known, allSymbolData, entropySamples,
                 K, blockSize, faceSize, entropyBits);
-            if (curr <= prev || curr >= K) break;
-            prev = curr;
+            if (added <= 0) break;
+            total += added;
             for (int i = 0; i < K; i++)
                 if (known[i]) isCorrupted[i] = false;
+            if (total >= K) break;
         }
-        return prev;
+        return total;
     }
 
     private static int DecodeInternal(
