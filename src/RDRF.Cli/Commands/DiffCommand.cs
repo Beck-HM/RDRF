@@ -36,7 +36,7 @@ public class DiffCommand : Command
 
                 if (!indexFile.Exists)
             {
-                Console.Error.WriteLine($"Error: index file not found: {indexFile.FullName}");
+                AnsiConsole.MarkupLine($"[red]Error: index file not found: {indexFile.FullName.EscapeMarkup()}[/]");
                 return 1;
             }
 
@@ -45,21 +45,21 @@ public class DiffCommand : Command
             {
                 if (password.Length == 0)
                 {
-                    Console.Error.WriteLine("Error: password cannot be empty");
+                    AnsiConsole.MarkupLine("[red]Error: password cannot be empty[/]");
                     return 1;
                 }
 
                 var records = VersionedRestore.GetVersionHistory(indexFile.FullName, password);
                 if (records.Count == 0)
                 {
-                    Console.Error.WriteLine("Error: no version history found");
+                    AnsiConsole.MarkupLine("[red]Error: no version history found[/]");
                     return 1;
                 }
 
                 int maxV = records.Max(r => r.Version);
                 if (v1 < 0 || v1 > maxV || v2 < 0 || v2 > maxV)
                 {
-                    Console.Error.WriteLine($"Error: versions must be 0-{maxV}");
+                    AnsiConsole.MarkupLine($"[red]Error: versions must be 0-{maxV}[/]");
                     return 1;
                 }
 
@@ -69,7 +69,7 @@ public class DiffCommand : Command
                     if (outputFile != null)
                     {
                         File.WriteAllText(outputFile.FullName, msg);
-                        Console.WriteLine($"Written to {outputFile.FullName}");
+                        AnsiConsole.MarkupLine($"[green]Written to[/] {outputFile.FullName.EscapeMarkup()}");
                     }
                     else
                     {
@@ -96,7 +96,7 @@ public class DiffCommand : Command
                 }
 
                 // Full reconstruct mode
-                Console.Error.WriteLine("Full reconstruct mode not yet implemented. Use adjacent versions for stored diffs.");
+                AnsiConsole.MarkupLine("[yellow]Full reconstruct mode not yet implemented. Use adjacent versions for stored diffs.[/]");
                 return 1;
             }
             finally
@@ -120,7 +120,7 @@ public class DiffCommand : Command
             {
                 File.WriteAllText(outputFile.FullName, diffText);
             }
-            Console.WriteLine($"Written to {outputFile.FullName}");
+            AnsiConsole.MarkupLine($"[green]Written to[/] {outputFile.FullName.EscapeMarkup()}");
         }
         else
         {

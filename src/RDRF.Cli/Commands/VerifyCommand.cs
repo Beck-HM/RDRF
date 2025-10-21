@@ -4,6 +4,7 @@ using RDRF.Core.Dssa;
 using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
 using RDRF.Cli.Services;
+using Spectre.Console;
 using System.CommandLine;
 using System.Security.Cryptography;
 using System.Text;
@@ -27,7 +28,7 @@ public class VerifyCommand : Command
 
             if (!indexFile.Exists)
             {
-                Console.Error.WriteLine($"Error: index file not found: {indexFile.FullName}");
+                AnsiConsole.MarkupLine($"[red]Error: index file not found: {indexFile.FullName.EscapeMarkup()}[/]");
                 return 1;
             }
 
@@ -36,7 +37,7 @@ public class VerifyCommand : Command
             {
                 if (password.Length == 0)
                 {
-                    Console.Error.WriteLine("Error: password cannot be empty");
+                    AnsiConsole.MarkupLine("[red]Error: password cannot be empty[/]");
                     return 1;
                 }
                 byte[] encryptedIndex = await File.ReadAllBytesAsync(indexFile.FullName);
@@ -50,13 +51,13 @@ public class VerifyCommand : Command
                 }
                 catch
                 {
-                    Console.Error.WriteLine("Error: wrong password or corrupted index file");
+                    AnsiConsole.MarkupLine("[red]Error: wrong password or corrupted index file[/]");
                     return 1;
                 }
 
                 if (index.Fss6FragmentBlockMaps == null && index.Fss6RcBlockMap == null)
                 {
-                    Console.Error.WriteLine("Error: backup does not contain FSS6/ETN data ï¿?verification requires FSS6");
+                    AnsiConsole.MarkupLine("[red]Error: backup does not contain FSS6/ETN data â€” verification requires FSS6[/]");
                     return 1;
                 }
 
@@ -82,57 +83,68 @@ public class VerifyCommand : Command
             byte[] indexBytes = IndexManager.SerializeIndex(index);
             var result = Fss6Etn.CrossValidate(indexBytes, fragments, rcBytes);
 
-            Console.WriteLine($"Fingerprint: {index.FileFingerprint}");
-            Console.WriteLine($"Strategy:    {index.FssStrategy} + FSS6");
-            Console.WriteLine($"Fragments:   {fragments.Count}/{index.FragmentCount} available");
+            var infoTable = new Table();
+            infoTable.Border(TableBorder.Rounded);
+            infoTable.AddColumn("Property");
+            infoTable.AddColumn(new TableColumn("Value").NoWrap());
+            string fp = index.FileFingerprint;
+            infoTable.AddRow("Fingerprint", fp.Length > 32 ? $"{fp[..12]}...{fp[^8..]}" : fp);
+            infoTable.AddRow("Strategy", $"{index.FssStrategy} + FSS6");
+            infoTable.AddRow("Fragments", $"{fragments.Count}/{index.FragmentCount} available");
+            AnsiConsole.Write(infoTable);
+            AnsiConsole.WriteLine();
 
             if (result.IsValid)
             {
-                Console.WriteLine($"Status: VALID");
+                AnsiConsole.MarkupLine("[green]Status: VALID[/]");
                 return 0;
             }
 
-            Console.WriteLine($"Status: CORRUPTED");
+            AnsiConsole.MarkupLine("[red]Status: CORRUPTED[/]");
+            AnsiConsole.WriteLine();
 
-            if (result.IndexCorrupted)
-            {
-                string blocks = FormatBlockList(result.IndexCorruptedBlocks);
-                Console.WriteLine($"Index:  CORRUPTED ({result.IndexCorruptedBlocks.Count} blocks{blocks})");
-            }
-            else
-                Console.WriteLine($"Index:  OK");
+            var statusTable = new Table();
+            statusTable.Border(TableBorder.Rounded);
+            statusTable.AddColumn("Component");
+            statusTable.AddColumn("Status");
+            statusTable.AddColumn("Details");
 
-            if (result.RcCorrupted)
-            {
-                string blocks = FormatBlockList(result.RcCorruptedBlocks);
-                Console.WriteLine($"RC:     CORRUPTED ({result.RcCorruptedBlocks.Count} blocks{blocks})");
-            }
-            else
-                Console.WriteLine($"RC:     OK");
+            string idxStatus = result.IndexCorrupted
+                ? $"[red]CORRUPTED[/] ({result.IndexCorruptedBlocks.Count} blocks{FormatBlockList(result.IndexCorruptedBlocks)})"
+                : "[green]OK[/]";
+            statusTable.AddRow("Index", "", idxStatus);
+
+            string rcStatus = result.RcCorrupted
+                ? $"[red]CORRUPTED[/] ({result.RcCorruptedBlocks.Count} blocks{FormatBlockList(result.RcCorruptedBlocks)})"
+                : "[green]OK[/]";
+            statusTable.AddRow("RC", "", rcStatus);
 
             if (result.CorruptedFragments.Count > 0)
             {
-                Console.WriteLine($"Fragments corrupted: {result.CorruptedFragments.Count}/{fragments.Count}");
+                string fragDetail = $"[red]{result.CorruptedFragments.Count}/{fragments.Count}[/]";
                 foreach (int fi in result.CorruptedFragments.OrderBy(x => x))
                 {
                     var blocks = result.CorruptedFragmentBlocks.ContainsKey(fi)
                         ? result.CorruptedFragmentBlocks[fi]
                         : new List<int>();
-                    Console.WriteLine($"  Fragment {fi}: {blocks.Count} blocks {FormatBlockList(blocks)}");
+                    fragDetail += $"\n  Fragment {fi}: {blocks.Count} blocks {FormatBlockList(blocks)}";
                 }
+                statusTable.AddRow("Fragments", "", fragDetail);
             }
             else
-                Console.WriteLine($"Fragments: OK");
+                statusTable.AddRow("Fragments", "", "[green]OK[/]");
 
             if (result.CorruptedFragmentTrailers.Count > 0)
             {
                 string trailers = string.Join(",", result.CorruptedFragmentTrailers.OrderBy(x => x));
-                Console.WriteLine($"Trailers corrupted: fragments [{trailers}]");
+                statusTable.AddRow("Trailers", "", $"[red]corrupted: [{trailers.EscapeMarkup()}][/]");
             }
+
+            AnsiConsole.Write(statusTable);
 
             int suspicious = result.SuspiciousFragmentBlocks?.Values.Sum(v => v.Count) ?? 0;
             if (suspicious > 0)
-                Console.WriteLine($"Suspicious (false positives): {suspicious}");
+                AnsiConsole.MarkupLine($"[yellow]Suspicious (false positives): {suspicious}[/]");
 
             return 1;
             }

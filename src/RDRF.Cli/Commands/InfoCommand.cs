@@ -2,6 +2,7 @@ using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Cli.Services;
+using Spectre.Console;
 using System.CommandLine;
 using System.Security.Cryptography;
 using System.Text;
@@ -25,14 +26,14 @@ public class InfoCommand : Command
 
             if (!indexFile.Exists)
             {
-                Console.Error.WriteLine($"Error: index file not found: {indexFile.FullName}");
+                AnsiConsole.MarkupLine($"[red]Error: index file not found: {indexFile.FullName.EscapeMarkup()}[/]");
                 return 1;
             }
 
             byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
             if (password.Length == 0)
             {
-                Console.Error.WriteLine("Error: password cannot be empty");
+                AnsiConsole.MarkupLine("[red]Error: password cannot be empty[/]");
                 return 1;
             }
 
@@ -48,33 +49,40 @@ public class InfoCommand : Command
                 }
                 catch
                 {
-                    Console.Error.WriteLine("Error: wrong password or corrupted index file");
+                    AnsiConsole.MarkupLine("[red]Error: wrong password or corrupted index file[/]");
                     return 1;
                 }
 
                 string createdAt = DateTimeOffset.FromUnixTimeSeconds(index.CreatedAt)
                     .ToString("yyyy-MM-dd HH:mm:ss UTC");
 
-                Console.WriteLine($"Fingerprint: {index.FileFingerprint}");
-                Console.WriteLine($"File:        {index.OriginalName}");
-                Console.WriteLine($"Size:        {index.FileSize:N0} bytes");
-                Console.WriteLine($"Strategy:    {index.FssStrategy}");
-                Console.WriteLine($"Fragments:   {index.FragmentCount} (original: {index.OriginalFragmentCount})");
+                var table = new Table();
+                table.Border(TableBorder.Rounded);
+                table.AddColumn("Property");
+                table.AddColumn(new TableColumn("Value").NoWrap());
+                string fp = index.FileFingerprint;
+                table.AddRow("Fingerprint", fp.Length > 32 ? $"{fp[..12]}...{fp[^8..]}" : fp);
+                table.AddRow("File", index.OriginalName);
+                table.AddRow("Size", $"{index.FileSize:N0} bytes");
+                table.AddRow("Strategy", index.FssStrategy);
+                table.AddRow("Fragments", $"{index.FragmentCount} (original: {index.OriginalFragmentCount})");
 
                 string? fss6 = (index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null)
                     ? "with FSS6/ETN" : null;
-                Console.WriteLine($"ETN:         {(fss6 ?? "no")}");
+                table.AddRow("ETN", fss6 ?? "no");
 
-                Console.WriteLine($"Salt:        {index.Salt ?? "(none)"}");
-                Console.WriteLine($"Created:     {createdAt}");
+                table.AddRow("Salt", index.Salt ?? "(none)");
+                table.AddRow("Created", createdAt);
                 if (index.UpdatedAt.HasValue)
                 {
                     string updatedAt = DateTimeOffset.FromUnixTimeSeconds(index.UpdatedAt.Value)
                         .ToString("yyyy-MM-dd HH:mm:ss UTC");
-                    Console.WriteLine($"Updated:     {updatedAt}");
+                    table.AddRow("Updated", updatedAt);
                 }
                 if (index.CustomName != null)
-                    Console.WriteLine($"CustomName:  {index.CustomName}");
+                    table.AddRow("CustomName", index.CustomName);
+
+                AnsiConsole.Write(table);
                 return 0;
             }
             finally

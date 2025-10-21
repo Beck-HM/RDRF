@@ -1,7 +1,10 @@
 ﻿using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Core.Dssa;
+using Spectre.Console;
 using System.CommandLine;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace RDRF.Cli.Commands;
 
@@ -34,7 +37,7 @@ public class RemoveBackendCommand : Command
             if (node && !string.IsNullOrEmpty(name))
             {
                 ConfigManager.RemoveBackend(name);
-                Console.WriteLine("Backend '{0}' removed from rdrf_config.yaml", name);
+                AnsiConsole.MarkupLine($"[green]Backend '{name.EscapeMarkup()}' removed from rdrf_config.yaml[/]");
                 return 0;
             }
 
@@ -42,16 +45,16 @@ public class RemoveBackendCommand : Command
             {
                 if (indexFile == null)
                 {
-                    Console.Error.WriteLine("Usage: rdrf remove <indexFile> -clean");
+                    AnsiConsole.MarkupLine("[red]Usage: rdrf remove <indexFile> -clean[/]");
                     return 1;
                 }
                 if (!indexFile.Exists)
                 {
-                    Console.Error.WriteLine("Error: index file not found: {0}", indexFile.FullName);
+                    AnsiConsole.MarkupLine($"[red]Error: index file not found: {indexFile.FullName.EscapeMarkup()}[/]");
                     return 1;
                 }
-                byte[] password = pwd != null ? System.Text.Encoding.UTF8.GetBytes(pwd) : Services.PasswordProvider.ReadInteractive();
-                if (password.Length == 0) { Console.Error.WriteLine("Error: password cannot be empty"); return 1; }
+                byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : Services.PasswordProvider.ReadInteractive();
+                if (password.Length == 0) { AnsiConsole.MarkupLine("[red]Error: password cannot be empty[/]"); return 1; }
                 try
                 {
                     byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
@@ -60,50 +63,54 @@ public class RemoveBackendCommand : Command
                     string fingerprint = idx.FileFingerprint;
                     string dir = indexFile.DirectoryName!;
                     int deletedCount = 0;
-                    var rcFiles = Directory.GetFiles(dir, fingerprint + ".rdrc");
-                    foreach (var f in rcFiles)
+
+                    AnsiConsole.Status().Start("Cleaning local files...", ctx =>
                     {
-                        File.Delete(f);
-                        deletedCount++;
-                        Console.WriteLine("Deleted: {0}", Path.GetFileName(f));
-                    }
-                    var fragmentFiles = Directory.GetFiles(dir, fingerprint + "_*.rdrf");
-                    foreach (var f in fragmentFiles)
-                    {
-                        File.Delete(f);
-                        deletedCount++;
-                        Console.WriteLine("Deleted: {0}", Path.GetFileName(f));
-                    }
-                    Console.WriteLine("Cleanup complete: {0} local file(s) removed, index kept.", deletedCount);
+                        var rcFiles = Directory.GetFiles(dir, fingerprint + ".rdrc");
+                        foreach (var f in rcFiles)
+                        {
+                            File.Delete(f);
+                            deletedCount++;
+                            ctx.Status($"Deleting {Path.GetFileName(f)}...");
+                        }
+                        var fragmentFiles = Directory.GetFiles(dir, fingerprint + "_*.rdrf");
+                        foreach (var f in fragmentFiles)
+                        {
+                            File.Delete(f);
+                            deletedCount++;
+                            ctx.Status($"Deleting {Path.GetFileName(f)}...");
+                        }
+                    });
+
+                    AnsiConsole.MarkupLine($"[green]Cleanup complete:[/] {deletedCount} local file(s) removed, index kept.");
                     return 0;
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine("Error: {0}", ex.Message);
+                    AnsiConsole.MarkupLine($"[red]Error: {ex.Message.EscapeMarkup()}[/]");
                     return 1;
                 }
                 finally
                 {
                     if (password.Length > 0)
-                        System.Security.Cryptography.CryptographicOperations.ZeroMemory(password);
+                        CryptographicOperations.ZeroMemory(password);
                 }
             }
 
             if (indexFile == null || version <= 0)
             {
-                Console.Error.WriteLine("Usage:");
-                Console.Error.WriteLine("  rdrf remove -name <name> -node          (remove backend config)");
-                Console.Error.WriteLine("  rdrf remove <index> -v <version>        (purge remote version)");
-                Console.Error.WriteLine("  rdrf remove <index> -clean              (delete local fragments/RC)");
+                AnsiConsole.MarkupLine("[red]Usage: rdrf remove -name <name> -node          (remove backend config)[/]");
+                AnsiConsole.MarkupLine("[red]       rdrf remove <index> -v <version>        (purge remote version)[/]");
+                AnsiConsole.MarkupLine("[red]       rdrf remove <index> -clean              (delete local fragments/RC)[/]");
                 return 1;
             }
             if (!indexFile.Exists)
             {
-                Console.Error.WriteLine("Error: index file not found: {0}", indexFile.FullName);
+                AnsiConsole.MarkupLine($"[red]Error: index file not found: {indexFile.FullName.EscapeMarkup()}[/]");
                 return 1;
             }
-            byte[] password2 = pwd != null ? System.Text.Encoding.UTF8.GetBytes(pwd) : Services.PasswordProvider.ReadInteractive();
-            if (password2.Length == 0) { Console.Error.WriteLine("Error: password cannot be empty"); return 1; }
+            byte[] password2 = pwd != null ? Encoding.UTF8.GetBytes(pwd) : Services.PasswordProvider.ReadInteractive();
+            if (password2.Length == 0) { AnsiConsole.MarkupLine("[red]Error: password cannot be empty[/]"); return 1; }
             try
             {
                 byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
@@ -115,7 +122,7 @@ public class RemoveBackendCommand : Command
                 var records = mgmt.Lookup(fingerprint, version);
                 if (records.Count == 0)
                 {
-                    Console.WriteLine("No records found for version {0}.", version);
+                    AnsiConsole.MarkupLine($"[yellow]No records found for version {version}.[/]");
                     return 0;
                 }
                 var pluginsDir = Path.Combine(AppContext.BaseDirectory, "plugins");
@@ -142,23 +149,23 @@ public class RemoveBackendCommand : Command
                         }
                         catch (Exception ex)
                         {
-                            Console.Error.WriteLine("  Failed to delete from '{0}': {1}", rec.BackendName, ex.Message);
+                            AnsiConsole.MarkupLine($"[red]  Failed to delete from '{rec.BackendName.EscapeMarkup()}': {ex.Message.EscapeMarkup()}[/]");
                         }
                     }
                 }
                 mgmt.DeleteVersion(fingerprint, version);
-                Console.WriteLine("Version {0} deleted (SQLite + {1}/{2} remote files).", version, remoteDeleted, records.Count);
+                AnsiConsole.MarkupLine($"[green]Version {version} deleted[/] (SQLite + {remoteDeleted}/{records.Count} remote files).");
                 return 0;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine("Error: {0}", ex.Message);
+                AnsiConsole.MarkupLine($"[red]Error: {ex.Message.EscapeMarkup()}[/]");
                 return 1;
             }
             finally
             {
                 if (password2.Length > 0)
-                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(password2);
+                    CryptographicOperations.ZeroMemory(password2);
             }
         });
     }

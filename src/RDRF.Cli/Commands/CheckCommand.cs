@@ -24,7 +24,7 @@ public class CheckCommand : Command
 
             if (!indexFile.Exists)
             {
-                Console.Error.WriteLine($"Error: index file not found: {indexFile.FullName}");
+                AnsiConsole.MarkupLine($"[red]Error: index file not found: {indexFile.FullName.EscapeMarkup()}[/]");
                 return 1;
             }
 
@@ -33,14 +33,14 @@ public class CheckCommand : Command
             {
                 if (password.Length == 0)
                 {
-                    Console.Error.WriteLine("Error: password cannot be empty");
+                    AnsiConsole.MarkupLine("[red]Error: password cannot be empty[/]");
                     return 1;
                 }
 
                 var records = VersionedRestore.GetVersionHistory(indexFile.FullName, password);
                 if (records.Count == 0)
                 {
-                    Console.Error.WriteLine("Error: no version history found (wrong password or non-versioned backup)");
+                    AnsiConsole.MarkupLine("[red]Error: no version history found (wrong password or non-versioned backup)[/]");
                     return 1;
                 }
 
@@ -87,7 +87,7 @@ public class CheckCommand : Command
     private static void RenderTable(List<VersionRecord> records)
     {
         AnsiConsole.Write(new Rule("[bold yellow]RDRF Version History[/]") { Style = Style.Parse("dim") });
-        Console.WriteLine();
+        AnsiConsole.WriteLine();
 
         var table = new Table();
         table.Border(TableBorder.Rounded);
@@ -106,20 +106,20 @@ public class CheckCommand : Command
             table.AddRow($"v{r.Version}", date, r.UserMessage, changes, fileStr);
         }
         AnsiConsole.Write(table);
-        Console.WriteLine();
+        AnsiConsole.WriteLine();
     }
 
     private static void ShowVersionFiles(VersionRecord version)
     {
         AnsiConsole.Write(new Rule($"[bold]v{version.Version}: {version.UserMessage}[/]") { Style = Style.Parse("dim") });
-        Console.WriteLine();
+        AnsiConsole.WriteLine();
 
         var files = version.Files;
 
         if (files == null || files.Count == 0)
         {
             ShowDiffText(version.SystemDiff);
-            Console.WriteLine();
+            AnsiConsole.WriteLine();
             AnsiConsole.Markup("[dim]Press Enter to return...[/]");
             Console.ReadLine();
             return;
@@ -144,13 +144,13 @@ public class CheckCommand : Command
             fileGrid.AddRow(new Markup($"  [{color}]{glyph.EscapeMarkup()}[/] [white]{f.Path.EscapeMarkup()}[/]"));
         }
         AnsiConsole.Write(new Panel(fileGrid).Header("Changed files").BorderColor(Color.Grey));
-        Console.WriteLine();
-        Console.WriteLine();
+        AnsiConsole.WriteLine();
+        AnsiConsole.WriteLine();
 
         if (files.Count == 1)
         {
             ShowDiffText(files[0].Diff);
-            Console.WriteLine();
+            AnsiConsole.WriteLine();
             AnsiConsole.Markup("[dim]Press Enter to return...[/]");
             Console.ReadLine();
             return;
@@ -172,7 +172,7 @@ public class CheckCommand : Command
         int fileChoice = int.Parse(fileInput);
         var fe = files[fileChoice - 1];
         ShowDiffText(fe.Diff);
-        Console.WriteLine();
+        AnsiConsole.WriteLine();
         AnsiConsole.Markup("[dim]Press Enter to return...[/]");
         Console.ReadLine();
     }

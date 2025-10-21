@@ -231,8 +231,6 @@ public class RestoreOrchestrator : IDisposable
 
         if (!streamingPath)
         {
-            Debug.WriteLine("  Falling back to dictionary-based restore (recovery or missing fragments)");
-
             var decryptedFragments = await DownloadAndDecryptFragmentsAsync(
                 filePrefix, fragmentCount, fileFingerprint, progress, ct, index).ConfigureAwait(false);
 
@@ -288,23 +286,32 @@ public class RestoreOrchestrator : IDisposable
             }
 
             int origCount2 = originalCount ?? fragmentCount;
-            bool compressed = index.Compression == Constants.CompressionLz4;
-            if (compressed)
+            if (index.Compression == Constants.CompressionLz4)
             {
-                using var ms = new MemoryStream(1024 * 1024);
-                StripFssEncodingToStream(decryptedFragments, fssStrategy, originalSizes, origCount2, ms);
-                byte[] restored = ms.ToArray();
-                try
+                // FSS decode all fragments first (Strip handles full decode)
+                var strategy = _fss.GetStrategy(fssStrategy);
+                bool alreadyStripped = fssStrategy is Constants.FssLevel61 or Constants.FssLevel62;
+                var stripped = alreadyStripped
+                    ? decryptedFragments.OrderBy(k => k.Key).Select(k => k.Value).ToList()
+                    : strategy.Strip(decryptedFragments, origCount2, originalSizes);
+
+                // Strip padding + LZ4 decompress per fragment
+                var rawFragments = new List<byte[]>(stripped.Count);
+                for (int i = 0; i < stripped.Count; i++)
                 {
-                    byte[] decompressed = RDRF.Core.Compression.Compressor.Decompress(restored, index.Compression);
-                    File.WriteAllBytes(outputPath, decompressed);
+                    byte[] frag = stripped[i];
+                    int storedSize = (originalSizes != null && i < originalSizes.Count) ? originalSizes[i] : frag.Length;
+                    byte[] stored = frag.AsSpan(0, Math.Min(storedSize, frag.Length)).ToArray();
+                    byte[] decompressed = RDRF.Core.Compression.Compressor.IsLz4Frame(stored)
+                        ? RDRF.Core.Compression.Compressor.Decompress(stored, Constants.CompressionLz4)
+                        : stored;
+                    rawFragments.Add(decompressed);
                 }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"  Decompression failed: {ex.Message}");
-                    if (File.Exists(outputPath)) File.Delete(outputPath);
-                    return false;
-                }
+
+                using var ms = new MemoryStream(rawFragments.Sum(f => f.Length));
+                foreach (var frag in rawFragments)
+                    ms.Write(frag, 0, frag.Length);
+                File.WriteAllBytes(outputPath, ms.ToArray());
             }
             else
             {
@@ -393,7 +400,11 @@ public class RestoreOrchestrator : IDisposable
                             key = cachedKey;
                     }
 
-                    string fname = Frags.FragmentFilename(sourcePrefix, i);
+                    int sourceIdx = i;
+                    if (index?.Fragments?.Count > i && index.Fragments[i].SourceIndex.HasValue)
+                        sourceIdx = index.Fragments[i].SourceIndex.Value;
+
+                    string fname = Frags.FragmentFilename(sourcePrefix, sourceIdx);
                     byte[] encrypted = await _storage.ReadFragmentAsync(fname, ct2)
                         .ConfigureAwait(false);
                     byte[] raw = EncryptionLayer.DecryptAndStripFragment(encrypted, key);
@@ -580,11 +591,21 @@ public class RestoreOrchestrator : IDisposable
                     decrypted[i] = data;
                 }).ConfigureAwait(false);
 
-            // Phase 2: Serial write + hash
+            // Phase 2: Serial write + hash (per-fragment LZ4 decompress)
+            bool isLz4 = index.Compression == Constants.CompressionLz4;
             for (int i = 0; i < fragmentCount; i++)
             {
                 if (!decrypted.TryGetValue(i, out var data) || i >= origCount) continue;
                 byte[] original = strategy.StripSingle(data, i, index.OriginalFragmentSizes);
+                if (isLz4)
+                {
+                    int storedSize = (index.OriginalFragmentSizes != null && i < index.OriginalFragmentSizes.Count)
+                        ? index.OriginalFragmentSizes[i] : original.Length;
+                    byte[] stored = original.AsSpan(0, Math.Min(storedSize, original.Length)).ToArray();
+                    original = RDRF.Core.Compression.Compressor.IsLz4Frame(stored)
+                        ? RDRF.Core.Compression.Compressor.Decompress(stored, Constants.CompressionLz4)
+                        : stored;
+                }
                 output.Write(original, 0, original.Length);
                 hasher.AppendData(original.AsSpan(0, original.Length));
             }
