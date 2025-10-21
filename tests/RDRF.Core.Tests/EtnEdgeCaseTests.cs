@@ -54,6 +54,15 @@ public class EtnEdgeCaseTests
                 var (_, data, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fileBytes, aesKey);
                 // Strip ETN trailer from fragment data
                 var cleanData = Fss6Etn.ParseTrailer(data).RawData;
+                // Strip padding using OriginalFragmentSizes, then decompress per fragment
+                if (index.Compression == Constants.CompressionLz4)
+                {
+                    int storedSize = (index.OriginalFragmentSizes != null && i < index.OriginalFragmentSizes.Count)
+                        ? index.OriginalFragmentSizes[i] : cleanData.Length;
+                    byte[] stored = cleanData.AsSpan(0, Math.Min(storedSize, cleanData.Length)).ToArray();
+                    try { cleanData = Compression.Compressor.Decompress(stored, Constants.CompressionLz4); }
+                    catch { cleanData = stored; }
+                }
                 decrypted.Add(cleanData);
             }
 
@@ -61,9 +70,7 @@ public class EtnEdgeCaseTests
             FragmentEngine.Frags.MergeFragments(decrypted, tmpMergePath);
             byte[] restored = File.ReadAllBytes(tmpMergePath);
             try { File.Delete(tmpMergePath); } catch { }
-            if (index.Compression == Constants.CompressionLz4)
-                restored = Compression.Compressor.Decompress(restored, index.Compression);
-            else if (restored.Length > index.FileSize)
+            if (restored.Length > index.FileSize)
                 Array.Resize(ref restored, (int)index.FileSize);
             byte[] originalHash = SHA256.HashData(File.ReadAllBytes(EtnTestHelpers.TestFile));
             byte[] restoredHash = SHA256.HashData(restored);

@@ -13,6 +13,18 @@ public static class Compressor
         "1f8b08", "52617221", "377abcaf271c", "494433", "664c6143", "4d546864",
     };
 
+    public static bool IsLz4Frame(byte[] data)
+    {
+        return data.Length >= 4 && data[0] == 0x04 && data[1] == 0x22 && data[2] == 0x4D && data[3] == 0x18;
+    }
+
+    public static byte[] AlwaysCompress(byte[] data)
+    {
+        var writer = new ArrayBufferWriter<byte>();
+        LZ4Frame.Encode(data.AsSpan(), writer, LZ4Level.L00_FAST, 0);
+        return writer.WrittenSpan.ToArray();
+    }
+
     public static byte[] Compress(byte[] data, string? method)
     {
         if (method != Constants.CompressionLz4) return data;

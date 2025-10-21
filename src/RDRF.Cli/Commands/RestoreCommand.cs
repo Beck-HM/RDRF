@@ -3,6 +3,7 @@ using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Core.Dssa;
 using RDRF.Cli.Services;
+using Spectre.Console;
 using System.CommandLine;
 using System.Security.Cryptography;
 using System.Text;
@@ -32,19 +33,19 @@ public class RestoreCommand : Command
 
             if (!indexFile.Exists)
             {
-                Console.Error.WriteLine($"Error: index file not found: {indexFile.FullName}");
+                AnsiConsole.MarkupLine($"[red]Error: index file not found: {indexFile.FullName.EscapeMarkup()}[/]");
                 return 1;
             }
             if (output == null)
             {
-                Console.Error.WriteLine("Error: -o <outputPath> is required");
+                AnsiConsole.MarkupLine("[red]Error: -o <outputPath> is required[/]");
                 return 1;
             }
 
             byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
             if (password.Length == 0)
             {
-                Console.Error.WriteLine("Error: password cannot be empty");
+                AnsiConsole.MarkupLine("[red]Error: password cannot be empty[/]");
                 return 1;
             }
 
@@ -84,30 +85,34 @@ public class RestoreCommand : Command
                 var vr = index.Versions?.FirstOrDefault(v => v.Version == targetVersion)
                     ?? throw new InvalidOperationException($"Version {targetVersion} not found in index history");
                 prefix = index.CustomName ?? vr.FileFingerprint;
-                success = await engine.RestoreFileFromFragmentsAsync(prefix, outputPath);
+                success = await AnsiConsole.Status()
+                    .StartAsync($"Restoring v{targetVersion}...", async _ =>
+                        await engine.RestoreFileFromFragmentsAsync(prefix, outputPath));
             }
             else
             {
                 prefix = index.CustomName ?? index.FileFingerprint;
-                success = await engine.RestoreFileAsync(index.FileFingerprint, outputPath, filePrefix: prefix);
+                success = await AnsiConsole.Status()
+                    .StartAsync("Restoring latest version...", async _ =>
+                        await engine.RestoreFileAsync(index.FileFingerprint, outputPath, filePrefix: prefix));
             }
 
             if (success)
             {
-                Console.WriteLine($"Restored to: {outputPath}");
+                AnsiConsole.MarkupLine($"[green]Restored to:[/] {outputPath.EscapeMarkup()}");
                 return 0;
             }
-            Console.Error.WriteLine("Error: restore failed (data may be corrupted)");
+            AnsiConsole.MarkupLine("[red]Error: restore failed (data may be corrupted)[/]");
             return 1;
         }
         catch (CryptographicException)
         {
-            Console.Error.WriteLine("Error: wrong password or corrupt index file");
+            AnsiConsole.MarkupLine("[red]Error: wrong password or corrupt index file[/]");
             return 1;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error: {ex.Message}");
+            AnsiConsole.MarkupLine($"[red]Error: {ex.Message.EscapeMarkup()}[/]");
             return 1;
         }
     }

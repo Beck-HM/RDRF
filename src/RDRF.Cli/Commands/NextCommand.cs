@@ -16,7 +16,7 @@ public class NextCommand : Command
     public NextCommand() : base("next", "Create an incremental versioned backup")
     {
         var sourceArg = new Argument<FileInfo>("source") { Description = "New or modified file path" };
-        var messageOpt = new Option<string>("-m") { Description = "Commit message describing the change" };
+        var messageOpt = new Option<string>("-m") { Description = "Commit message describing the change (required)" };
         var storageOpt = new Option<DirectoryInfo?>("-o") { Description = "Storage directory (default: ./backup/)" };
         var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (INSECURE: visible in process list; omit for secure prompt)" };
 
@@ -34,19 +34,19 @@ public class NextCommand : Command
 
             if (!source.Exists)
             {
-                Console.Error.WriteLine($"Error: file not found: {source.FullName}");
+                AnsiConsole.MarkupLine($"[red]Error: file not found: {source.FullName.EscapeMarkup()}[/]");
                 return 1;
             }
             if (string.IsNullOrEmpty(msg))
             {
-                Console.Error.WriteLine("Error: -m <commit message> is required");
+                AnsiConsole.MarkupLine("[red]Error: -m <commit message> is required[/]");
                 return 1;
             }
 
             byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
             if (password.Length == 0)
             {
-                Console.Error.WriteLine("Error: password cannot be empty");
+                AnsiConsole.MarkupLine("[red]Error: password cannot be empty[/]");
                 return 1;
             }
 
@@ -56,13 +56,13 @@ public class NextCommand : Command
             var dir = new DirectoryInfo(storagePath);
             if (!dir.Exists)
             {
-                Console.Error.WriteLine($"Error: storage directory not found: {storagePath}");
+                AnsiConsole.MarkupLine($"[red]Error: storage directory not found: {storagePath.EscapeMarkup()}[/]");
                 return 1;
             }
             var indexFiles = dir.GetFiles("*.indrdrf");
             if (indexFiles.Length == 0)
             {
-                Console.Error.WriteLine("Error: no backup found in storage directory. Use 'backup' command first.");
+                AnsiConsole.MarkupLine("[red]Error: no backup found in storage directory. Use 'backup' command first.[/]");
                 return 1;
             }
             var indexFile = indexFiles[0];
@@ -77,7 +77,7 @@ public class NextCommand : Command
 
             if ((oldIndex.VersionNumber ?? 0) == 0)
             {
-                Console.Error.WriteLine("Error: backup is not versioned. Use 'backup' for first backup, then 'next' for increments.");
+                AnsiConsole.MarkupLine("[red]Error: backup is not versioned. Use 'backup' for first backup, then 'next' for increments.[/]");
                 return 1;
             }
 
@@ -105,9 +105,10 @@ public class NextCommand : Command
             var table = new Table();
             table.Border(TableBorder.Rounded);
             table.AddColumn("Property");
-            table.AddColumn("Value");
+            table.AddColumn(new TableColumn("Value").NoWrap());
             table.AddRow("Version", $"v{(newIndex.VersionNumber ?? 0)}");
-            table.AddRow("Fingerprint", newFp);
+            string fp = newFp;
+            table.AddRow("Fingerprint", fp.Length > 32 ? $"{fp[..12]}...{fp[^8..]}" : fp);
             table.AddRow("Message", msg);
             table.AddRow("Strategy", newIndex.FssStrategy);
             AnsiConsole.Write(table);

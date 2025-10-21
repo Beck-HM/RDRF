@@ -17,7 +17,8 @@ public static class VersionedRestore
         var storage = new LocalDssaAdapter(storageDir);
         string fingerprint = Path.GetFileNameWithoutExtension(indexFilePath);
 
-        byte[] aesKey = EncryptionLayer.DeriveKeyLegacy(password);
+        byte[] encryptedIndex = File.ReadAllBytes(indexFilePath);
+        (byte[] aesKey, _) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
         using var restore = new RestoreOrchestrator(aesKey, password, storage);
         return restore.RestoreFile(fingerprint, outputPath, allowFssRecovery, progress: progress);
     }

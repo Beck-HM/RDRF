@@ -83,6 +83,7 @@ public static class IndexManager
         WriteField(writer, "version_number", index.VersionNumber);
         WriteVersions(writer, index.Versions);
         WriteFragments(writer, index.Fragments);
+        WriteDedupMap(writer, index.DedupMap);
         WriteRepairData(writer, "fss61_repair_b", index.Fss61RepairB);
         WriteRepairData(writer, "fss61_repair_c", index.Fss61RepairC);
         WriteFss62RepairData(writer, "fss62_repair_b", index.Fss62RepairB);
@@ -127,6 +128,7 @@ public static class IndexManager
                 case "version_number":               index.VersionNumber = reader.ReadInt32(); break;
                 case "versions":                     index.Versions = ReadVersions(reader); break;
                 case "fragments":                   index.Fragments = ReadFragments(reader); break;
+                case "dedup_map":                   index.DedupMap = ReadDedupMap(reader); break;
                 case "fss61_repair_b":              index.Fss61RepairB = ReadRepairData(reader); break;
                 case "fss61_repair_c":              index.Fss61RepairC = ReadRepairData(reader); break;
                 case "fss62_repair_b":              index.Fss62RepairB = ReadFss62RepairData(reader); break;
@@ -259,9 +261,53 @@ public static class IndexManager
 
             if (f.Filename != null) { w.WriteTextString("filename"); w.WriteTextString(f.Filename); }
             if (f.SourceVersion != null) { w.WriteTextString("source_version"); w.WriteTextString(f.SourceVersion); }
+            if (f.SourceIndex.HasValue) { w.WriteTextString("source_index"); w.WriteInt32(f.SourceIndex.Value); }
             w.WriteEndMap();
         }
         w.WriteEndArray();
+    }
+
+    private static void WriteDedupMap(CborWriter w, Dictionary<string, DedupEntry>? map)
+    {
+        if (map == null || map.Count == 0) return;
+        w.WriteTextString("dedup_map");
+        w.WriteStartMap(null);
+        foreach (var kvp in map)
+        {
+            w.WriteTextString(kvp.Key);
+            w.WriteStartMap(null);
+            w.WriteTextString("fp");   w.WriteTextString(kvp.Value.SourceFingerprint);
+            w.WriteTextString("idx");  w.WriteInt32(kvp.Value.SourceIndex);
+            w.WriteTextString("rc");   w.WriteInt32(kvp.Value.RefCount);
+            w.WriteEndMap();
+        }
+        w.WriteEndMap();
+    }
+
+    private static Dictionary<string, DedupEntry>? ReadDedupMap(CborReader r)
+    {
+        var map = new Dictionary<string, DedupEntry>();
+        r.ReadStartMap();
+        while (r.PeekState() != CborReaderState.EndMap)
+        {
+            string key = r.ReadTextString();
+            var entry = new DedupEntry();
+            r.ReadStartMap();
+            while (r.PeekState() != CborReaderState.EndMap)
+            {
+                switch (r.ReadTextString())
+                {
+                    case "fp":  entry.SourceFingerprint = r.ReadTextString(); break;
+                    case "idx": entry.SourceIndex = r.ReadInt32(); break;
+                    case "rc":  entry.RefCount = r.ReadInt32(); break;
+                    default:    r.SkipValue(); break;
+                }
+            }
+            r.ReadEndMap();
+            map[key] = entry;
+        }
+        r.ReadEndMap();
+        return map;
     }
 
     private static void WriteStringList(CborWriter w, List<string> list)
@@ -389,6 +435,7 @@ public static class IndexManager
                     case "nonce":    r.SkipValue(); break;
                     case "filename": f.Filename = r.ReadTextString(); break;
                     case "source_version": f.SourceVersion = r.ReadTextString(); break;
+                    case "source_index":  f.SourceIndex = r.ReadInt32(); break;
                     default:         r.SkipValue(); break;
                 }
             }
@@ -591,6 +638,7 @@ public class RdrfIndex
     public int? VersionNumber { get; set; }
     public List<Versioning.VersionRecord>? Versions { get; set; }
     public List<FragmentInfo>? Fragments { get; set; }
+    public Dictionary<string, DedupEntry>? DedupMap { get; set; }
     public FSS.Fss61RepairData? Fss61RepairB { get; set; }
     public FSS.Fss61RepairData? Fss61RepairC { get; set; }
     public FSS.Fss62RepairData? Fss62RepairB { get; set; }
@@ -604,4 +652,12 @@ public class FragmentInfo
     public string Hash { get; set; } = string.Empty;
     public string? Filename { get; set; }
     public string? SourceVersion { get; set; }
+    public int? SourceIndex { get; set; }
+}
+
+public class DedupEntry
+{
+    public string SourceFingerprint { get; set; } = string.Empty;
+    public int SourceIndex { get; set; }
+    public int RefCount { get; set; }
 }

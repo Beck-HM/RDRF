@@ -334,9 +334,13 @@ internal static class RepairRunner
     {
         return RebuildCore(fragments, rb.BlockSize, rb.BlockCount, cvResult,
             (kv) => Fss62RepairTrailer.Parse(kv).Item1,
-            (blocks, isBad, total) => DuipCode.Decode(blocks, isBad,
-                rb.Data, rb.EntropySamples, total, rb.BlockSize,
-                DuipCode.DefaultFaceSize, DuipCode.DefaultEntropyBits) > 0);
+            (blocks, isBad, total) => DuipCode.EnableMultiPass
+                ? DuipCode.DecodeMultiPass(blocks, isBad,
+                    rb.Data, rb.EntropySamples, total, rb.BlockSize,
+                    DuipCode.DefaultFaceSize, DuipCode.DefaultEntropyBits) > 0
+                : DuipCode.Decode(blocks, isBad,
+                    rb.Data, rb.EntropySamples, total, rb.BlockSize,
+                    DuipCode.DefaultFaceSize, DuipCode.DefaultEntropyBits) > 0);
     }
 
     private static bool RebuildCore(Dictionary<int, byte[]> fragments,

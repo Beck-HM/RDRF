@@ -130,65 +130,54 @@ public class BackupOrchestrator : IDisposable
 
         var plan = _fsa.Compute(fssStrategy, auxiliaryStrategies);
 
-        // Phase 1: Stream-read, hash incrementally, LZ4-frame compress
-        byte[] compressedData;
+        // Phase 1: Read file → split raw → hash(original data) → LZ4 per block → pad
+        byte[] fileBytes = await File.ReadAllBytesAsync(filePath, cancellationToken).ConfigureAwait(false);
         using (var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
         {
-            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536);
-            using var compressedStream = new MemoryStream((int)fs.Length);
-            var desc = K4os.Compression.LZ4.Streams.Extensions.CreateDescriptor(
-                new K4os.Compression.LZ4.Streams.LZ4EncoderSettings());
-            var encFactory = (K4os.Compression.LZ4.Streams.ILZ4Descriptor d)
-                => K4os.Compression.LZ4.Streams.Extensions.CreateEncoder(
-                    d, K4os.Compression.LZ4.LZ4Level.L00_FAST, 0);
-            using (var enc = new K4os.Compression.LZ4.Streams.LZ4EncoderStream(
-                compressedStream, desc, encFactory, leaveOpen: false))
-            {
-                byte[] buf = ArrayPool<byte>.Shared.Rent(65536);
-                try
-                {
-                    int read;
-                    while ((read = await fs.ReadAsync(buf.AsMemory(0, buf.Length), cancellationToken)
-                        .ConfigureAwait(false)) > 0)
-                    {
-                        hasher.AppendData(buf.AsSpan(0, read));
-                        enc.Write(buf, 0, read);
-                    }
-                }
-                finally { ArrayPool<byte>.Shared.Return(buf); }
-            }
-            compressedData = compressedStream.ToArray();
+            hasher.AppendData(fileBytes);
             fileFingerprint = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
+            long totalRead = 0;
+            long nextReport = 0;
+            foreach (var chunk in fileBytes.Chunk(65536))
+            {
+                totalRead += chunk.Length;
+                if (totalRead >= nextReport)
+                {
+                    progress?.Report(new RdrfProgressReport { Stage = "Read", CurrentBytes = totalRead, TotalBytes = fileSize });
+                    nextReport = totalRead + Math.Max(65536, fileSize / 100);
+                }
+            }
         }
         originalHash = fileFingerprint;
-        bool dataCompressed = true; // always store in LZ4 frame format
-        int dataLenForOverPad = compressedData.Length;
 
-        // Pad compressed data to fragSize boundary so all fragments have equal data size
-        // (required by FSS1 neighbor XOR which assumes uniform fragment sizes)
-        int paddedLen = ((dataLenForOverPad + fragSize - 1) / fragSize) * fragSize;
-        if (paddedLen != compressedData.Length)
+        var rawFragments = new List<byte[]>();
+        var originalFragments = new List<byte[]>();    // LZ4 + padded
+        var originalFragmentSizes = new List<int>();    // stored size before padding
+
+        for (int off = 0; off < fileBytes.Length; off += fragSize)
         {
-            byte[] padded = new byte[paddedLen];
-            Buffer.BlockCopy(compressedData, 0, padded, 0, compressedData.Length);
-            compressedData = padded;
+            int len = Math.Min(fragSize, fileBytes.Length - off);
+            byte[] raw = new byte[len];
+            Buffer.BlockCopy(fileBytes, off, raw, 0, len);
+            rawFragments.Add(raw);
+
+            byte[] compressed = Compressor.AlwaysCompress(raw);
+            // Only keep LZ4 if it shrinks; otherwise store raw
+            byte[] stored = compressed.Length < raw.Length ? compressed : raw;
+            originalFragmentSizes.Add(stored.Length);
+
+            byte[] padded = new byte[fragSize];
+            Buffer.BlockCopy(stored, 0, padded, 0, Math.Min(stored.Length, fragSize));
+            originalFragments.Add(padded);
         }
 
-        var originalFragments = new List<byte[]>();
-        for (int off = 0; off < compressedData.Length; off += fragSize)
-        {
-            byte[] frag = new byte[fragSize];
-            Buffer.BlockCopy(compressedData, off, frag, 0, fragSize);
-            originalFragments.Add(frag);
-        }
+        int originalFragmentCount = rawFragments.Count;
+        var rawHashes = rawFragments.Select(f => XxHash128.Hash(f.AsSpan())).ToList();
 
-        int originalFragmentCount = originalFragments.Count;
-        var originalFragmentSizes = originalFragments.Select(f => f.Length).ToList();
-        int overPad = paddedLen - dataLenForOverPad;
-        if (overPad > 0 && originalFragmentSizes.Count > 0)
-            originalFragmentSizes[^1] = fragSize - overPad;
+        progress?.Report(new RdrfProgressReport { Stage = "Read", CurrentBytes = fileSize, TotalBytes = fileSize,
+            CurrentItem = originalFragmentCount, TotalItems = originalFragmentCount });
 
-        Debug.WriteLine($"  Step 1: Read {fileSize:N0} bytes, compressed to {compressedData.Length}, split into {originalFragmentCount} fragments");
+        Debug.WriteLine($"  Phase 1: Read {fileSize:N0} bytes, {originalFragmentCount} raw fragments, each LZ4→padded to {fragSize}");
 
         // Phase 2: FSS encode all fragments
         var fragments = new List<byte[]>(originalFragments);
@@ -205,6 +194,8 @@ public class BackupOrchestrator : IDisposable
                 Debug.WriteLine($"  Step 2: ETN inject: {fragments.Count} fragments");
             }
         }
+
+        progress?.Report(new RdrfProgressReport { Stage = "Encode", CurrentItem = fragments.Count, TotalItems = fragments.Count });
 
         string filePrefix = customName ?? fileFingerprint;
 
@@ -234,13 +225,9 @@ public class BackupOrchestrator : IDisposable
             embeddedIndex.CustomName = customName;
         if (_salt.Length > 0)
             embeddedIndex.Salt = Convert.ToHexString(_salt).ToLowerInvariant();
-        if (dataCompressed)
-            embeddedIndex.Compression = compressionMethod;
+        embeddedIndex.Compression = compressionMethod;
 
-        // Compute raw fragment XxHash128 for incremental comparison (before FSS encoding)
-        var rawHashes = new List<byte[]>(originalFragments.Count);
-        foreach (var frag in originalFragments)
-            rawHashes.Add(XxHash128.Hash(frag.AsSpan()));
+        // RawFragmentHashes = XxHash128 of UNCOMPRESSED data (content-addressable dedup key)
         embeddedIndex.RawFragmentHashes = rawHashes;
 
         byte[] serializedIndex = IndexManager.SerializeIndex(embeddedIndex);
@@ -326,6 +313,8 @@ public class BackupOrchestrator : IDisposable
             string fname = Frags.FragmentFilename(filePrefix, i);
             writeBatch.Add((fname, fileData));
             fragments[i] = null!;
+
+            progress?.Report(new RdrfProgressReport { Stage = "Write", CurrentItem = i + 1, TotalItems = fragments.Count });
 
             if (writeBatch.Count >= BatchSize)
             {

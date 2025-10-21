@@ -20,6 +20,7 @@ public class BackupCommand : Command
         var nameOpt = new Option<string?>("-name") { Description = "Custom name for the backup (optional)" };
         var nextOpt = new Option<bool>("-next", "--next") { Description = "Enable versioning (creates v1, supports 'rdrf next' for increments)" };
         var nodeOpt = new Option<bool>("-node", "--node") { Description = "Versioned backup with API distribution flag (use with rdrf remote + push)" };
+        var messageOpt = new Option<string?>("-m") { Description = "Commit message for the initial version (used with -next or -node)" };
         var fss1 = new Option<bool>("-fss1", new[] { "--fss1" }) { Description = "FSS1 strategy - single-dash for primary, double-dash for auxiliary" };
         var fss2 = new Option<bool>("-fss2", new[] { "--fss2" }) { Description = "FSS2 strategy - single-dash for primary, double-dash for auxiliary" };
         var fss2r = new Option<bool>("-fss2r", new[] { "--fss2r" }) { Description = "FSS2R strategy - single-dash for primary, double-dash for auxiliary" };
@@ -27,6 +28,7 @@ public class BackupCommand : Command
         var fss5 = new Option<bool>("-fss5", new[] { "--fss5" }) { Description = "FSS5 strategy - single-dash for primary, double-dash for auxiliary" };
         var fss5p = new Option<bool>("-fss5+", new[] { "--fss5+" }) { Description = "FSS5+ strategy - single-dash for primary, double-dash for auxiliary" };
         var fss61 = new Option<bool>("-fss6.1", new[] { "--fss6.1" }) { Description = "FSS6.1 strategy - ETN + LT fountain code repair" };
+        var fss62 = new Option<bool>("-fss6.2", new[] { "--fss6.2" }) { Description = "FSS6.2 strategy - ETN + Duip fountain code repair" };
         var fsaOpt = new Option<bool>("-fsa") { Description = "Enable multi-strategy FSA fusion mode (used with multiple --fss options)" };
 
         Arguments.Add(sourceArg);
@@ -34,8 +36,9 @@ public class BackupCommand : Command
         Options.Add(passwordOpt);
         Options.Add(sizeOpt);
         Options.Add(nameOpt);
+        Options.Add(messageOpt);
         Add(fss1); Add(fss2); Add(fss2r);
-        Add(fss3); Add(fss5); Add(fss5p); Add(fss61);
+        Add(fss3); Add(fss5); Add(fss5p); Add(fss61); Add(fss62);
         Add(fsaOpt); Add(nextOpt); Add(nodeOpt);
 
         SetAction(async (ParseResult parseResult) =>
@@ -47,6 +50,7 @@ public class BackupCommand : Command
             var customName = parseResult.GetValue(nameOpt);
             bool enableNext = parseResult.GetValue(nextOpt);
             bool enableNode = parseResult.GetValue(nodeOpt);
+            var commitMsg = parseResult.GetValue(messageOpt);
             bool fsaMode = parseResult.GetValue(fsaOpt);
 
             var flags = new[]
@@ -58,12 +62,13 @@ public class BackupCommand : Command
                 (parseResult.GetValue(fss5), Constants.FssLevel5),
                 (parseResult.GetValue(fss5p), Constants.FssLevel5P),
                 (parseResult.GetValue(fss61), Constants.FssLevel61),
+                (parseResult.GetValue(fss62), Constants.FssLevel62),
             };
             var selected = flags.Where(x => x.Item1).Select(x => x.Item2).ToList();
 
             if (selected.Count < 1)
             {
-                Console.Error.WriteLine("Error: at least one -fss<level> option is required");
+                AnsiConsole.MarkupLine("[red]Error: at least one -fss<level> option is required[/]");
                 return 1;
             }
 
@@ -80,7 +85,7 @@ public class BackupCommand : Command
             {
                 if (selected.Count != 1)
                 {
-                    Console.Error.WriteLine("Error: single-strategy mode requires exactly one -fss<level> (use -fsa for multi-strategy)");
+                    AnsiConsole.MarkupLine("[red]Error: single-strategy mode requires exactly one -fss<level> (use -fsa for multi-strategy)[/]");
                     return 1;
                 }
                 strategy = selected[0];
@@ -88,7 +93,7 @@ public class BackupCommand : Command
             byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
             if (password.Length == 0)
             {
-                Console.Error.WriteLine("Error: password cannot be empty");
+                AnsiConsole.MarkupLine("[red]Error: password cannot be empty[/]");
                 return 1;
             }
 
@@ -101,7 +106,7 @@ public class BackupCommand : Command
             {
                 if (source is not FileInfo)
                 {
-                    Console.Error.WriteLine("Error: -next and -node are only supported for single-file backups");
+                    AnsiConsole.MarkupLine("[red]Error: -next and -node are only supported for single-file backups[/]");
                     return 1;
                 }
 
@@ -111,12 +116,17 @@ public class BackupCommand : Command
                 await ProgressReporter.Run($"Backing up {nf.Name}", async prog =>
                 {
                     fp = await VersionedBackup.BackupAsync(nf.FullName, new LocalDssaAdapter(storagePath), password,
-                        "Initial backup", strategy, fragmentSize, customName, auxiliary, prog);
+                        commitMsg ?? "Initial backup", strategy, fragmentSize, customName, auxiliary, prog);
                 });
-                Console.WriteLine($"Fingerprint: {fp}");
-                Console.WriteLine($"Strategy: {strategy} ({mode})");
+                var resultTable = new Table();
+                resultTable.Border(TableBorder.Rounded);
+                resultTable.AddColumn("Property");
+                resultTable.AddColumn(new TableColumn("Value").NoWrap());
+                resultTable.AddRow("Fingerprint", fp.Length > 32 ? $"{fp[..12]}...{fp[^8..]}" : fp);
+                resultTable.AddRow("Strategy", $"{strategy} ({mode})");
                 if (enableNode)
-                    Console.WriteLine($"Use 'rdrf remote {fp}.indrdrf -add <backends>' to register backends");
+                    resultTable.AddRow("Remote", $"rdrf remote {fp}.indrdrf -add <backends>");
+                AnsiConsole.Write(resultTable);
                 return 0;
             }
 
@@ -162,9 +172,15 @@ public class BackupCommand : Command
                         });
                 }
 
-                Console.WriteLine($"Fingerprint: {firstFp}");
-                Console.WriteLine($"Strategy: {strategy}");
-                if (count > 1) Console.WriteLine($"Backed up {count} files");
+                var resultTable = new Table();
+                resultTable.Border(TableBorder.Rounded);
+                resultTable.AddColumn("Property");
+                resultTable.AddColumn(new TableColumn("Value").NoWrap());
+                string fp = firstFp ?? "";
+                resultTable.AddRow("Fingerprint", fp.Length > 32 ? $"{fp[..12]}...{fp[^8..]}" : fp);
+                resultTable.AddRow("Strategy", strategy);
+                if (count > 1) resultTable.AddRow("Files", count.ToString());
+                AnsiConsole.Write(resultTable);
             }
 
             return 0;

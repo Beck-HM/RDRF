@@ -149,6 +149,53 @@ public class IndexManagerTests
     }
 
     [Fact]
+    public void SerializeDeserialize_DedupMap()
+    {
+        var idx = MakeIndex();
+        idx.DedupMap = new Dictionary<string, DedupEntry>
+        {
+            ["abc"] = new DedupEntry { SourceFingerprint = "fp1", SourceIndex = 0, RefCount = 2 },
+            ["def"] = new DedupEntry { SourceFingerprint = "fp2", SourceIndex = 1, RefCount = 1 },
+        };
+        byte[] cbor = IndexManager.SerializeIndex(idx);
+        var idx2 = IndexManager.DeserializeIndex(cbor);
+
+        Assert.NotNull(idx2.DedupMap);
+        Assert.Equal(2, idx2.DedupMap.Count);
+        Assert.Equal("fp1", idx2.DedupMap["abc"].SourceFingerprint);
+        Assert.Equal(0, idx2.DedupMap["abc"].SourceIndex);
+        Assert.Equal(2, idx2.DedupMap["abc"].RefCount);
+        Assert.Equal("fp2", idx2.DedupMap["def"].SourceFingerprint);
+        Assert.Equal(1, idx2.DedupMap["def"].SourceIndex);
+        Assert.Equal(1, idx2.DedupMap["def"].RefCount);
+    }
+
+    [Fact]
+    public void SerializeDeserialize_SourceIndex()
+    {
+        var idx = MakeIndex();
+        Assert.NotNull(idx.Fragments);
+        idx.Fragments[0].SourceVersion = "fp_other";
+        idx.Fragments[0].SourceIndex = 3;
+        byte[] cbor = IndexManager.SerializeIndex(idx);
+        var idx2 = IndexManager.DeserializeIndex(cbor);
+
+        Assert.NotNull(idx2.Fragments);
+        Assert.Equal("fp_other", idx2.Fragments[0].SourceVersion);
+        Assert.Equal(3, idx2.Fragments[0].SourceIndex);
+    }
+
+    [Fact]
+    public void SerializeDeserialize_EmptyDedupMap_NotSerialized()
+    {
+        var idx = MakeIndex();
+        idx.DedupMap = new Dictionary<string, DedupEntry>();
+        byte[] cbor = IndexManager.SerializeIndex(idx);
+        var idx2 = IndexManager.DeserializeIndex(cbor);
+        Assert.Null(idx2.DedupMap);
+    }
+
+    [Fact]
     public void GetFragmentInfo_ByIndex()
     {
         var idx = MakeIndex();

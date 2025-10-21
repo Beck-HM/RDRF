@@ -19,11 +19,15 @@ int fragSize = 256 * 1024;
 string[] strategies = { "FSS6.1", "FSS6.2" };
 double[] ratios = { 0.5, 1.0, 2.0 };
 
-// Parse -r flag
+// Parse flags
 for (int ai = 0; ai < args.Length; ai++)
+{
     if ((args[ai] == "-r" || args[ai] == "--ratio") && ai + 1 < args.Length)
         ratios = args[++ai].Split(',', StringSplitOptions.TrimEntries)
             .Select(double.Parse).ToArray();
+    if (args[ai] == "-m")
+        DuipCode.EnableMultiPass = true;
+}
 
 foreach (double ratio in ratios)
 {
@@ -167,7 +171,7 @@ foreach (double ratio in ratios)
             bool recovered;
             try
             {
-                using (var r = new RestoreOrchestrator(rcMaster, trialStorage))
+                using (var r = new RestoreOrchestrator(aesKey, rcMaster, trialStorage))
                     recovered = r.RestoreFileAsync(fingerprint, outPath).GetAwaiter().GetResult();
             }
             catch (Exception ex)

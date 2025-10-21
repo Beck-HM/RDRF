@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.IO.Hashing;
 using System.Security.Cryptography;
+using RDRF.Core.Compression;
 using RDRF.Core.Diff;
 using RDRF.Core.Encryption;
 using RDRF.Core.FragmentEngine;
@@ -37,11 +38,18 @@ public static class VersionedBackup
         {
             string dir = local.GetBasePath();
             if (!Directory.Exists(dir)) return null;
+            string? newest = null;
+            DateTime newestTime = DateTime.MinValue;
             foreach (string f in Directory.GetFiles(dir, "*" + Constants.IndexFileSuffix))
             {
-                string name = Path.GetFileName(f);
-                return name[..^Constants.IndexFileSuffix.Length];
+                DateTime ft = File.GetLastWriteTimeUtc(f);
+                if (ft > newestTime)
+                {
+                    newestTime = ft;
+                    newest = Path.GetFileName(f);
+                }
             }
+            return newest?[..^Constants.IndexFileSuffix.Length];
         }
         return null;
     }
@@ -63,6 +71,8 @@ public static class VersionedBackup
         return fingerprint;
     }
 
+    private static string HashKey(byte[] hash) => Convert.ToHexString(hash).ToLowerInvariant();
+
 private static async Task<string> IncrementalBackupAsync(
     string filePath, DssaAdapter storage, string prevFingerprint,
     byte[] password, string userMessage, string fssStrategy,
@@ -77,15 +87,19 @@ private static async Task<string> IncrementalBackupAsync(
     int prevVersion = 0;
     List<VersionRecord>? oldVersions = null;
     List<byte[]>? prevRawHashes = null;
+    RdrfIndex? prevIdx = null;
     try
     {
         (_, byte[] prevCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(prevIndexBytes, password);
-        var prevIdx = IndexManager.DeserializeIndex(prevCbor);
+        prevIdx = IndexManager.DeserializeIndex(prevCbor);
         prevVersion = prevIdx.VersionNumber ?? 0;
         oldVersions = prevIdx.Versions;
         prevRawHashes = prevIdx.RawFragmentHashes;
     }
     catch { throw new CryptographicException("Failed to decrypt previous index. Wrong password or corrupted backup."); }
+
+    // Load existing dedup map from previous index
+    var dedupMap = prevIdx?.DedupMap ?? new Dictionary<string, DedupEntry>();
 
     byte[] salt = new byte[Constants.SaltPrefixLength];
     Buffer.BlockCopy(prevIndexBytes, 0, salt, 0, Constants.SaltPrefixLength);
@@ -102,10 +116,9 @@ private static async Task<string> IncrementalBackupAsync(
         fileFingerprint = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
     }
 
-    // Same fingerprint 鈫?file unchanged 鈫?just update commit message
+    // Same fingerprint -> file unchanged -> just update commit message
     if (prevRawHashes != null && fileFingerprint == prevFingerprint)
     {
-        var newIndex = new RdrfIndex { FileFingerprint = fileFingerprint };
         AppendVersionRecord(storage, prevFingerprint, password, salt, prevVersion, userMessage, string.Empty, oldVersions);
         return prevFingerprint;
     }
@@ -126,34 +139,40 @@ private static async Task<string> IncrementalBackupAsync(
         }
     };
 
-    // Compress data before splitting into fragments
-    byte[] compressedData = RDRF.Core.Compression.Compressor.Compress(newData, Constants.CompressionLz4);
-    bool dataCompressed = compressedData.Length < newData.Length;
-
-    // Split compressed data into raw fragments
+    // Split raw (uncompressed) data into fragments, hash for dedup
     var rawFragments = new List<byte[]>();
-    for (int off = 0; off < compressedData.Length; off += fragSize)
+    for (int off = 0; off < newData.Length; off += fragSize)
     {
-        int len = Math.Min(fragSize, compressedData.Length - off);
+        int len = Math.Min(fragSize, newData.Length - off);
         byte[] frag = new byte[len];
-        Buffer.BlockCopy(compressedData, off, frag, 0, len);
+        Buffer.BlockCopy(newData, off, frag, 0, len);
         rawFragments.Add(frag);
     }
 
-    // Compute raw fragment hashes (on compressed data)
+    // Compute raw fragment hashes (on UNCOMPRESSED data) and query dedup map
     var newRawHashes = new List<byte[]>(rawFragments.Count);
-    foreach (var frag in rawFragments)
-        newRawHashes.Add(System.IO.Hashing.XxHash128.Hash(frag.AsSpan()));
-
-    // Determine which raw fragments changed
+    var sourceVersion = new string?[rawFragments.Count];
+    var sourceIndex = new int?[rawFragments.Count];
     bool[] changedFlags = new bool[rawFragments.Count];
     bool anyChanged = false;
+
     for (int i = 0; i < rawFragments.Count; i++)
     {
-        bool changed = prevRawHashes == null || i >= prevRawHashes.Count ||
-            !newRawHashes[i].AsSpan().SequenceEqual(prevRawHashes[i]);
-        changedFlags[i] = changed;
-        if (changed) anyChanged = true;
+        byte[] hash = XxHash128.Hash(rawFragments[i].AsSpan());
+        newRawHashes.Add(hash);
+        string key = HashKey(hash);
+        if (dedupMap.TryGetValue(key, out var entry))
+        {
+            sourceVersion[i] = entry.SourceFingerprint;
+            sourceIndex[i] = entry.SourceIndex;
+            entry.RefCount++;
+            changedFlags[i] = false;
+        }
+        else
+        {
+            changedFlags[i] = true;
+            anyChanged = true;
+        }
     }
 
     if (!anyChanged)
@@ -163,8 +182,17 @@ private static async Task<string> IncrementalBackupAsync(
         return prevFingerprint;
     }
 
-    // For 1:1 strategies (FSS1, FSS6.1), only process changed raw fragments
-    bool isOneToOne = fssStrategy == Constants.FssLevel1 || fssStrategy == Constants.FssLevel61;
+    // Build set of old hash keys for refCount cleanup
+    var oldHashKeys = new HashSet<string>();
+    if (prevRawHashes != null)
+        foreach (var h in prevRawHashes)
+            oldHashKeys.Add(HashKey(h));
+    var newHashKeys = new HashSet<string>(newRawHashes.Select(HashKey));
+
+    // For 1:1 strategies (FSS1, FSS6.1, FSS6.2), only process changed raw fragments
+    bool isOneToOne = fssStrategy == Constants.FssLevel1
+        || fssStrategy == Constants.FssLevel61
+        || fssStrategy == Constants.FssLevel62;
 
     if (isOneToOne)
     {
@@ -174,28 +202,95 @@ private static async Task<string> IncrementalBackupAsync(
 
         using var orchestrator = new BackupOrchestrator((byte[])password.Clone(), storage, (byte[])salt.Clone());
 
-        // Select only changed raw fragments for processing
+        // LZ4 compress raw fragments → keep only if smaller → pad → pass to BuildChangedFragmentsIndex
+        var compressedFrags = new List<byte[]>();
+        var originalSizes = new List<int>();
+        foreach (var raw in rawFragments)
+        {
+            byte[] compressed = Compressor.AlwaysCompress(raw);
+            byte[] stored = compressed.Length < raw.Length ? compressed : raw;
+            originalSizes.Add(stored.Length);
+            byte[] padded = new byte[fragSize > 0 ? fragSize : 1024 * 1024];
+            Buffer.BlockCopy(stored, 0, padded, 0, Math.Min(stored.Length, padded.Length));
+            compressedFrags.Add(padded);
+        }
+
+        // Select only changed compressed fragments
         var changedRaw = new List<byte[]>();
         var changedIdxMap = new List<int>();
-        for (int i = 0; i < rawFragments.Count; i++)
+        for (int i = 0; i < compressedFrags.Count; i++)
         {
             if (changedFlags[i])
             {
-                changedRaw.Add(rawFragments[i]);
+                changedRaw.Add(compressedFrags[i]);
                 changedIdxMap.Add(i);
             }
         }
 
-        // Build the full index with all raw fragment hashes
+        // Update dedup map: add entries for NEW fragments
+        for (int i = 0; i < rawFragments.Count; i++)
+        {
+            if (changedFlags[i])
+            {
+                string key = HashKey(newRawHashes[i]);
+                dedupMap[key] = new DedupEntry
+                {
+                    SourceFingerprint = actualFingerprint,
+                    SourceIndex = i,
+                    RefCount = 1,
+                };
+            }
+        }
+
+        // Decrement refCount for old hashes no longer present (never delete prev version's files)
+        foreach (string oldKey in oldHashKeys)
+        {
+            if (!newHashKeys.Contains(oldKey) && dedupMap.TryGetValue(oldKey, out var entry))
+            {
+                // Don't delete fragments owned by the version we're replacing — still needed by its index
+                if (entry.SourceFingerprint == prevFingerprint) continue;
+                entry.RefCount--;
+                if (entry.RefCount <= 0)
+                {
+                    string oldPrefix = entry.SourceFingerprint;
+                    string fragName = Frags.FragmentFilename(oldPrefix, entry.SourceIndex);
+                    try { storage.DeleteFragment(fragName); } catch { Debug.WriteLine($"Failed to delete {fragName}"); }
+                    dedupMap.Remove(oldKey);
+                }
+            }
+        }
+
+        // Build the full index (FSS-encodes compressed+padded fragments)
         orchestrator.BuildChangedFragmentsIndex(
-            rawFragments, changedRaw, changedIdxMap, changedFlags,
+            compressedFrags, changedRaw, changedIdxMap, changedFlags,
             actualFingerprint, fileFingerprint, Path.GetFileName(filePath),
             newData.Length, fssStrategy, fragmentSize, customName, prevFingerprint,
             prevRawHashes, progress, ct,
-            compressionMethod: dataCompressed ? Constants.CompressionLz4 : null)
+            compressionMethod: Constants.CompressionLz4)
             .GetAwaiter().GetResult();
 
-        CleanupOldFragments(storage, prevFingerprint);
+        // Patch index with correct RawFragmentHashes + OriginalFragmentSizes + SourceVersion
+        byte[] newEncIdx = storage.ReadIndex(actualFingerprint);
+        (_, byte[] newCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(newEncIdx, password);
+        var newIdx = IndexManager.DeserializeIndex(newCbor);
+        newIdx.RawFragmentHashes = newRawHashes;
+        newIdx.OriginalFragmentSizes = originalSizes;
+        if (newIdx.Fragments != null)
+        {
+            for (int i = 0; i < newIdx.Fragments.Count && i < rawFragments.Count; i++)
+            {
+                if (sourceVersion[i] != null)
+                {
+                    newIdx.Fragments[i].SourceVersion = sourceVersion[i];
+                    newIdx.Fragments[i].SourceIndex = sourceIndex[i];
+                }
+            }
+        }
+        newIdx.DedupMap = dedupMap;
+        byte[] updatedCbor = IndexManager.SerializeIndex(newIdx);
+        byte[] updatedIndex = EncryptionLayer.EncryptIndexWithSaltPrefix(updatedCbor, password, salt);
+        storage.WriteIndex(actualFingerprint, updatedIndex);
+
         AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage,
             diffResult.HumanDiff, oldVersions, fileEntries);
         return actualFingerprint;
@@ -211,42 +306,74 @@ private static async Task<string> IncrementalBackupAsync(
                 progress, ct).ConfigureAwait(false);
         }
 
-        CleanupOldFragments(storage, prevFingerprint);
-        DedupPostProcessing(storage, actualFingerprint, password, prevFingerprint, prevRawHashes, newRawHashes);
+        // Apply dedup: mark unchanged fragments as references
+        byte[] encIdx = storage.ReadIndex(actualFingerprint);
+        (_, byte[] idxCbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encIdx, password);
+        var index = IndexManager.DeserializeIndex(idxCbor);
+        string prefix = index.CustomName ?? actualFingerprint;
+
+        for (int i = 0; i < newRawHashes.Count && i < index.Fragments?.Count; i++)
+        {
+            string key = HashKey(newRawHashes[i]);
+            if (dedupMap.TryGetValue(key, out var entry))
+            {
+                index.Fragments[i].SourceVersion = entry.SourceFingerprint;
+                index.Fragments[i].SourceIndex = entry.SourceIndex;
+                entry.RefCount++;
+                string fragName = Frags.FragmentFilename(prefix, i);
+                try { storage.DeleteFragment(fragName); } catch { }
+            }
+            else
+            {
+                dedupMap[key] = new DedupEntry
+                {
+                    SourceFingerprint = actualFingerprint,
+                    SourceIndex = i,
+                    RefCount = 1,
+                };
+            }
+        }
+
+        // Decrement refCount for old hashes no longer present (never delete prev version's files)
+        foreach (string oldKey in oldHashKeys)
+        {
+            if (!newHashKeys.Contains(oldKey) && dedupMap.TryGetValue(oldKey, out var entry))
+            {
+                if (entry.SourceFingerprint == prevFingerprint) continue;
+                entry.RefCount--;
+                if (entry.RefCount <= 0)
+                {
+                    string oldPrefix = entry.SourceFingerprint;
+                    string fragName = Frags.FragmentFilename(oldPrefix, entry.SourceIndex);
+                    try { storage.DeleteFragment(fragName); } catch { }
+                    dedupMap.Remove(oldKey);
+                }
+            }
+        }
+
+        index.DedupMap = dedupMap;
+        byte[] finalCbor = IndexManager.SerializeIndex(index);
+        byte[] finalIndex = EncryptionLayer.EncryptIndexWithSaltPrefix(finalCbor, password, salt);
+        storage.WriteIndex(actualFingerprint, finalIndex);
+
         AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage,
             diffResult.HumanDiff, oldVersions, fileEntries);
         return actualFingerprint;
     }
 }
 
-private static void DedupPostProcessing(DssaAdapter storage, string actualFingerprint,
-    byte[] password, string prevFingerprint,
-    List<byte[]>? prevRawHashes, List<byte[]>? newRawHashes)
-{
-    if (prevRawHashes == null || newRawHashes == null) return;
-
-    byte[] encryptedIndex = storage.ReadIndex(actualFingerprint);
-    (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
-    var index = IndexManager.DeserializeIndex(cbor);
-    string prefix = index.CustomName ?? actualFingerprint;
-
-    byte[] salt = new byte[Constants.SaltPrefixLength];
-    Buffer.BlockCopy(encryptedIndex, 0, salt, 0, Constants.SaltPrefixLength);
-
-    for (int i = 0; i < newRawHashes.Count && i < prevRawHashes.Count && i < index.Fragments?.Count; i++)
+    private static void CleanupOldFragments(DssaAdapter storage, string fingerprint)
     {
-        if (newRawHashes[i].AsSpan().SequenceEqual(prevRawHashes[i]))
+        try
         {
-            index.Fragments[i].SourceVersion = prevFingerprint;
-            string fragName = FragmentEngine.Frags.FragmentFilename(prefix, i);
-            try { storage.DeleteFragment(fragName); } catch (Exception ex) { Debug.WriteLine($"Failed to delete old fragment '{fragName}': {ex.Message}"); }
+            storage.DeleteFragment(fingerprint + Constants.IndexFileSuffix);
+            storage.DeleteFragment(fingerprint + Constants.RcFileSuffix);
+            foreach (string fragFile in storage.ListFragments())
+                if (fragFile.StartsWith(fingerprint + "_", StringComparison.OrdinalIgnoreCase))
+                    storage.DeleteFragment(fragFile);
         }
+        catch (Exception ex) { Debug.WriteLine($"Fragment cleanup failed: {ex.Message}"); }
     }
-
-    byte[] updatedCbor = IndexManager.SerializeIndex(index);
-    byte[] updatedIndex = EncryptionLayer.EncryptIndexWithSaltPrefix(updatedCbor, password, salt);
-    storage.WriteIndex(actualFingerprint, updatedIndex);
-}
 
     private static byte[] ReadDecryptedOriginal(DssaAdapter storage, string fingerprint,
         byte[] password, long sampleSize = 0)
@@ -259,7 +386,6 @@ private static void DedupPostProcessing(DssaAdapter storage, string actualFinger
         int fragCount = index.FragmentCount;
         int origCount = index.OriginalFragmentCount > 0 ? index.OriginalFragmentCount : fragCount;
 
-        // Determine how many fragments to read (partial read for sampling)
         int fragsToRead = fragCount;
         if (sampleSize > 0)
         {
@@ -269,7 +395,6 @@ private static void DedupPostProcessing(DssaAdapter storage, string actualFinger
                 total += index.OriginalFragmentSizes[i];
                 if (total >= sampleSize) { fragsToRead = i + 1; break; }
             }
-            // FSS1 concatenation: encoded[i] = data[i] + data[(i+1)], need +1 for neighbor
             if (fragsToRead < fragCount)
                 fragsToRead = Math.Min(fragCount, fragsToRead + 1);
         }
@@ -277,7 +402,15 @@ private static void DedupPostProcessing(DssaAdapter storage, string actualFinger
         var rawFragments = new List<byte[]>(fragsToRead);
         for (int i = 0; i < fragsToRead; i++)
         {
-            string fragName = FragmentEngine.Frags.FragmentFilename(prefix, i);
+            string svFp = fingerprint;
+            int svIdx = i;
+            if (index.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
+            {
+                svFp = index.Fragments[i].SourceVersion;
+                svIdx = index.Fragments[i].SourceIndex ?? i;
+            }
+            string svPrefix = index.CustomName ?? svFp;
+            string fragName = FragmentEngine.Frags.FragmentFilename(svPrefix, svIdx);
             byte[] encrypted = storage.ReadFragment(fragName);
             byte[] raw = EncryptionLayer.DecryptAndStripFragment(encrypted, aesKey);
             rawFragments.Add(raw);
@@ -289,7 +422,24 @@ private static void DedupPostProcessing(DssaAdapter storage, string actualFinger
             decoded[i] = rawFragments[i];
 
         var stripped = fssEngine.Strip(decoded, index.FssStrategy, origCount, index.OriginalFragmentSizes);
-        byte[] result = FragmentEngine.Frags.MergeFragments(stripped);
+
+        byte[] result;
+        if (index.Compression == Constants.CompressionLz4)
+        {
+            for (int i = 0; i < stripped.Count; i++)
+            {
+                byte[] frag = stripped[i];
+                int storedSize = (index.OriginalFragmentSizes != null && i < index.OriginalFragmentSizes.Count)
+                    ? index.OriginalFragmentSizes[i] : frag.Length;
+                byte[] stored = frag.AsSpan(0, Math.Min(storedSize, frag.Length)).ToArray();
+                stripped[i] = Compressor.IsLz4Frame(stored)
+                    ? Compressor.Decompress(stored, Constants.CompressionLz4)
+                    : stored;
+            }
+            result = FragmentEngine.Frags.MergeFragments(stripped);
+        }
+        else
+            result = FragmentEngine.Frags.MergeFragments(stripped);
 
         if (sampleSize > 0 && result.Length > sampleSize)
             return result.AsSpan(0, (int)sampleSize).ToArray();
@@ -330,18 +480,4 @@ private static void DedupPostProcessing(DssaAdapter storage, string actualFinger
         byte[] saltedIndex = EncryptionLayer.EncryptIndexWithSaltPrefix(newCbor, password, salt);
         storage.WriteIndex(fingerprint, saltedIndex);
     }
-
-    private static void CleanupOldFragments(DssaAdapter storage, string fingerprint)
-    {
-        try
-        {
-            storage.DeleteFragment(fingerprint + Constants.IndexFileSuffix);
-            storage.DeleteFragment(fingerprint + Constants.RcFileSuffix);
-            foreach (string fragFile in storage.ListFragments())
-                if (fragFile.StartsWith(fingerprint + "_", StringComparison.OrdinalIgnoreCase))
-                    storage.DeleteFragment(fragFile);
-        }
-        catch (Exception ex) { Debug.WriteLine($"Fragment cleanup failed: {ex.Message}"); }
-    }
 }
-

@@ -4,6 +4,7 @@ using RDRF.Core.Dssa;
 using RDRF.Core.Encryption;
 using RDRF.Core.Integrity;
 using RDRF.Cli.Services;
+using Spectre.Console;
 using System.CommandLine;
 using System.Security.Cryptography;
 using System.Text;
@@ -27,7 +28,7 @@ public class StatusCommand : Command
 
             if (!indexFile.Exists)
             {
-                Console.Error.WriteLine($"Error: index file not found: {indexFile.FullName}");
+                AnsiConsole.MarkupLine($"[red]Error: index file not found: {indexFile.FullName.EscapeMarkup()}[/]");
                 return 1;
             }
 
@@ -36,7 +37,7 @@ public class StatusCommand : Command
             {
                 if (password.Length == 0)
                 {
-                    Console.Error.WriteLine("Error: password cannot be empty");
+                    AnsiConsole.MarkupLine("[red]Error: password cannot be empty[/]");
                     return 1;
                 }
                 byte[] encryptedIndex = await File.ReadAllBytesAsync(indexFile.FullName);
@@ -50,7 +51,7 @@ public class StatusCommand : Command
                 }
                 catch
                 {
-                    Console.Error.WriteLine("Error: wrong password or corrupted index file");
+                    AnsiConsole.MarkupLine("[red]Error: wrong password or corrupted index file[/]");
                     return 1;
                 }
 
@@ -73,15 +74,27 @@ public class StatusCommand : Command
 
             bool hasEtn = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
 
-            Console.WriteLine();
-            Console.WriteLine($"Fingerprint:  {index.FileFingerprint}");
-            Console.WriteLine($"File:         {index.OriginalName}");
-            Console.WriteLine($"Strategy:     {index.FssStrategy}{(hasEtn ? " + FSS6" : "")}");
-            Console.WriteLine();
-            Console.WriteLine("Backup Infrastructure:");
-            Console.WriteLine($"  Index:       {(indexOk ? "OK" : "MISSING")}");
-            Console.WriteLine($"  RC:          {(rcOk ? "OK" : (storage.RcExists(lookupKey) ? "CORRUPTED" : "MISSING"))}");
-            Console.WriteLine();
+            var infoTable = new Table();
+            infoTable.Border(TableBorder.Rounded);
+            infoTable.AddColumn("Property");
+            infoTable.AddColumn(new TableColumn("Value").NoWrap());
+            string fp = index.FileFingerprint;
+            infoTable.AddRow("Fingerprint", fp.Length > 32 ? $"{fp[..12]}...{fp[^8..]}" : fp);
+            infoTable.AddRow("File", index.OriginalName);
+            infoTable.AddRow("Strategy", index.FssStrategy + (hasEtn ? " + FSS6" : ""));
+            AnsiConsole.Write(infoTable);
+            AnsiConsole.WriteLine();
+
+            var infraTable = new Table();
+            infraTable.Border(TableBorder.Rounded);
+            infraTable.AddColumn("Component");
+            infraTable.AddColumn("Status");
+            string indexStatus = indexOk ? "[green]OK[/]" : "[yellow]MISSING[/]";
+            string rcStatus = rcOk ? "[green]OK[/]" : (storage.RcExists(lookupKey) ? "[yellow]ENCRYPTED[/]" : "[yellow]MISSING[/]");
+            infraTable.AddRow("Index", indexStatus);
+            infraTable.AddRow("RC", rcStatus);
+            AnsiConsole.Write(new Panel(infraTable).Header("Backup Infrastructure").BorderColor(Color.Grey));
+            AnsiConsole.WriteLine();
 
             int ok = 0, corrupted = 0, missing = 0;
             var rows = new List<(int idx, string status, string size, string hash)>();
@@ -91,7 +104,7 @@ public class StatusCommand : Command
                 string fname = RDRF.Core.FragmentEngine.Frags.FragmentFilename(prefix, i);
                 if (!storage.FragmentExists(fname))
                 {
-                    rows.Add((i, "MISSING", "-", "-"));
+                    rows.Add((i, "[yellow]MISSING[/]", "-", "-"));
                     missing++;
                     continue;
                 }
@@ -104,6 +117,10 @@ public class StatusCommand : Command
                     if (hasEtn)
                     {
                         decrypted = RDRF.Core.ETN.EtnTrailer.Parse(decrypted).RawData;
+                        if (index.Fss61RepairB != null)
+                            decrypted = RDRF.Core.FSS.Fss61RepairTrailer.Parse(decrypted).data;
+                        if (index.Fss62RepairB != null)
+                            decrypted = RDRF.Core.FSS.Fss62RepairTrailer.Parse(decrypted).data;
                     }
 
                     string actualHash = IntegrityChecker.HashBytes(decrypted);
@@ -115,30 +132,37 @@ public class StatusCommand : Command
 
                     if (match)
                     {
-                        rows.Add((i, "OK", sizeStr, "\u2705"));
+                        rows.Add((i, "[green]OK[/]", sizeStr, "\u2705"));
                         ok++;
                     }
                     else
                     {
-                        rows.Add((i, "CORRUPTED", sizeStr, "\u274C"));
+                        rows.Add((i, hasEtn ? "[yellow]ENCRYPTED[/]" : "[red]CORRUPTED[/]", sizeStr, "\u274C"));
                         corrupted++;
                     }
                 }
                 catch
                 {
-                    rows.Add((i, "CORRUPTED", "-", "-"));
+                    rows.Add((i, "[yellow]ENCRYPTED[/]", "-", "-"));
                     corrupted++;
                 }
             }
 
-            Console.WriteLine($"Fragment Status ({index.FragmentCount} expected):");
-            Console.WriteLine($"  #  Status      Size       Hash");
-            Console.WriteLine($" -- ---------- ---------- ----------");
+            var fragmentTable = new Table();
+            fragmentTable.Border(TableBorder.Rounded);
+            fragmentTable.AddColumn(new TableColumn("#").RightAligned());
+            fragmentTable.AddColumn("Status");
+            fragmentTable.AddColumn("Size");
+            fragmentTable.AddColumn("Hash");
             foreach (var r in rows)
-                Console.WriteLine($"  {r.idx,-2} {r.status,-10} {r.size,-10} {r.hash}");
+                fragmentTable.AddRow(r.idx.ToString(), r.status, r.size, r.hash);
+            AnsiConsole.Write(new Panel(fragmentTable).Header($"Fragment Status ({index.FragmentCount} expected)").BorderColor(Color.Grey));
+            AnsiConsole.WriteLine();
 
-            Console.WriteLine();
-            Console.WriteLine($"Summary: {ok}/{index.FragmentCount} OK, {corrupted} CORRUPTED, {missing} MISSING");
+            string summary = ok == index.FragmentCount
+                ? $"[green]{ok}/{index.FragmentCount} OK[/]"
+                : $"[green]{ok} OK[/], [red]{corrupted} CORRUPTED[/], [yellow]{missing} MISSING[/]";
+            AnsiConsole.MarkupLine($"Summary: {summary}");
             return missing > 0 || corrupted > 0 ? 1 : 0;
             }
             finally
