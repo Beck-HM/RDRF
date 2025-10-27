@@ -286,10 +286,18 @@ private static async Task<string> IncrementalBackupAsync(
                 }
             }
         }
+        // DedupMap GC: remove entries no longer referenced by any version
+        var gcKeys = dedupMap.Where(kv => kv.Value.RefCount <= 0
+            && kv.Value.SourceFingerprint != actualFingerprint
+            && kv.Value.SourceFingerprint != prevFingerprint).Select(kv => kv.Key).ToList();
+        foreach (var k in gcKeys) dedupMap.Remove(k);
+
         newIdx.DedupMap = dedupMap;
         byte[] updatedCbor = IndexManager.SerializeIndex(newIdx);
         byte[] updatedIndex = EncryptionLayer.EncryptIndexWithSaltPrefix(updatedCbor, password, salt);
         storage.WriteIndex(actualFingerprint, updatedIndex);
+
+        CleanupOrphanedIndexes(storage, actualFingerprint, prevFingerprint, dedupMap);
 
         AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage,
             diffResult.HumanDiff, oldVersions, fileEntries);
@@ -351,16 +359,44 @@ private static async Task<string> IncrementalBackupAsync(
             }
         }
 
+        // DedupMap GC: remove entries no longer referenced by any version
+        var gcKeys = dedupMap.Where(kv => kv.Value.RefCount <= 0
+            && kv.Value.SourceFingerprint != actualFingerprint
+            && kv.Value.SourceFingerprint != prevFingerprint).Select(kv => kv.Key).ToList();
+        foreach (var k in gcKeys) dedupMap.Remove(k);
+
         index.DedupMap = dedupMap;
         byte[] finalCbor = IndexManager.SerializeIndex(index);
         byte[] finalIndex = EncryptionLayer.EncryptIndexWithSaltPrefix(finalCbor, password, salt);
         storage.WriteIndex(actualFingerprint, finalIndex);
+
+        CleanupOrphanedIndexes(storage, actualFingerprint, prevFingerprint, dedupMap);
 
         AppendVersionRecord(storage, actualFingerprint, password, salt, prevVersion, userMessage,
             diffResult.HumanDiff, oldVersions, fileEntries);
         return actualFingerprint;
     }
 }
+
+    private static void CleanupOrphanedIndexes(DssaAdapter storage, string currentFp, string prevFp, Dictionary<string, DedupEntry> dedupMap)
+    {
+        if (storage is not LocalDssaAdapter local) return;
+        string dir = local.GetBasePath();
+        if (!Directory.Exists(dir)) return;
+
+        var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { currentFp, prevFp };
+        foreach (var entry in dedupMap.Values)
+            referenced.Add(entry.SourceFingerprint);
+
+        foreach (string f in Directory.GetFiles(dir, "*" + Constants.IndexFileSuffix))
+        {
+            string fp = Path.GetFileNameWithoutExtension(f);
+            if (!referenced.Contains(fp))
+            {
+                try { File.Delete(f); } catch { }
+            }
+        }
+    }
 
     private static void CleanupOldFragments(DssaAdapter storage, string fingerprint)
     {

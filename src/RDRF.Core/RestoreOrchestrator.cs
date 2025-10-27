@@ -560,17 +560,39 @@ public class RestoreOrchestrator : IDisposable
         int fragmentCount = index.FragmentCount;
         int origCount = index.OriginalFragmentCount > 0 ? index.OriginalFragmentCount : fragmentCount;
 
-        // FSS1/FSS2 rearrange data across fragments - streaming per-fragment StripSingle isn't possible
-        if (index.FssStrategy is Constants.FssLevel1 or Constants.FssLevel2)
-            return false;
-
+        // Check all fragments exist (accounting for SourceVersion references)
         for (int i = 0; i < fragmentCount; i++)
-            if (!_storage.FragmentExists(Frags.FragmentFilename(filePrefix, i)))
+        {
+            string svFp = filePrefix;
+            int svIdx = i;
+            if (index.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
+            {
+                svFp = index.Fragments[i].SourceVersion;
+                svIdx = index.Fragments[i].SourceIndex ?? i;
+            }
+            if (!_storage.FragmentExists(Frags.FragmentFilename(svFp, svIdx)))
                 return false;
+        }
 
         var strategy = _fss.GetStrategy(index.FssStrategy);
         bool hasEtn = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
         var etn = hasEtn ? (Fss6Etn)_fss.GetStrategy(Constants.FssLevel6) : null;
+
+        // Pre-read SourceVersion index keys
+        var sourceKeys = new Dictionary<string, byte[]>();
+        if (index.Fragments != null)
+        {
+            for (int i = 0; i < fragmentCount && i < index.Fragments.Count; i++)
+            {
+                string? sv = index.Fragments[i].SourceVersion;
+                if (sv != null && !sourceKeys.ContainsKey(sv))
+                {
+                    byte[] srcIdx = await _storage.ReadIndexAsync(sv, ct).ConfigureAwait(false);
+                    byte[] salt = srcIdx.AsSpan(0, Constants.SaltPrefixLength).ToArray();
+                    sourceKeys[sv] = EncryptionLayer.DeriveKey(_rcCode, salt);
+                }
+            }
+        }
 
         try
         {
@@ -583,9 +605,19 @@ public class RestoreOrchestrator : IDisposable
                 new ParallelOptions { MaxDegreeOfParallelism = Constants.DefaultParallelism, CancellationToken = ct },
                 async (i, ct2) =>
                 {
+                    string svFp = filePrefix;
+                    int svIdx = i;
+                    byte[] key = _aesKey;
+                    if (index.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
+                    {
+                        svFp = index.Fragments[i].SourceVersion;
+                        svIdx = index.Fragments[i].SourceIndex ?? i;
+                        if (sourceKeys.TryGetValue(svFp, out var cachedKey))
+                            key = cachedKey;
+                    }
                     byte[] encrypted = await _storage.ReadFragmentAsync(
-                        Frags.FragmentFilename(filePrefix, i), ct2).ConfigureAwait(false);
-                    byte[] data = EncryptionLayer.DecryptAndStripFragment(encrypted, _aesKey);
+                        Frags.FragmentFilename(svFp, svIdx), ct2).ConfigureAwait(false);
+                    byte[] data = EncryptionLayer.DecryptAndStripFragment(encrypted, key);
                     if (etn != null)
                         data = StripAnyTrailer(data);
                     decrypted[i] = data;
