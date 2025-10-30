@@ -50,6 +50,8 @@ public class NextCommand : Command
                 return 1;
             }
 
+            try
+            {
             string storagePath = storageDir?.FullName ?? Path.Combine(AppContext.BaseDirectory, "backup");
             var storage = new LocalDssaAdapter(storagePath);
 
@@ -86,7 +88,7 @@ public class NextCommand : Command
             var diffResult = new RDRF.Core.Diff.DiffEngine().ComputeDiff(oldBytes, newBytes, oldIndex.OriginalName);
 
             if (diffResult.IsBinary)
-                AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} �?{newBytes.Length} bytes");
+                AnsiConsole.MarkupLine($"[yellow]Binary file:[/] {oldBytes.Length} -> {newBytes.Length} bytes");
             else
                 AnsiConsole.MarkupLine($"[yellow]Changes:[/] +{diffResult.AddedLines} -{diffResult.RemovedLines} lines (+{diffResult.AddedBytes} bytes)");
 
@@ -114,6 +116,11 @@ public class NextCommand : Command
             AnsiConsole.Write(table);
 
             return 0;
+            }
+            finally
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(password);
+            }
         });
     }
 

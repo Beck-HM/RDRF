@@ -5,7 +5,7 @@ namespace RDRF.Core.Dssa;
 
 public static class StorageConfig
 {
-    private static readonly Dictionary<string, IStorageBackendFactory> _factories = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, IStorageBackendFactory> _factories = new();
 
     private sealed class YamlRoot
     {
@@ -81,19 +81,20 @@ public static class StorageConfig
         if (string.IsNullOrEmpty(value))
             return value;
 
-        int start = value.IndexOf("${", StringComparison.Ordinal);
-        if (start < 0)
-            return value;
+        for (int depth = 0; depth < 10; depth++)
+        {
+            int start = value.IndexOf("${", StringComparison.Ordinal);
+            if (start < 0) break;
 
-        int end = value.IndexOf('}', start + 2);
-        if (end < 0)
-            return value;
+            int end = value.IndexOf('}', start + 2);
+            if (end < 0) break;
 
-        var varName = value[(start + 2)..end];
-        var envValue = Environment.GetEnvironmentVariable(varName);
-        if (envValue == null)
-            return value;
+            var varName = value[(start + 2)..end];
+            var envValue = Environment.GetEnvironmentVariable(varName);
+            if (envValue == null) break;
 
-        return value[..start] + envValue + ExpandEnv(value[(end + 1)..]);
+            value = value[..start] + envValue + value[(end + 1)..];
+        }
+        return value;
     }
 }

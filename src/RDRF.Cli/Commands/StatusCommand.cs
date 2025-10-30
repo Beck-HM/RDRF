@@ -69,7 +69,7 @@ public class StatusCommand : Command
                     byte[] encryptedRc = storage.ReadRc(lookupKey);
                     EncryptionLayer.DecryptFragmentWithKey(encryptedRc, aesKey);
                 }
-                catch { rcOk = false; }
+                catch { System.Diagnostics.Debug.WriteLine("RC decrypt failed"); rcOk = false; }
             }
 
             bool hasEtn = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
