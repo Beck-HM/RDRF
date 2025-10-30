@@ -50,6 +50,21 @@ public class ImageDiffStrategy : IDiffStrategy
         long addedBytes = Math.Max(0, newData.LongLength - oldData.LongLength);
         long removedBytes = Math.Max(0, oldData.LongLength - newData.LongLength);
 
+        if (!OperatingSystem.IsWindows())
+        {
+            string sizeLine = $"  File: {FormatBytes(oldData.Length)} -> {FormatBytes(newData.Length)} ({FormatBytes(newData.Length - oldData.Length)})";
+            sb.AppendLine(sizeLine);
+            return new DiffResult
+            {
+                Label = label,
+                IsBinary = true,
+                AddedBytes = addedBytes,
+                RemovedBytes = removedBytes,
+                HumanDiff = sb.ToString(),
+                Lines = lines,
+            };
+        }
+
         try
         {
             using var oldMs = new MemoryStream(oldData);

@@ -19,6 +19,12 @@ public class ManagementFile
         using var conn = CreateConnection();
         conn.Open();
 
+        using (var walCmd = conn.CreateCommand())
+        {
+            walCmd.CommandText = "PRAGMA journal_mode=WAL;";
+            walCmd.ExecuteNonQuery();
+        }
+
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             CREATE TABLE IF NOT EXISTS remotes (

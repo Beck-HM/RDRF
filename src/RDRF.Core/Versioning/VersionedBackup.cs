@@ -261,13 +261,13 @@ private static async Task<string> IncrementalBackupAsync(
         }
 
         // Build the full index (FSS-encodes compressed+padded fragments)
-        orchestrator.BuildChangedFragmentsIndex(
+        await orchestrator.BuildChangedFragmentsIndex(
             compressedFrags, changedRaw, changedIdxMap, changedFlags,
             actualFingerprint, fileFingerprint, Path.GetFileName(filePath),
             newData.Length, fssStrategy, fragmentSize, customName, prevFingerprint,
             prevRawHashes, progress, ct,
             compressionMethod: Constants.CompressionLz4)
-            .GetAwaiter().GetResult();
+            .ConfigureAwait(false);
 
         // Patch index with correct RawFragmentHashes + OriginalFragmentSizes + SourceVersion
         byte[] newEncIdx = storage.ReadIndex(actualFingerprint);
@@ -329,7 +329,7 @@ private static async Task<string> IncrementalBackupAsync(
                 index.Fragments[i].SourceIndex = entry.SourceIndex;
                 entry.RefCount++;
                 string fragName = Frags.FragmentFilename(prefix, i);
-                try { storage.DeleteFragment(fragName); } catch { }
+                try { storage.DeleteFragment(fragName); } catch (Exception ex_dd) { Debug.WriteLine($"Failed to delete {fragName}: {ex_dd.Message}"); }
             }
             else
             {
@@ -353,7 +353,7 @@ private static async Task<string> IncrementalBackupAsync(
                 {
                     string oldPrefix = entry.SourceFingerprint;
                     string fragName = Frags.FragmentFilename(oldPrefix, entry.SourceIndex);
-                    try { storage.DeleteFragment(fragName); } catch { }
+                    try { storage.DeleteFragment(fragName); } catch (Exception ex_dd) { Debug.WriteLine($"Failed to delete {fragName}: {ex_dd.Message}"); }
                     dedupMap.Remove(oldKey);
                 }
             }
@@ -393,7 +393,7 @@ private static async Task<string> IncrementalBackupAsync(
             string fp = Path.GetFileNameWithoutExtension(f);
             if (!referenced.Contains(fp))
             {
-                try { File.Delete(f); } catch { }
+                try { File.Delete(f); } catch (Exception ex_gc) { Debug.WriteLine($"Failed to delete orphaned index {f}: {ex_gc.Message}"); }
             }
         }
     }

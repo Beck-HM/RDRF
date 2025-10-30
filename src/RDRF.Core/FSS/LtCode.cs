@@ -84,7 +84,8 @@ public static class LtCode
                 dest[i] ^= src[i];
         }
     }
-    public static double RepairRatio { get; set; } = 0.7;
+    public static double RepairRatio { get => _repairRatio; set { _repairRatio = value; Thread.MemoryBarrier(); } }
+    private static double _repairRatio = 0.7;
 
     private static readonly ConcurrentDictionary<(int K, int symbolCount, int seed), (int[] deg, short[][] idx)> _symCache = new();
 

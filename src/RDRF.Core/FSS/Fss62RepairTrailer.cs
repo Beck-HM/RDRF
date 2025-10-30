@@ -5,8 +5,8 @@ public static class Fss62RepairTrailer
     public static byte[] Build(byte[] fragmentData, string aFingerprint, string cFingerprint,
         Fss62RepairData repairA, Fss62RepairData repairC)
     {
-        var ms = new MemoryStream();
-        var w = new BinaryWriter(ms);
+        using var ms = new MemoryStream();
+        using var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, true);
 
         w.Write(HexToBytes(aFingerprint));
         w.Write(HexToBytes(cFingerprint));
@@ -42,7 +42,8 @@ public static class Fss62RepairTrailer
         if (trailerSize < 104)
             return (fileData, "", "", null, null);
 
-        var r = new BinaryReader(new MemoryStream(fileData, trailerStart, trailerSize));
+        using var fragStream = new MemoryStream(fileData, trailerStart, trailerSize);
+        var r = new BinaryReader(fragStream);
 
         string aFp = BytesToHex(r.ReadBytes(32));
         string cFp = BytesToHex(r.ReadBytes(32));
@@ -103,6 +104,7 @@ public static class Fss62RepairTrailer
 
     private static byte[] HexToBytes(string hex)
     {
+        if (hex.Length % 2 != 0) hex = hex.PadRight(hex.Length + 1, '0');
         byte[] b = new byte[hex.Length / 2];
         for (int i = 0; i < b.Length; i++)
             b[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
