@@ -264,6 +264,88 @@ public class VersioningTests
         Assert.True(result.HumanDiff.Contains("line4"), $"Diff should mention new line, got: {result.HumanDiff}");
     }
 
+    [Fact]
+    public async Task StreamingRestore_Fss3_ShouldRestore()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"rdr_sr_{Guid.NewGuid():N}");
+        string file = Path.Combine(Path.GetTempPath(), $"rdr_sr_in_{Guid.NewGuid():N}.dat");
+        string output = Path.Combine(Path.GetTempPath(), $"rdr_sr_out_{Guid.NewGuid():N}.dat");
+        try
+        {
+            byte[] password = RandomNumberGenerator.GetBytes(32);
+            byte[] content = new byte[10000];
+            Array.Fill(content, (byte)'A');
+            File.WriteAllBytes(file, content);
+
+            string fp = await Versioning.VersionedBackup.BackupAsync(
+                file, new LocalDssaAdapter(dir), password, "V1", "FSS3",
+                fragmentSize: 1024 * 1024);
+
+            bool ok = Versioning.VersionedRestore.Restore(output,
+                Path.Combine(dir, fp + ".indrdrf"), password);
+            Assert.True(ok, "FSS3 streaming restore should succeed");
+            Assert.Equal(content.Length, new FileInfo(output).Length);
+        }
+        finally
+        {
+            try { File.Delete(file); } catch { }
+            try { File.Delete(output); } catch { }
+            try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task StreamingRestore_WithSourceVersion_ShouldRestore()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"rdr_sv_{Guid.NewGuid():N}");
+        string file = Path.Combine(Path.GetTempPath(), $"rdr_sv_in_{Guid.NewGuid():N}.dat");
+        string outputV3 = Path.Combine(Path.GetTempPath(), $"rdr_sv_out_{Guid.NewGuid():N}.dat");
+        try
+        {
+            byte[] password = RandomNumberGenerator.GetBytes(32);
+            int fragSize = 256;
+            var rng = new Random(42);
+
+            // V1: 2048 bytes, JPEG-prefix (no compression)
+            byte[] v1 = new byte[2048];
+            v1[0] = 0xff; v1[1] = 0xd8; v1[2] = 0xff; v1[3] = 0xe0;
+            rng.NextBytes(new Span<byte>(v1, 4, 2044));
+            File.WriteAllBytes(file, v1);
+            string fp1 = await Versioning.VersionedBackup.BackupAsync(
+                file, new LocalDssaAdapter(dir), password, "V1", "FSS3", fragmentSize: fragSize);
+
+            // V2: same size, all new content (populates DedupMap)
+            byte[] v2 = new byte[2048];
+            v2[0] = 0xff; v2[1] = 0xd8; v2[2] = 0xff; v2[3] = 0xe0;
+            rng.NextBytes(v2.AsSpan(4));
+            File.WriteAllBytes(file, v2);
+            string fp2 = await Versioning.VersionedBackup.BackupAsync(
+                file, new LocalDssaAdapter(dir), password, "V2", "FSS3", fragmentSize: fragSize);
+
+            // V3: keep first 1536 same as V2 (6 fragments), replace last 512
+            byte[] v3 = new byte[2048];
+            v3[0] = 0xff; v3[1] = 0xd8; v3[2] = 0xff; v3[3] = 0xe0;
+            Buffer.BlockCopy(v2, 4, v3, 4, 1532);
+            rng.NextBytes(new Span<byte>(v3, 1536, 512));
+            File.WriteAllBytes(file, v3);
+            string fp3 = await Versioning.VersionedBackup.BackupAsync(
+                file, new LocalDssaAdapter(dir), password, "V3", "FSS3", fragmentSize: fragSize);
+
+            // V3 restore should produce correct data (streaming path with SourceVersion)
+            bool ok = Versioning.VersionedRestore.Restore(outputV3,
+                Path.Combine(dir, fp3 + ".indrdrf"), password);
+            Assert.True(ok, "FSS3 streaming restore with SourceVersion should succeed");
+            Assert.Equal(v3.Length, new FileInfo(outputV3).Length);
+            Assert.Equal(v3, File.ReadAllBytes(outputV3));
+        }
+        finally
+        {
+            try { File.Delete(file); } catch { }
+            try { File.Delete(outputV3); } catch { }
+            try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
     // ── Dedup gap coverage ──
 
     private static async Task<(string fp1, string fp2, string fp3)> CreateThreeVersions(

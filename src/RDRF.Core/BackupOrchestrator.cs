@@ -128,7 +128,8 @@ public class BackupOrchestrator : IDisposable
         string originalHash;
         string fileFingerprint;
 
-        var plan = _fsa.Compute(fssStrategy, auxiliaryStrategies);
+        // Multi-strategy (auxiliary) temporarily disabled; single-strategy only.
+        var plan = _fsa.Compute(fssStrategy, null);
 
         // Phase 1: Read file → split raw → hash(original data) → LZ4 per block → pad
         byte[] fileBytes = await File.ReadAllBytesAsync(filePath, cancellationToken).ConfigureAwait(false);
