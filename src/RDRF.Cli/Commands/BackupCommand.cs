@@ -29,7 +29,8 @@ public class BackupCommand : Command
         var fss5p = new Option<bool>("-fss5+", new[] { "--fss5+" }) { Description = "FSS5+ strategy - single-dash for primary, double-dash for auxiliary" };
         var fss61 = new Option<bool>("-fss6.1", new[] { "--fss6.1" }) { Description = "FSS6.1 strategy - ETN + LT fountain code repair" };
         var fss62 = new Option<bool>("-fss6.2", new[] { "--fss6.2" }) { Description = "FSS6.2 strategy - ETN + Duip fountain code repair" };
-        var fsaOpt = new Option<bool>("-fsa") { Description = "Enable multi-strategy FSA fusion mode (used with multiple --fss options)" };
+        // FSA multi-strategy fusion is temporarily disabled. Single-strategy mode only.
+        // var fsaOpt = new Option<bool>("-fsa") { Description = "Enable multi-strategy FSA fusion mode (used with multiple --fss options)" };
 
         Arguments.Add(sourceArg);
         Options.Add(outputOpt);
@@ -39,7 +40,7 @@ public class BackupCommand : Command
         Options.Add(messageOpt);
         Add(fss1); Add(fss2); Add(fss2r);
         Add(fss3); Add(fss5); Add(fss5p); Add(fss61); Add(fss62);
-        Add(fsaOpt); Add(nextOpt); Add(nodeOpt);
+        Add(nextOpt); Add(nodeOpt);
 
         SetAction(async (ParseResult parseResult) =>
         {
@@ -51,8 +52,6 @@ public class BackupCommand : Command
             bool enableNext = parseResult.GetValue(nextOpt);
             bool enableNode = parseResult.GetValue(nodeOpt);
             var commitMsg = parseResult.GetValue(messageOpt);
-            bool fsaMode = parseResult.GetValue(fsaOpt);
-
             var flags = new[]
             {
                 (parseResult.GetValue(fss1), Constants.FssLevel1),
@@ -75,21 +74,13 @@ public class BackupCommand : Command
             string strategy;
             List<string>? auxiliary = null;
 
-            if (fsaMode)
+            if (selected.Count != 1)
             {
-                strategy = selected[0];
-                if (selected.Count > 1)
-                    auxiliary = selected.Skip(1).ToList();
+                AnsiConsole.MarkupLine("[red]Error: only one -fss<level> option allowed (single-strategy mode only)[/]");
+                return 1;
             }
-            else
-            {
-                if (selected.Count != 1)
-                {
-                    AnsiConsole.MarkupLine("[red]Error: single-strategy mode requires exactly one -fss<level> (use -fsa for multi-strategy)[/]");
-                    return 1;
-                }
-                strategy = selected[0];
-            }
+            strategy = selected[0];
+
             byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
             if (password.Length == 0)
             {

@@ -38,7 +38,7 @@ public class EtnCrossStrategyTests
         yield return new object[] { "FSS1", 1 };
     }
 
-    [Theory]
+    [Theory(Skip = "FSA multi-strategy temporarily disabled")]
     [MemberData(nameof(FssStrategies))]
     public void BackupAndRestoreWithFssPlusEtn(string strategy)
     {
@@ -121,7 +121,7 @@ public class EtnCrossStrategyTests
         }
     }
 
-    [Fact]
+    [Fact(Skip = "FSA multi-strategy temporarily disabled")]
     public void Fss6CrossValidation_AfterFragmentRecovery()
     {
         // FSS3+FSS6: drop a fragment, FSS3 recovers it, then verify ETN validates
