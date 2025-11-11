@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\RDRF.Core\RDRF.Core.csproj" />
@@ -16,7 +16,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>rdrf</AssemblyName>
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
 </Project>
+
+
 

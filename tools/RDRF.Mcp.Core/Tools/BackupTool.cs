@@ -1,0 +1,55 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+using RDRF.Core;
+using RDRF.Core.Dssa;
+using RDRF.Core.Index;
+
+namespace RDRF.Mcp.Core.Tools;
+
+public class BackupTool : IMcpTool
+{
+    public string Name => "backup";
+    public string Description => "Backup a file using the specified FSS strategy";
+
+    public Dictionary<string, object> InputSchema => new()
+    {
+        ["filePath"] = new { type = "string", description = "Path to the file to backup" },
+        ["strategy"] = new { type = "string", description = "FSS strategy (FSS1, FSS3, FSS6.1, etc.)" },
+        ["storageDir"] = new { type = "string", description = "Storage directory (default: ./backup/)" },
+        ["password"] = new { type = "string", description = "Encryption password" },
+        ["fragmentSize"] = new { type = "number", description = "Fragment size in MB (default: 1)" },
+    };
+
+    public string[] Required => ["filePath", "strategy"];
+
+    public async Task<string> ExecuteAsync(Dictionary<string, object?> args)
+    {
+        string filePath = args.GetValueOrDefault("filePath")?.ToString() ?? throw new ArgumentException("filePath required");
+        string strategy = args.GetValueOrDefault("strategy")?.ToString() ?? throw new ArgumentException("strategy required");
+        string storageDir = args.GetValueOrDefault("storageDir")?.ToString() ?? "./backup";
+        string? pwd = args.GetValueOrDefault("password")?.ToString();
+        int? fragSizeMB = args.GetValueOrDefault("fragmentSize") is JsonElement je && je.ValueKind == JsonValueKind.Number ? je.GetInt32() : null;
+
+        if (!File.Exists(filePath)) throw new FileNotFoundException($"File not found: {filePath}");
+
+        byte[] password;
+        if (!string.IsNullOrEmpty(pwd))
+            password = System.Text.Encoding.UTF8.GetBytes(pwd);
+        else
+            password = RandomNumberGenerator.GetBytes(32);
+
+        Directory.CreateDirectory(storageDir);
+        using var engine = new RDRFEngine((byte[])password.Clone(), new LocalDssaAdapter(storageDir));
+        string fingerprint = await engine.BackupFileAsync(filePath, strategy,
+            fragmentSize: (fragSizeMB ?? 1) * 1024 * 1024);
+
+        var result = new Dictionary<string, object?>
+        {
+            ["fingerprint"] = fingerprint,
+            ["storageDir"] = Path.GetFullPath(storageDir),
+            ["indexFile"] = $"{fingerprint}.indrdrf",
+            ["fragments"] = $"{fingerprint}_*.rdrf"
+        };
+        return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+    }
+}
