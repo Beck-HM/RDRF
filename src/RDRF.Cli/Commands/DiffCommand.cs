@@ -96,7 +96,7 @@ public class DiffCommand : Command
                 }
 
                 // Full reconstruct mode
-                AnsiConsole.MarkupLine("[yellow]Full reconstruct mode not yet implemented. Use adjacent versions for stored diffs.[/]");
+                AnsiConsole.MarkupLine("[yellow]Only adjacent version diffs are supported (e.g. v1 vs v2). Use check to browse versions.[/]");
                 return 1;
             }
             finally
@@ -112,8 +112,12 @@ public class DiffCommand : Command
         {
             if (format == "stat")
             {
-                int add = diffText.Count(c => c == '+' && !diffText.SkipWhile(l => l != '\n').Any());
-                int del = diffText.Count(c => c == '-');
+                int add = 0, del = 0;
+                foreach (string line in diffText.Split('\n'))
+                {
+                    if (line.StartsWith('+') && !line.StartsWith("+++")) add++;
+                    if (line.StartsWith('-') && !line.StartsWith("---")) del++;
+                }
                 File.WriteAllText(outputFile.FullName, $"+{add} -{del} lines");
             }
             else

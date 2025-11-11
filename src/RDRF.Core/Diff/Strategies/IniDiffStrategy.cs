@@ -135,10 +135,12 @@ public class IniDiffStrategy : IDiffStrategy
         {
             string line = raw.TrimEnd('\r');
 
+            // Only treat ; or # as comment markers when they appear at the start
+            // of a token (preceded only by whitespace), not inside values.
             int commentIdx = -1;
             for (int i = 0; i < line.Length; i++)
             {
-                if (line[i] == ';' || line[i] == '#')
+                if ((line[i] == ';' || line[i] == '#') && (i == 0 || char.IsWhiteSpace(line[i - 1])))
                 {
                     commentIdx = i;
                     break;

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Encryption;
@@ -15,7 +16,7 @@ public static class PullService
     {
         if (password.Length == 0)
         {
-            Console.Error.WriteLine("Error: password cannot be empty");
+            Debug.WriteLine("Error: password cannot be empty");
             return 1;
         }
 
@@ -35,15 +36,15 @@ public static class PullService
         {
             if (allVersions.Count == 0)
             {
-                Console.WriteLine("No version history found in index.");
+                Debug.WriteLine("No version history found in index.");
                 return 0;
             }
-            Console.WriteLine($"Project: {currentFingerprint}");
+            Debug.WriteLine($"Project: {currentFingerprint}");
             foreach (var vr in allVersions)
             {
                 var records = mgmt.Lookup(vr.FileFingerprint, vr.Version);
                 int fragCount = records.Count(r => r.ContentType == "fragment");
-                Console.WriteLine($"  v{vr.Version}: {fragCount} fragment(s)");
+                Debug.WriteLine($"  v{vr.Version}: {fragCount} fragment(s)");
             }
             return 0;
         }
@@ -54,7 +55,7 @@ public static class PullService
         {
             if (!int.TryParse(versionArg, out targetVersion))
             {
-                Console.Error.WriteLine("Error: -v must be a version number or 'list'");
+                Debug.WriteLine("Error: -v must be a version number or 'list'");
                 return 1;
             }
         }
@@ -62,7 +63,7 @@ public static class PullService
         {
             if (allVersions.Count == 0)
             {
-                Console.Error.WriteLine("Error: no version history in index.");
+                Debug.WriteLine("Error: no version history in index.");
                 return 1;
             }
             targetVersion = allVersions.Last().Version;
@@ -71,7 +72,7 @@ public static class PullService
         var targetVr = allVersions.FirstOrDefault(v => v.Version == targetVersion);
         if (targetVr == null)
         {
-            Console.Error.WriteLine($"Error: version {targetVersion} not found in index history");
+            Debug.WriteLine($"Error: version {targetVersion} not found in index history");
             return 1;
         }
 
@@ -84,7 +85,7 @@ public static class PullService
 
         var factories = PluginLoader.Load(pluginsDir);
         if (factories.Count == 0 && !dryRun)
-            Console.Error.WriteLine("Warning: no plugins found in " + pluginsDir);
+            Debug.WriteLine("Warning: no plugins found in " + pluginsDir);
 
         foreach (var cfg in configs)
         {
@@ -92,7 +93,7 @@ public static class PullService
                 f.Type.Equals(cfg.Type, StringComparison.OrdinalIgnoreCase));
             if (factory == null)
             {
-                Console.Error.WriteLine($"  No plugin found for backend type '{cfg.Type}' (backend '{cfg.Name}')");
+                Debug.WriteLine($"  No plugin found for backend type '{cfg.Type}' (backend '{cfg.Name}')");
                 continue;
             }
 
@@ -108,20 +109,20 @@ public static class PullService
         var locations = mgmt.Lookup(lookupFingerprint, targetVersion);
         if (locations.Count == 0)
         {
-            Console.Error.WriteLine($"Error: no fragments found for version {targetVersion}");
+            Debug.WriteLine($"Error: no fragments found for version {targetVersion}");
             return 1;
         }
 
         if (dryRun)
         {
-            Console.WriteLine($"Project: {currentFingerprint} v{targetVersion}");
+            Debug.WriteLine($"Project: {currentFingerprint} v{targetVersion}");
             int rcCount = locations.Count(l => l.ContentType == "rc");
             int fragCount = locations.Count - rcCount;
-            Console.WriteLine($"Would download {fragCount} fragment(s)" + (rcCount > 0 ? " + RC" : ""));
+            Debug.WriteLine($"Would download {fragCount} fragment(s)" + (rcCount > 0 ? " + RC" : ""));
             foreach (var loc in locations.OrderBy(l => l.FragmentIndex))
             {
                 string label = loc.ContentType == "rc" ? "RC" : $"Fragment {loc.FragmentIndex}";
-                Console.WriteLine($"  {label} from {loc.BackendName} ({loc.FileSize:N0} bytes)");
+                Debug.WriteLine($"  {label} from {loc.BackendName} ({loc.FileSize:N0} bytes)");
             }
             return 0;
         }
@@ -141,7 +142,7 @@ public static class PullService
                 {
                     if (!backends.TryGetValue(loc.BackendName, out var backend))
                     {
-                        Console.Error.WriteLine($"  Backend '{loc.BackendName}' not available");
+                        Debug.WriteLine($"  Backend '{loc.BackendName}' not available");
                         Interlocked.Increment(ref errors);
                         return;
                     }
@@ -180,7 +181,7 @@ public static class PullService
                 catch (Exception ex)
                 {
                     string label = loc.ContentType == "rc" ? "RC" : $"Fragment {loc.FragmentIndex}";
-                    Console.Error.WriteLine($"  {label} error: {ex.Message}");
+                    Debug.WriteLine($"  {label} error: {ex.Message}");
                     Interlocked.Increment(ref errors);
                 }
                 finally
@@ -196,7 +197,7 @@ public static class PullService
             {
                 if (!backends.TryGetValue(loc.BackendName, out var backend))
                 {
-                    Console.Error.WriteLine($"  Backend '{loc.BackendName}' not available");
+                    Debug.WriteLine($"  Backend '{loc.BackendName}' not available");
                     errors++;
                     continue;
                 }
@@ -241,13 +242,15 @@ public static class PullService
                 catch (Exception ex)
                 {
                     string label = loc.ContentType == "rc" ? "RC" : $"Fragment {loc.FragmentIndex}";
-                    Console.Error.WriteLine($"  {label} error: {ex.Message}");
+                    Debug.WriteLine($"  {label} error: {ex.Message}");
                     errors++;
                 }
             }
         }
 
-        Console.WriteLine($"Done: {downloaded} file(s) downloaded, {errors} error(s)");
+        Debug.WriteLine($"Done: {downloaded} file(s) downloaded, {errors} error(s)");
         return errors > 0 ? 1 : 0;
     }
 }
+
+

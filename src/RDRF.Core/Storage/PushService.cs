@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Encryption;
@@ -14,7 +15,7 @@ public static class PushService
     {
         if (password.Length == 0)
         {
-            Console.Error.WriteLine("Error: password cannot be empty");
+            Debug.WriteLine("Error: password cannot be empty");
             return 1;
         }
 
@@ -31,7 +32,7 @@ public static class PushService
 
         if (configs.Count == 0)
         {
-            Console.Error.WriteLine("Error: no backends configured in rdrf_config.yaml. Run 'rdrf init' first.");
+            Debug.WriteLine("Error: no backends configured in rdrf_config.yaml. Run 'rdrf init' first.");
             return 1;
         }
 
@@ -41,7 +42,7 @@ public static class PushService
 
         if (registeredBackends.Count == 0)
         {
-            Console.Error.WriteLine("Error: no backends could be registered");
+            Debug.WriteLine("Error: no backends could be registered");
             return 1;
         }
 
@@ -53,7 +54,7 @@ public static class PushService
 
         if (targetBackends.Count == 0 && remotes.Count > 0)
         {
-            Console.Error.WriteLine("Error: none of the configured remotes could be loaded");
+            Debug.WriteLine("Error: none of the configured remotes could be loaded");
             return 1;
         }
         if (targetBackends.Count == 0)
@@ -77,14 +78,14 @@ public static class PushService
         {
             if (existingOnBackends.Contains(i))
             {
-                Console.WriteLine($"  Fragment {i}/{fragmentCount} already on backend, skipped");
+                Debug.WriteLine($"  Fragment {i}/{fragmentCount} already on backend, skipped");
                 continue;
             }
             string fragName = Frags.FragmentFilename(prefix, i);
             string fragPath = Path.Combine(storageDir, fragName);
             if (!File.Exists(fragPath))
             {
-                Console.Error.WriteLine($"  Fragment {i} not found: {fragName}");
+                Debug.WriteLine($"  Fragment {i} not found: {fragName}");
                 continue;
             }
             items.Add((i, fragPath));
@@ -99,13 +100,13 @@ public static class PushService
 
         if (dryRun)
         {
-            Console.WriteLine($"Project: {fingerprint} v{versionNumber}");
-            Console.WriteLine($"Backends: {string.Join(", ", targetBackends)}");
-            Console.WriteLine($"Would push {items.Count} fragment(s)" + (hasRc ? " + RC" : ""));
+            Debug.WriteLine($"Project: {fingerprint} v{versionNumber}");
+            Debug.WriteLine($"Backends: {string.Join(", ", targetBackends)}");
+            Debug.WriteLine($"Would push {items.Count} fragment(s)" + (hasRc ? " + RC" : ""));
             foreach (var (idx, _) in items)
-                Console.WriteLine($"  Fragment {idx}/{fragmentCount}");
+                Debug.WriteLine($"  Fragment {idx}/{fragmentCount}");
             if (hasRc)
-                Console.WriteLine("  RC file");
+                Debug.WriteLine("  RC file");
             return 0;
         }
 
@@ -138,7 +139,7 @@ public static class PushService
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"  Fragment {item.index} error: {ex.Message}");
+                    Debug.WriteLine($"  Fragment {item.index} error: {ex.Message}");
                     Interlocked.Increment(ref errors);
                 }
                 finally
@@ -174,7 +175,7 @@ public static class PushService
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"  Fragment {item.index} error: {ex.Message}");
+                    Debug.WriteLine($"  Fragment {item.index} error: {ex.Message}");
                     errors++;
                 }
             }
@@ -205,12 +206,12 @@ public static class PushService
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"  RC error: {ex.Message}");
+                Debug.WriteLine($"  RC error: {ex.Message}");
                 errors++;
             }
         }
 
-        Console.WriteLine($"Done: {done} file(s) pushed, {errors} error(s)");
+        Debug.WriteLine($"Done: {done} file(s) pushed, {errors} error(s)");
         return errors > 0 ? 1 : 0;
     }
 
@@ -220,7 +221,7 @@ public static class PushService
     {
         var factories = PluginLoader.Load(pluginsDir);
         if (factories.Count == 0 && !dryRun)
-            Console.Error.WriteLine("Warning: no plugins found in " + pluginsDir);
+            Debug.WriteLine("Warning: no plugins found in " + pluginsDir);
 
         var registered = new List<string>();
         foreach (var cfg in configs)
@@ -229,7 +230,7 @@ public static class PushService
                 f.Type.Equals(cfg.Type, StringComparison.OrdinalIgnoreCase));
             if (factory == null)
             {
-                Console.Error.WriteLine($"  No plugin found for backend type '{cfg.Type}' (backend '{cfg.Name}')");
+                Debug.WriteLine($"  No plugin found for backend type '{cfg.Type}' (backend '{cfg.Name}')");
                 continue;
             }
 
@@ -242,8 +243,10 @@ public static class PushService
             }
 
             registered.Add(cfg.Name);
-            Console.WriteLine($"  Backend '{cfg.Name}' ({cfg.Type}) registered");
+            Debug.WriteLine($"  Backend '{cfg.Name}' ({cfg.Type}) registered");
         }
         return registered;
     }
 }
+
+

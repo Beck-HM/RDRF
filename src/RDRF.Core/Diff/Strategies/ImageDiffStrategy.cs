@@ -65,6 +65,21 @@ public class ImageDiffStrategy : IDiffStrategy
             };
         }
 
+        // Skip full image analysis for files over 50MB to prevent OOM
+        if (oldData.LongLength > 50 * 1024 * 1024 || newData.LongLength > 50 * 1024 * 1024)
+        {
+            sb.AppendLine($"  File: {FormatBytes(oldData.Length)} -> {FormatBytes(newData.Length)} ({FormatBytes(newData.Length - oldData.Length)})");
+            return new DiffResult
+            {
+                Label = label,
+                IsBinary = true,
+                AddedBytes = addedBytes,
+                RemovedBytes = removedBytes,
+                HumanDiff = sb.ToString(),
+                Lines = lines,
+            };
+        }
+
         try
         {
             using var oldMs = new MemoryStream(oldData);

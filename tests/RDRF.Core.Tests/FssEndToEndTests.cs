@@ -137,7 +137,7 @@ public class FssEndToEndTests
 
     [Theory]
     [MemberData(nameof(AllStrategies))]
-    public void BackupAndRestoreAsync_ShouldReturnIdenticalFile(string strategy)
+    public async Task BackupAndRestoreAsync_ShouldReturnIdenticalFile(string strategy)
     {
         Assert.True(File.Exists(TestFile), $"Test file not found: {TestFile}");
 
@@ -151,16 +151,10 @@ public class FssEndToEndTests
             var storage = new LocalDssaAdapter(storageDir);
             using var engine = new RDRFEngine(rcCode, storage);
 
-            // Async backup
-            var task = engine.BackupFileAsync(TestFile, strategy);
-            task.Wait();
-            string fingerprint = task.Result;
+            string fingerprint = await engine.BackupFileAsync(TestFile, strategy);
             Assert.False(string.IsNullOrEmpty(fingerprint));
 
-            // Async restore
-            var restoreTask = engine.RestoreFileAsync(fingerprint, outputFile);
-            restoreTask.Wait();
-            bool restored = restoreTask.Result;
+            bool restored = await engine.RestoreFileAsync(fingerprint, outputFile);
             Assert.True(restored, $"[{strategy}] Async restore returned false!");
 
             string restoredHash = ComputeSha256(outputFile);

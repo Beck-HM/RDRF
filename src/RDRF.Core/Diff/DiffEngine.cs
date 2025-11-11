@@ -52,7 +52,7 @@ public class DiffEngine
 
     public DiffResult ComputeDiff(byte[] oldData, byte[] newData, string? label = null)
     {
-        var sample = newData.Length > 0 ? newData.AsSpan(0, Math.Min(newData.Length, 1024)) : ReadOnlySpan<byte>.Empty;
+        var sample = newData.Length > 0 ? newData.AsSpan(0, Math.Min(newData.Length, 8192)) : ReadOnlySpan<byte>.Empty;
         var strategy = SelectStrategy(label, sample);
         var result = strategy.ComputeDiff(oldData, newData, label);
         return result;
