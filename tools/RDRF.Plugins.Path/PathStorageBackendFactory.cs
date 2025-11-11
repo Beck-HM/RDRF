@@ -1,4 +1,4 @@
-using RDRF.Dssa;
+using RDRF.Core.Dssa;
 
 namespace RDRF.Plugins.Path;
 
@@ -18,3 +18,4 @@ public class PathStorageBackendFactory : IStorageBackendFactory
         return new PathStorageBackend(basePath);
     }
 }
+
