@@ -46,6 +46,8 @@ public class ManagementFile
                 version_number INTEGER NOT NULL,
                 created_at INTEGER NOT NULL
             );
+            CREATE INDEX IF NOT EXISTS idx_versions
+                ON versions(fingerprint, version_number);
 
             CREATE TABLE IF NOT EXISTS fragment_locations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -156,11 +156,14 @@ public class MediaDiffStrategy : IDiffStrategy
                     props["type"] = "video";
                     props["Resolution"] = $"{props_.VideoWidth}x{props_.VideoHeight}";
 
-                    foreach (var codec in props_.Codecs)
+                    if (props_.Codecs != null)
                     {
-                        string? desc = codec?.Description;
-                        if (!string.IsNullOrEmpty(desc))
-                            props["Codec"] = desc;
+                        foreach (var codec in props_.Codecs)
+                        {
+                            string? desc = codec?.Description;
+                            if (!string.IsNullOrEmpty(desc))
+                                props["Codec"] = desc;
+                        }
                     }
                 }
                 else

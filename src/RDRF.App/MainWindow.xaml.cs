@@ -210,10 +210,10 @@ public partial class MainWindow : Window
         {
             if (kvp.Key == "FSS6.1") continue;
             bool isSelected = kvp.Key == strategy;
-            kvp.Value.Style = (Style)FindResource(isSelected ? "StrategyCardActiveStyle" : "StrategyCardStyle");
-            var sp = (StackPanel)kvp.Value.Child;
-            var tb = (TextBlock)sp.Children[0];
-            tb.Foreground = (Brush)FindResource(isSelected ? "AccentBrush" : "TextSecondaryBrush");
+            kvp.Value.Style = FindResource(isSelected ? "StrategyCardActiveStyle" : "StrategyCardStyle") as Style ?? kvp.Value.Style;
+            var sp = kvp.Value.Child as StackPanel;
+            if (sp?.Children.Count > 0 && sp.Children[0] is TextBlock tb)
+                tb.Foreground = FindResource(isSelected ? "AccentBrush" : "TextSecondaryBrush") as Brush ?? tb.Foreground;
             kvp.Value.IsEnabled = true;
             kvp.Value.Opacity = 1;
         }
@@ -229,10 +229,10 @@ public partial class MainWindow : Window
             bool isPrimary = kvp.Key == primary;
             bool isSelected = isPrimary || (isFss6 && auxSelected);
 
-            kvp.Value.Style = (Style)FindResource(isSelected ? "StrategyCardActiveStyle" : "StrategyCardStyle");
-            var sp = (StackPanel)kvp.Value.Child;
-            var tb = (TextBlock)sp.Children[0];
-            tb.Foreground = (Brush)FindResource(isSelected ? "AccentBrush" : "TextSecondaryBrush");
+            kvp.Value.Style = FindResource(isSelected ? "StrategyCardActiveStyle" : "StrategyCardStyle") as Style ?? kvp.Value.Style;
+            var sp = kvp.Value.Child as StackPanel;
+            if (sp?.Children.Count > 0 && sp.Children[0] is TextBlock tb)
+                tb.Foreground = FindResource(isSelected ? "AccentBrush" : "TextSecondaryBrush") as Brush ?? tb.Foreground;
 
             if (primary != null)
             {

@@ -453,12 +453,13 @@ public class RegressionTests
         // (This is tested indirectly via the existing end-to-end tests, but the direct
         //  behavior is covered here.)
         index.Salt = null;
-        Assert.Null(index.Salt);
 
-        // If we create a backup WITHOUT salt (pre-Item 1 format), the current code
-        // should still be able to decrypt it.
-        // This is implicitly tested by all existing end-to-end tests that go through
-        // the full pipeline.
+        // Salt-less index round-trips correctly through serialization
+        byte[] cbor = IndexManager.SerializeIndex(index);
+        var deserialized = IndexManager.DeserializeIndex(cbor);
+        Assert.Null(deserialized.Salt);
+        Assert.Equal("testfp", deserialized.FileFingerprint);
+        Assert.Equal("FSS1", deserialized.FssStrategy);
     }
 // ---------- // Item 2 - DeriveKey with explicit salt
     // 
