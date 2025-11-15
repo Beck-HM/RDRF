@@ -355,6 +355,7 @@
                                                 Content="Browse"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Margin="8,0,0,0"
+                                                AutomationProperties.AutomationId="EncryptBrowseButton"
                                                 Click="EncryptBrowse_Click" />
                                     </Grid>
                                 </StackPanel>
@@ -850,6 +851,7 @@
                                                 Content="Browse"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Margin="8,0,0,0"
+                                                AutomationProperties.AutomationId="DecryptBrowseButton"
                                                 Click="DecryptBrowse_Click" />
                                     </Grid>
                                 </StackPanel>
@@ -1080,6 +1082,7 @@
                                                 Content="Browse"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Margin="8,0,0,0"
+                                                AutomationProperties.AutomationId="DecryptOutputBrowseButton"
                                                 Click="DecryptOutputBrowse_Click" />
                                     </Grid>
                                 </StackPanel>
