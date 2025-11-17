@@ -10,14 +10,21 @@ string appDir = AppContext.BaseDirectory;
 string appExe = Path.Combine(appDir, "RDRF.App.exe");
 if (!File.Exists(appExe))
 {
-    // Fallback: look relative to project directory
+    // Fallback: look relative to project directory (dev mode via dotnet run)
     appExe = Path.GetFullPath(Path.Combine(
-        AppContext.BaseDirectory, "..", "..", "..", "..", "src", "RDRF.App",
+        AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "RDRF.App",
         "bin", "Release", "net8.0-windows", "RDRF.App.exe"));
 }
 if (!File.Exists(appExe))
 {
-    Console.Error.WriteLine($"[rdrf-mcp-wpf] RDRF.App.exe not found at {appExe}");
+    // Try Debug build as fallback
+    appExe = Path.GetFullPath(Path.Combine(
+        AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "RDRF.App",
+        "bin", "Debug", "net8.0-windows", "RDRF.App.exe"));
+}
+if (!File.Exists(appExe))
+{
+    Console.Error.WriteLine($"[rdrf-mcp-wpf] RDRF.App.exe not found");
     return;
 }
 
