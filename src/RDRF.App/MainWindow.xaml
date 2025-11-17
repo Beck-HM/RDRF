@@ -396,6 +396,7 @@
                                         <Border x:Name="StrategyFSS1"
                                                 Style="{StaticResource StrategyCardActiveStyle}"
                                                 Margin="0,0,8,8"
+                                                AutomationProperties.AutomationId="StrategyFSS1"
                                                 MouseLeftButtonDown="StrategyFSS1_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-1"
@@ -417,6 +418,7 @@
                                         <Border x:Name="StrategyFSS2"
                                                 Style="{StaticResource StrategyCardStyle}"
                                                 Margin="8,0,8,8"
+                                                AutomationProperties.AutomationId="StrategyFSS2"
                                                 MouseLeftButtonDown="StrategyFSS2_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-2"
@@ -438,6 +440,7 @@
                                         <Border x:Name="StrategyFSS2R"
                                                 Style="{StaticResource StrategyCardStyle}"
                                                 Margin="8,0,8,8"
+                                                AutomationProperties.AutomationId="StrategyFSS2R"
                                                 MouseLeftButtonDown="StrategyFSS2R_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-2R"
@@ -459,6 +462,7 @@
                                         <Border x:Name="StrategyFSS3"
                                                 Style="{StaticResource StrategyCardStyle}"
                                                 Margin="8,0,0,8"
+                                                AutomationProperties.AutomationId="StrategyFSS3"
                                                 MouseLeftButtonDown="StrategyFSS3_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-3"
@@ -480,6 +484,7 @@
                                         <Border x:Name="StrategyFSS5"
                                                 Style="{StaticResource StrategyCardStyle}"
                                                 Margin="0,8,8,0"
+                                                AutomationProperties.AutomationId="StrategyFSS5"
                                                 MouseLeftButtonDown="StrategyFSS5_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-5"
@@ -501,6 +506,7 @@
                                         <Border x:Name="StrategyFSS5P"
                                                 Style="{StaticResource StrategyCardStyle}"
                                                 Margin="8,8,8,0"
+                                                AutomationProperties.AutomationId="StrategyFSS5P"
                                                 MouseLeftButtonDown="StrategyFSS5P_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-5+"
@@ -522,6 +528,7 @@
                                         <Border x:Name="StrategyFSS6"
                                                 Style="{StaticResource StrategyCardStyle}"
                                                 Margin="8,8,8,0"
+                                                AutomationProperties.AutomationId="StrategyFSS6"
                                                 MouseLeftButtonDown="StrategyFSS6_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-6"
@@ -543,6 +550,7 @@
                                         <Border x:Name="StrategyFSS61"
                                                 Style="{StaticResource StrategyCardStyle}"
                                                 Margin="8,8,0,0"
+                                                AutomationProperties.AutomationId="StrategyFSS61"
                                                 MouseLeftButtonDown="StrategyFSS61_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-6.1"
@@ -1175,6 +1183,7 @@
                                                 Content="Browse"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Margin="8,0,0,0"
+                                                AutomationProperties.AutomationId="HistoryBrowseBackupButton"
                                                 Click="HistoryBrowseBackup_Click" />
                                     </Grid>
                                 </StackPanel>
@@ -1209,6 +1218,7 @@
                                                 Content="Browse"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Margin="8,0,0,0"
+                                                AutomationProperties.AutomationId="HistoryBrowseIncrementalButton"
                                                 Click="HistoryBrowseIncremental_Click" />
                                     </Grid>
                                 </StackPanel>
