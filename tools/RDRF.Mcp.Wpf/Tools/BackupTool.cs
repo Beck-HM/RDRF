@@ -29,11 +29,11 @@ public class BackupTool : IMcpTool
         // Click Encrypt tab if not already active
         await WpfElementFinder.ClickButton("TabEncrypt", 5000);
 
-        // Set file path
-        await WpfElementFinder.SetText("EncryptFilePath", filePath);
+        // Set file path (ReadOnly TextBox uses keyboard simulation)
+        await WpfElementFinder.SetTextByKeyboard("EncryptFilePath", filePath);
 
         // Set password
-        await WpfElementFinder.SetText("EncryptKeyBox", password);
+        await WpfElementFinder.SetTextByKeyboard("EncryptKeyBox", password);
 
         // Set fragment size if specified
         if (fragSize.HasValue)
@@ -43,8 +43,9 @@ public class BackupTool : IMcpTool
         if (!string.IsNullOrEmpty(customName))
             await WpfElementFinder.SetText("CustomNameBox", customName);
 
-        // Select strategy card
-        await WpfElementFinder.ClickButton("Strategy" + strategy.Replace(".", "").Replace("+", "P"), 5000);
+        // Select strategy card by its displayed name (e.g. "FSS-1", "FSS-3")
+        string strategyDisplay = strategy.Replace("FSS", "FSS-").Replace("-+", "+");
+        await WpfElementFinder.ClickByText(strategyDisplay, 5000);
 
         // Click Start Encryption
         await WpfElementFinder.ClickButton("StartEncryptButton", 5000);

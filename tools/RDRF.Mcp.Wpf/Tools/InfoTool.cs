@@ -23,11 +23,11 @@ public class InfoTool : IMcpTool
         // Click Decrypt tab to see file info
         await WpfElementFinder.ClickButton("TabDecrypt", 5000);
 
-        // Set index file to trigger info display
-        await WpfElementFinder.SetText("DecryptIndexPath", indexPath);
+        // Set index file to trigger info display (ReadOnly TextBox uses keyboard)
+        await WpfElementFinder.SetTextByKeyboard("DecryptIndexPath", indexPath);
 
         // Set password to decrypt info
-        await WpfElementFinder.SetText("DecryptKeyBox", password);
+        await WpfElementFinder.SetTextByKeyboard("DecryptKeyBox", password);
 
         // Read info fields
         await Task.Delay(2000); // wait for UI to update
