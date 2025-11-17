@@ -25,15 +25,15 @@ public class RestoreTool : IMcpTool
         // Click Decrypt tab
         await WpfElementFinder.ClickButton("TabDecrypt", 5000);
 
-        // Set index file path
-        await WpfElementFinder.SetText("DecryptIndexPath", indexPath);
+        // Set index file path (ReadOnly TextBox uses keyboard)
+        await WpfElementFinder.SetTextByKeyboard("DecryptIndexPath", indexPath);
 
         // Set password
-        await WpfElementFinder.SetText("DecryptKeyBox", password);
+        await WpfElementFinder.SetTextByKeyboard("DecryptKeyBox", password);
 
         // Set output path if specified
         if (!string.IsNullOrEmpty(outputPath))
-            await WpfElementFinder.SetText("DecryptOutputPath", outputPath);
+            await WpfElementFinder.SetTextByKeyboard("DecryptOutputPath", outputPath);
 
         // Click Start Decryption
         await WpfElementFinder.ClickButton("StartDecryptButton", 5000);

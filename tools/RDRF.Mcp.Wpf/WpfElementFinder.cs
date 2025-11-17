@@ -134,6 +134,86 @@ return 'false'
         return result == "true";
     }
 
+    private static string ClickByTextScript(string text, int timeoutMs)
+    {
+        // Build a PowerShell script to click an element by its displayed text.
+        // Uses Add-Type for user32 mouse_event for Border elements without InvokePattern.
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Add-Type -AssemblyName UIAutomationClient");
+        sb.AppendLine("$sw = [Diagnostics.Stopwatch]::StartNew()");
+        sb.AppendLine("$timeoutMs = " + timeoutMs);
+        sb.AppendLine("$target = '" + text.Replace("'", "''") + "'");
+        sb.AppendLine("while ($sw.ElapsedMilliseconds -lt $timeoutMs) {");
+        sb.AppendLine("  $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $target)");
+        sb.AppendLine("  $el = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)");
+        sb.AppendLine("  if ($el -ne $null -and $el.Current.IsEnabled) {");
+        sb.AppendLine("    $rect = $el.Current.BoundingRectangle");
+        sb.AppendLine("    if ($rect.Width -gt 0 -and $rect.Height -gt 0) {");
+        sb.AppendLine("      $x = [int]($rect.X + $rect.Width / 2)");
+        sb.AppendLine("      $y = [int]($rect.Y + $rect.Height / 2)");
+        sb.AppendLine("      $null = [System.Windows.Automation.AutomationElement]::RootElement.SetFocus()");
+        sb.AppendLine("      Add-Type -AssemblyName System.Windows.Forms");
+        sb.AppendLine("      [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point($x, $y)");
+        sb.AppendLine("      $sig = '[DllImport(\"user32.dll\")] public static extern void mouse_event(uint f, int x, int y, uint d, int e);'");
+        sb.AppendLine("      Add-Type -MemberDefinition $sig -Name NativeMouse -Namespace Win32");
+        sb.AppendLine("      [Win32.NativeMouse]::mouse_event(0x0002, 0, 0, 0, 0)");
+        sb.AppendLine("      Start-Sleep -Milliseconds 50");
+        sb.AppendLine("      [Win32.NativeMouse]::mouse_event(0x0004, 0, 0, 0, 0)");
+        sb.AppendLine("    }");
+        sb.AppendLine("    return 'true'");
+        sb.AppendLine("  }");
+        sb.AppendLine("  Start-Sleep -Milliseconds 200");
+        sb.AppendLine("}");
+        sb.AppendLine("return 'false'");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Click an element by finding a TextBlock child with specific text (for Border cards, etc.)
+    /// </summary>
+    public static async Task<bool> ClickByText(string text, int timeoutMs = 15000)
+    {
+        var script = ClickByTextScript(text, timeoutMs);
+        var result = await ExecutePowershellAsync(script, timeoutMs + 5000);
+        return result == "true";
+    }
+
+    private static string SetTextByKeyboardScript(string automationId, string text, int timeoutMs)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Add-Type -AssemblyName UIAutomationClient");
+        sb.AppendLine("Add-Type -AssemblyName System.Windows.Forms");
+        sb.AppendLine("$sw = [Diagnostics.Stopwatch]::StartNew()");
+        sb.AppendLine("$timeoutMs = " + timeoutMs);
+        sb.AppendLine("$aid = '" + automationId.Replace("'", "''") + "'");
+        sb.AppendLine("$val = '" + text.Replace("'", "''") + "'");
+        sb.AppendLine("while ($sw.ElapsedMilliseconds -lt $timeoutMs) {");
+        sb.AppendLine("  $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, $aid)");
+        sb.AppendLine("  $el = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)");
+        sb.AppendLine("  if ($el -ne $null) {");
+        sb.AppendLine("    $el.SetFocus()");
+        sb.AppendLine("    Start-Sleep -Milliseconds 200");
+        sb.AppendLine("    [System.Windows.Forms.SendKeys]::SendWait('^a')");
+        sb.AppendLine("    Start-Sleep -Milliseconds 100");
+        sb.AppendLine("    [System.Windows.Forms.SendKeys]::SendWait($val)");
+        sb.AppendLine("    return 'true'");
+        sb.AppendLine("  }");
+        sb.AppendLine("  Start-Sleep -Milliseconds 200");
+        sb.AppendLine("}");
+        sb.AppendLine("return 'false'");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Set text on ANY element (including ReadOnly) by focusing + keyboard input.
+    /// </summary>
+    public static async Task<bool> SetTextByKeyboard(string automationId, string text, int timeoutMs = 15000)
+    {
+        var script = SetTextByKeyboardScript(automationId, text, timeoutMs);
+        var result = await ExecutePowershellAsync(script, timeoutMs + 5000);
+        return result == "true";
+    }
+
     /// <summary>
     /// Get the text content of an element by AutomationId using TextPattern or Name.
     /// </summary>
