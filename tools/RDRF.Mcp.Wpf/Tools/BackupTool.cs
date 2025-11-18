@@ -29,11 +29,13 @@ public class BackupTool : IMcpTool
         // Click Encrypt tab if not already active
         await WpfElementFinder.ClickButton("TabEncrypt", 5000);
 
-        // Set file path (ReadOnly TextBox uses keyboard simulation)
-        await WpfElementFinder.SetTextByKeyboard("EncryptFilePath", filePath);
+        // Set file path (try ValuePattern first, fall back to keyboard)
+        if (!await WpfElementFinder.SetText("EncryptFilePath", filePath, 3000))
+            await WpfElementFinder.SetTextByKeyboard("EncryptFilePath", filePath, 5000);
 
-        // Set password
-        await WpfElementFinder.SetTextByKeyboard("EncryptKeyBox", password);
+        // Set password (try ValuePattern first, fall back to keyboard)
+        if (!await WpfElementFinder.SetText("EncryptKeyBox", password, 3000))
+            await WpfElementFinder.SetTextByKeyboard("EncryptKeyBox", password, 5000);
 
         // Set fragment size if specified
         if (fragSize.HasValue)

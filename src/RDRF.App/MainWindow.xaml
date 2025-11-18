@@ -142,6 +142,45 @@
             <Setter Property="Background" Value="#2A2A40" />
         </Style>
 
+        <!-- Strategy Card Button Style (UIA-accessible replacement for Border cards) -->
+        <Style x:Key="StrategyCardButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource BackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="14" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="False" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.85" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.7" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="StrategyCardActiveButtonStyle" TargetType="Button" BasedOn="{StaticResource StrategyCardButtonStyle}">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+            <Setter Property="Background" Value="#2A2A40" />
+        </Style>
+
         <Style x:Key="FsaToggleStyle" TargetType="ToggleButton">
             <Setter Property="Background" Value="{StaticResource BackgroundBrush}" />
             <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
@@ -393,11 +432,11 @@
                                     <UniformGrid Columns="4"
                                                  Rows="2">
                                         <!-- FSS-1 -->
-                                        <Border x:Name="StrategyFSS1"
-                                                Style="{StaticResource StrategyCardActiveStyle}"
+                                        <Button x:Name="StrategyFSS1"
+                                                Style="{StaticResource StrategyCardActiveButtonStyle}"
                                                 Margin="0,0,8,8"
                                                 AutomationProperties.AutomationId="StrategyFSS1"
-                                                MouseLeftButtonDown="StrategyFSS1_Click">
+                                                Click="StrategyFSS1_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-1"
                                                            FontSize="11"
@@ -411,15 +450,15 @@
                                                 <TextBlock Text="~100% overhead"
                                                            FontSize="11"
                                                            Foreground="{StaticResource TextSecondaryBrush}" />
-                                            </StackPanel>
-                                        </Border>
+                                             </StackPanel>
+                                        </Button>
 
                                         <!-- FSS-2 -->
-                                        <Border x:Name="StrategyFSS2"
-                                                Style="{StaticResource StrategyCardStyle}"
+                                        <Button x:Name="StrategyFSS2"
+                                                Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="8,0,8,8"
                                                 AutomationProperties.AutomationId="StrategyFSS2"
-                                                MouseLeftButtonDown="StrategyFSS2_Click">
+                                                Click="StrategyFSS2_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-2"
                                                            FontSize="11"
@@ -433,15 +472,15 @@
                                                 <TextBlock Text="~105% overhead"
                                                            FontSize="11"
                                                            Foreground="{StaticResource TextSecondaryBrush}" />
-                                            </StackPanel>
-                                        </Border>
+                                             </StackPanel>
+                                        </Button>
 
                                         <!-- FSS-2R -->
-                                        <Border x:Name="StrategyFSS2R"
-                                                Style="{StaticResource StrategyCardStyle}"
+                                        <Button x:Name="StrategyFSS2R"
+                                                Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="8,0,8,8"
                                                 AutomationProperties.AutomationId="StrategyFSS2R"
-                                                MouseLeftButtonDown="StrategyFSS2R_Click">
+                                                Click="StrategyFSS2R_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-2R"
                                                            FontSize="11"
@@ -456,14 +495,14 @@
                                                            FontSize="11"
                                                            Foreground="{StaticResource TextSecondaryBrush}" />
                                             </StackPanel>
-                                        </Border>
+                                        </Button>
 
                                         <!-- FSS-3 -->
-                                        <Border x:Name="StrategyFSS3"
-                                                Style="{StaticResource StrategyCardStyle}"
+                                        <Button x:Name="StrategyFSS3"
+                                                Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="8,0,0,8"
                                                 AutomationProperties.AutomationId="StrategyFSS3"
-                                                MouseLeftButtonDown="StrategyFSS3_Click">
+                                                Click="StrategyFSS3_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-3"
                                                            FontSize="11"
@@ -478,14 +517,14 @@
                                                            FontSize="11"
                                                            Foreground="{StaticResource TextSecondaryBrush}" />
                                             </StackPanel>
-                                        </Border>
+                                        </Button>
 
                                         <!-- FSS-5 -->
-                                        <Border x:Name="StrategyFSS5"
-                                                Style="{StaticResource StrategyCardStyle}"
+                                        <Button x:Name="StrategyFSS5"
+                                                Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="0,8,8,0"
                                                 AutomationProperties.AutomationId="StrategyFSS5"
-                                                MouseLeftButtonDown="StrategyFSS5_Click">
+                                                Click="StrategyFSS5_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-5"
                                                            FontSize="11"
@@ -500,14 +539,14 @@
                                                            FontSize="11"
                                                            Foreground="{StaticResource TextSecondaryBrush}" />
                                             </StackPanel>
-                                        </Border>
+                                        </Button>
 
                                         <!-- FSS-5+ -->
-                                        <Border x:Name="StrategyFSS5P"
-                                                Style="{StaticResource StrategyCardStyle}"
+                                        <Button x:Name="StrategyFSS5P"
+                                                Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="8,8,8,0"
                                                 AutomationProperties.AutomationId="StrategyFSS5P"
-                                                MouseLeftButtonDown="StrategyFSS5P_Click">
+                                                Click="StrategyFSS5P_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-5+"
                                                            FontSize="11"
@@ -522,14 +561,14 @@
                                                            FontSize="11"
                                                            Foreground="{StaticResource TextSecondaryBrush}" />
                                             </StackPanel>
-                                        </Border>
+                                        </Button>
 
                                         <!-- FSS-6 -->
-                                        <Border x:Name="StrategyFSS6"
-                                                Style="{StaticResource StrategyCardStyle}"
+                                        <Button x:Name="StrategyFSS6"
+                                                Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="8,8,8,0"
                                                 AutomationProperties.AutomationId="StrategyFSS6"
-                                                MouseLeftButtonDown="StrategyFSS6_Click">
+                                                Click="StrategyFSS6_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-6"
                                                            FontSize="11"
@@ -544,14 +583,14 @@
                                                            FontSize="11"
                                                            Foreground="{StaticResource TextSecondaryBrush}" />
                                             </StackPanel>
-                                        </Border>
+                                        </Button>
 
                                         <!-- FSS-6.1 -->
-                                        <Border x:Name="StrategyFSS61"
-                                                Style="{StaticResource StrategyCardStyle}"
+                                        <Button x:Name="StrategyFSS61"
+                                                Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="8,8,0,0"
                                                 AutomationProperties.AutomationId="StrategyFSS61"
-                                                MouseLeftButtonDown="StrategyFSS61_Click">
+                                                Click="StrategyFSS61_Click">
                                             <StackPanel>
                                                 <TextBlock Text="FSS-6.1"
                                                            FontSize="11"
@@ -566,7 +605,7 @@
                                                            FontSize="11"
                                                            Foreground="{StaticResource TextSecondaryBrush}" />
                                             </StackPanel>
-                                        </Border>
+                                        </Button>
                                     </UniformGrid>
                                 </StackPanel>
                             </Border>
