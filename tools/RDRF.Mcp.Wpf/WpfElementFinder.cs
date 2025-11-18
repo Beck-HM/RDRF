@@ -136,31 +136,56 @@ return 'false'
 
     private static string ClickByTextScript(string text, int timeoutMs)
     {
-        // Build a PowerShell script to click an element by its displayed text.
-        // Uses Add-Type for user32 mouse_event for Border elements without InvokePattern.
+        // Find RDRF window, then search TextBlocks inside for matching text.
+        // When found, walk up the UIA tree to find the clickable parent Border.
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("Add-Type -AssemblyName UIAutomationClient");
         sb.AppendLine("$sw = [Diagnostics.Stopwatch]::StartNew()");
         sb.AppendLine("$timeoutMs = " + timeoutMs);
         sb.AppendLine("$target = '" + text.Replace("'", "''") + "'");
+        sb.AppendLine("$walker = New-Object System.Windows.Automation.TreeWalker([System.Windows.Automation.Condition]::TrueCondition)");
         sb.AppendLine("while ($sw.ElapsedMilliseconds -lt $timeoutMs) {");
-        sb.AppendLine("  $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $target)");
-        sb.AppendLine("  $el = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)");
-        sb.AppendLine("  if ($el -ne $null -and $el.Current.IsEnabled) {");
-        sb.AppendLine("    $rect = $el.Current.BoundingRectangle");
-        sb.AppendLine("    if ($rect.Width -gt 0 -and $rect.Height -gt 0) {");
-        sb.AppendLine("      $x = [int]($rect.X + $rect.Width / 2)");
-        sb.AppendLine("      $y = [int]($rect.Y + $rect.Height / 2)");
-        sb.AppendLine("      $null = [System.Windows.Automation.AutomationElement]::RootElement.SetFocus()");
-        sb.AppendLine("      Add-Type -AssemblyName System.Windows.Forms");
-        sb.AppendLine("      [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point($x, $y)");
-        sb.AppendLine("      $sig = '[DllImport(\"user32.dll\")] public static extern void mouse_event(uint f, int x, int y, uint d, int e);'");
-        sb.AppendLine("      Add-Type -MemberDefinition $sig -Name NativeMouse -Namespace Win32");
-        sb.AppendLine("      [Win32.NativeMouse]::mouse_event(0x0002, 0, 0, 0, 0)");
-        sb.AppendLine("      Start-Sleep -Milliseconds 50");
-        sb.AppendLine("      [Win32.NativeMouse]::mouse_event(0x0004, 0, 0, 0, 0)");
+        // Find RDRF window
+        sb.AppendLine("  $wndCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'RDRF')");
+        sb.AppendLine("  $wnd = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children, $wndCond)");
+        sb.AppendLine("  if ($wnd -ne $null) {");
+        // Walk all descendants looking for matching text
+        sb.AppendLine("    $todo = New-Object System.Collections.Generic.Queue[System.Windows.Automation.AutomationElement]");
+        sb.AppendLine("    $todo.Enqueue($wnd)");
+        sb.AppendLine("    while ($todo.Count -gt 0) {");
+        sb.AppendLine("      $el = $todo.Dequeue()");
+        sb.AppendLine("      try {");
+        sb.AppendLine("        $tp = $null");
+        sb.AppendLine("        if ($el.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$tp)) {");
+        sb.AppendLine("          $t = $tp.DocumentRange.GetText(-1).Trim()");
+        sb.AppendLine("          if ($t -eq $target) {");
+        // Walk up to find a clickable parent (Border or any element with BoundingRectangle)
+        sb.AppendLine("            $parent = $walker.GetParent($el)");
+        sb.AppendLine("            while ($parent -ne $null -and $parent -ne $wnd) {");
+        sb.AppendLine("              $pr = $parent.Current.BoundingRectangle");
+        sb.AppendLine("              if ($pr.Width -gt 0 -and $pr.Height -gt 0) { break }");
+        sb.AppendLine("              $parent = $walker.GetParent($parent)");
+        sb.AppendLine("            }");
+        sb.AppendLine("            if ($parent -ne $null -and $parent -ne $wnd) {");
+        sb.AppendLine("              $rect = $parent.Current.BoundingRectangle");
+        sb.AppendLine("              $x = [int]($rect.X + $rect.Width / 2)");
+        sb.AppendLine("              $y = [int]($rect.Y + $rect.Height / 2)");
+        sb.AppendLine("              Add-Type -AssemblyName System.Windows.Forms");
+        sb.AppendLine("              [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point($x, $y)");
+        sb.AppendLine("              $sig = '[DllImport(\"user32.dll\")] public static extern void mouse_event(uint f, int x, int y, uint d, int e);'");
+        sb.AppendLine("              Add-Type -MemberDefinition $sig -Name NativeMouse -Namespace Win32");
+        sb.AppendLine("              [Win32.NativeMouse]::mouse_event(0x0002, 0, 0, 0, 0)");
+        sb.AppendLine("              Start-Sleep -Milliseconds 50");
+        sb.AppendLine("              [Win32.NativeMouse]::mouse_event(0x0004, 0, 0, 0, 0)");
+        sb.AppendLine("              return 'true'");
+        sb.AppendLine("            }");
+        sb.AppendLine("          }");
+        sb.AppendLine("        }");
+        // Enqueue children
+        sb.AppendLine("        $child = $walker.GetFirstChild($el)");
+        sb.AppendLine("        while ($child -ne $null) { $todo.Enqueue($child); $child = $walker.GetNextSibling($child) }");
+        sb.AppendLine("      } catch {}");
         sb.AppendLine("    }");
-        sb.AppendLine("    return 'true'");
         sb.AppendLine("  }");
         sb.AppendLine("  Start-Sleep -Milliseconds 200");
         sb.AppendLine("}");

@@ -22,7 +22,7 @@ public partial class MainWindow : Window
     private string _configPath = string.Empty;
     private AppConfig _config = new();
 
-    private readonly Dictionary<string, Border> _strategyBorders = new();
+    private readonly Dictionary<string, Button> _strategyBorders = new();
 
     public MainWindow()
     {
@@ -210,8 +210,8 @@ public partial class MainWindow : Window
         {
             if (kvp.Key == "FSS6.1") continue;
             bool isSelected = kvp.Key == strategy;
-            kvp.Value.Style = FindResource(isSelected ? "StrategyCardActiveStyle" : "StrategyCardStyle") as Style ?? kvp.Value.Style;
-            var sp = kvp.Value.Child as StackPanel;
+            kvp.Value.Style = FindResource(isSelected ? "StrategyCardActiveButtonStyle" : "StrategyCardButtonStyle") as Style ?? kvp.Value.Style;
+            var sp = kvp.Value.Content as StackPanel;
             if (sp?.Children.Count > 0 && sp.Children[0] is TextBlock tb)
                 tb.Foreground = FindResource(isSelected ? "AccentBrush" : "TextSecondaryBrush") as Brush ?? tb.Foreground;
             kvp.Value.IsEnabled = true;
@@ -229,8 +229,8 @@ public partial class MainWindow : Window
             bool isPrimary = kvp.Key == primary;
             bool isSelected = isPrimary || (isFss6 && auxSelected);
 
-            kvp.Value.Style = FindResource(isSelected ? "StrategyCardActiveStyle" : "StrategyCardStyle") as Style ?? kvp.Value.Style;
-            var sp = kvp.Value.Child as StackPanel;
+            kvp.Value.Style = FindResource(isSelected ? "StrategyCardActiveButtonStyle" : "StrategyCardButtonStyle") as Style ?? kvp.Value.Style;
+            var sp = kvp.Value.Content as StackPanel;
             if (sp?.Children.Count > 0 && sp.Children[0] is TextBlock tb)
                 tb.Foreground = FindResource(isSelected ? "AccentBrush" : "TextSecondaryBrush") as Brush ?? tb.Foreground;
 
@@ -247,14 +247,14 @@ public partial class MainWindow : Window
         }
     }
 
-    private void StrategyFSS1_Click(object sender, MouseButtonEventArgs e) => SelectStrategy("FSS1");
-    private void StrategyFSS2_Click(object sender, MouseButtonEventArgs e) => SelectStrategy("FSS2");
-    private void StrategyFSS2R_Click(object sender, MouseButtonEventArgs e) => SelectStrategy("FSS2R");
-    private void StrategyFSS3_Click(object sender, MouseButtonEventArgs e) => SelectStrategy("FSS3");
-    private void StrategyFSS5_Click(object sender, MouseButtonEventArgs e) => SelectStrategy("FSS5");
-    private void StrategyFSS5P_Click(object sender, MouseButtonEventArgs e) => SelectStrategy("FSS5P");
-    private void StrategyFSS6_Click(object sender, MouseButtonEventArgs e) => SelectStrategy("FSS6");
-    private void StrategyFSS61_Click(object sender, MouseButtonEventArgs e) => SelectStrategy("FSS6.1");
+    private void StrategyFSS1_Click(object sender, RoutedEventArgs e) => SelectStrategy("FSS1");
+    private void StrategyFSS2_Click(object sender, RoutedEventArgs e) => SelectStrategy("FSS2");
+    private void StrategyFSS2R_Click(object sender, RoutedEventArgs e) => SelectStrategy("FSS2R");
+    private void StrategyFSS3_Click(object sender, RoutedEventArgs e) => SelectStrategy("FSS3");
+    private void StrategyFSS5_Click(object sender, RoutedEventArgs e) => SelectStrategy("FSS5");
+    private void StrategyFSS5P_Click(object sender, RoutedEventArgs e) => SelectStrategy("FSS5P");
+    private void StrategyFSS6_Click(object sender, RoutedEventArgs e) => SelectStrategy("FSS6");
+    private void StrategyFSS61_Click(object sender, RoutedEventArgs e) => SelectStrategy("FSS6.1");
 
     // ── Encrypt Page (thin coordination) ──
 
