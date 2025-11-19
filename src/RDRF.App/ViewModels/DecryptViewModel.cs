@@ -184,6 +184,55 @@ public class DecryptViewModel : ViewModelBase, IDisposable
         StartDecryptCommand = new RelayCommand(_ => StartDecrypt());
     }
 
+    /// <summary>
+    /// Set the index path programmatically (used by rdrf-mcp-wpf IPC).
+    /// </summary>
+    public void SetIndexPath(string filePath)
+    {
+        StopFragmentWatcher();
+
+        _decryptIndexPath = filePath;
+        IndexPathDisplay = Path.GetFileName(filePath);
+
+        _decryptStoragePath = Path.GetDirectoryName(filePath);
+
+        _decryptService?.Dispose();
+        _decryptService = null;
+        _decryptFragmentPrefix = null;
+
+        string extension = Path.GetExtension(filePath).ToLowerInvariant();
+
+        if (extension == ".rdrf")
+        {
+            string fileName = Path.GetFileNameWithoutExtension(filePath);
+            int lastUnderscore = fileName.LastIndexOf('_');
+            if (lastUnderscore > 0)
+            {
+                string suffix = fileName[(lastUnderscore + 1)..];
+                if (int.TryParse(suffix, out _))
+                    _decryptFragmentPrefix = fileName[..lastUnderscore];
+            }
+
+            if (_decryptFragmentPrefix == null)
+            {
+                ShowFileInfo = true;
+                ShowFragmentStatus = false;
+                IsStartEnabled = false;
+                InfoFileName = "Invalid fragment filename";
+                return;
+            }
+
+            FileHint = $"Fragment mode (prefix: {_decryptFragmentPrefix})";
+        }
+        else
+        {
+            FileHint = "Index mode";
+        }
+
+        // LoadBackupInfo is triggered by DecryptKeyBox_PasswordChanged when password is set.
+        // The path is now available for the password entry handler.
+    }
+
     private void BrowseBackup()
     {
         StopFragmentWatcher();
