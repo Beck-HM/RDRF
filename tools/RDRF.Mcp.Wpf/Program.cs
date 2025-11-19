@@ -29,11 +29,12 @@ if (!File.Exists(appExe))
 }
 
 var controller = new WpfAppController(appExe);
+Func<string, bool> sendIpc = json => controller.SendIpcMessage(json);
 var server = new McpServer();
 server.RegisterTool(new LaunchTool(controller));
 server.RegisterTool(new CloseTool(controller));
-server.RegisterTool(new BackupTool());
-server.RegisterTool(new RestoreTool());
+server.RegisterTool(new BackupTool(sendIpc));
+server.RegisterTool(new RestoreTool(sendIpc));
 server.RegisterTool(new InfoTool());
 
 // JSON-RPC 2.0 over stdio, newline-delimited

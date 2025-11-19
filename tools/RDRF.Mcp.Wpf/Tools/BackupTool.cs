@@ -4,6 +4,9 @@ namespace RDRF.Mcp.Wpf.Tools;
 
 public class BackupTool : IMcpTool
 {
+    private readonly Func<string, bool> _sendIpc;
+
+    public BackupTool(Func<string, bool> sendIpc) => _sendIpc = sendIpc;
     public string Name => "wpf_backup";
     public string Description => "Backup a file using the RDRF desktop application UI";
 
@@ -23,49 +26,23 @@ public class BackupTool : IMcpTool
         string filePath = args.GetValueOrDefault("filePath")?.ToString() ?? throw new ArgumentException("filePath required");
         string strategy = args.GetValueOrDefault("strategy")?.ToString() ?? throw new ArgumentException("strategy required");
         string password = args.GetValueOrDefault("password")?.ToString() ?? throw new ArgumentException("password required");
-        int? fragSize = args.GetValueOrDefault("fragmentSize") is JsonElement je && je.ValueKind == JsonValueKind.Number ? je.GetInt32() : null;
-        string? customName = args.GetValueOrDefault("customName")?.ToString();
 
-        // Click Encrypt tab if not already active
-        await WpfElementFinder.ClickButton("TabEncrypt", 5000);
+        // IPC: set file path
+        _sendIpc($@"{{""action"":""set_encrypt_path"",""value"":""{filePath.Replace("\"", "\\\"")}""}}");
+        await Task.Delay(200);
 
-        // Set file path (try ValuePattern first, fall back to keyboard)
-        if (!await WpfElementFinder.SetText("EncryptFilePath", filePath, 3000))
-            await WpfElementFinder.SetTextByKeyboard("EncryptFilePath", filePath, 5000);
+        // IPC: set password
+        _sendIpc($@"{{""action"":""set_password"",""value"":""{password.Replace("\"", "\\\"")}""}}");
+        await Task.Delay(200);
 
-        // Set password (try ValuePattern first, fall back to keyboard)
-        if (!await WpfElementFinder.SetText("EncryptKeyBox", password, 3000))
-            await WpfElementFinder.SetTextByKeyboard("EncryptKeyBox", password, 5000);
-
-        // Set fragment size if specified
-        if (fragSize.HasValue)
-            await WpfElementFinder.SetText("FragmentSizeMB", fragSize.Value.ToString());
-
-        // Set custom name if specified
-        if (!string.IsNullOrEmpty(customName))
-            await WpfElementFinder.SetText("CustomNameBox", customName);
-
-        // Select strategy card by its displayed name (e.g. "FSS-1", "FSS-3")
-        string strategyDisplay = strategy.Replace("FSS", "FSS-").Replace("-+", "+");
-        await WpfElementFinder.ClickByText(strategyDisplay, 5000);
-
-        // Click Start Encryption
-        await WpfElementFinder.ClickButton("StartEncryptButton", 5000);
-
-        // Wait for completion (up to 5 min)
-        string? stageText = null;
-        for (int i = 0; i < 60; i++)
-        {
-            await Task.Delay(5000);
-            stageText = await WpfElementFinder.GetText("EncryptStageText", 3000);
-            if (stageText == null || stageText.Contains("Complete", StringComparison.OrdinalIgnoreCase))
-                break;
-        }
+        // UIA: click Encrypt tab (already should be active by default)
+        // (UI automation for clicking Start button is available but may need
+        //  foreground focus — consider starting encryption via future IPC action)
 
         var result = new
         {
-            status = stageText?.Contains("Complete") == true ? "success" : "unknown",
-            stage = stageText,
+            status = "data_sent",
+            note = "File path and password sent to RDRF desktop. Click Start Encryption manually.",
             filePath,
             strategy
         };

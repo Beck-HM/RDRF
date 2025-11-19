@@ -4,6 +4,9 @@ namespace RDRF.Mcp.Wpf.Tools;
 
 public class RestoreTool : IMcpTool
 {
+    private readonly Func<string, bool> _sendIpc;
+
+    public RestoreTool(Func<string, bool> sendIpc) => _sendIpc = sendIpc;
     public string Name => "wpf_restore";
     public string Description => "Restore a backup using the RDRF desktop application UI";
 
@@ -25,15 +28,13 @@ public class RestoreTool : IMcpTool
         // Click Decrypt tab
         await WpfElementFinder.ClickButton("TabDecrypt", 5000);
 
-        // Set index file path (ReadOnly TextBox uses keyboard)
-        await WpfElementFinder.SetTextByKeyboard("DecryptIndexPath", indexPath);
+        // Send index path to WPF app via IPC
+        _sendIpc($@"{{""action"":""set_decrypt_path"",""value"":""{indexPath.Replace("\"", "\\\"")}""}}");
+        await Task.Delay(500);
 
-        // Set password
-        await WpfElementFinder.SetTextByKeyboard("DecryptKeyBox", password);
-
-        // Set output path if specified
-        if (!string.IsNullOrEmpty(outputPath))
-            await WpfElementFinder.SetTextByKeyboard("DecryptOutputPath", outputPath);
+        // Send decrypt password via IPC
+        _sendIpc($@"{{""action"":""set_decrypt_password"",""value"":""{password.Replace("\"", "\\\"")}""}}");
+        await Task.Delay(300);
 
         // Click Start Decryption
         await WpfElementFinder.ClickButton("StartDecryptButton", 5000);

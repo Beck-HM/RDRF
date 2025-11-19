@@ -2,10 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using RDRF.App.ViewModels;
@@ -23,6 +26,16 @@ public partial class MainWindow : Window
     private AppConfig _config = new();
 
     private readonly Dictionary<string, Button> _strategyBorders = new();
+
+    private const int WM_COPYDATA = 0x004A;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct COPYDATASTRUCT
+    {
+        public IntPtr dwData;
+        public int cbData;
+        public IntPtr lpData;
+    }
 
     public MainWindow()
     {
@@ -64,6 +77,70 @@ public partial class MainWindow : Window
             if (e.PropertyName == nameof(EncryptViewModel.EncryptFilePath))
                 QueuePreviewUpdate();
         };
+
+        // HwndSource hook for WM_COPYDATA IPC (used by rdrf-mcp-wpf)
+        SourceInitialized += OnSourceInitialized;
+    }
+
+    private void OnSourceInitialized(object? sender, EventArgs e)
+    {
+        try
+        {
+            var src = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            src?.AddHook(WndProc);
+        }
+        catch { }
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg == WM_COPYDATA)
+        {
+            try
+            {
+                var cds = Marshal.PtrToStructure<COPYDATASTRUCT>(lParam);
+                if (cds.cbData > 0 && cds.lpData != IntPtr.Zero)
+                {
+                    byte[] bytes = new byte[cds.cbData];
+                    Marshal.Copy(cds.lpData, bytes, 0, cds.cbData);
+                    string json = Encoding.UTF8.GetString(bytes);
+                    using var doc = JsonDocument.Parse(json);
+                    var root = doc.RootElement;
+                    string action = root.GetProperty("action").GetString() ?? "";
+                    string value = root.GetProperty("value").GetString() ?? "";
+
+                    Dispatcher.Invoke(() =>
+                    {
+                        switch (action)
+                        {
+                            case "set_encrypt_path":
+                                if (!string.IsNullOrEmpty(value) && File.Exists(value))
+                                {
+                                    _encryptVM.EncryptFilePath = value;
+                                    _encryptVM.FilePathDisplay = Path.GetFileName(value);
+                                }
+                                break;
+
+                            case "set_decrypt_path":
+                                if (!string.IsNullOrEmpty(value) && File.Exists(value))
+                                    _decryptVM.SetIndexPath(value);
+                                break;
+
+                            case "set_password":
+                                EncryptKeyBox.Password = value;
+                                break;
+
+                            case "set_decrypt_password":
+                                DecryptKeyBox.Password = value;
+                                break;
+                        }
+                    });
+                }
+            }
+            catch { /* ignore malformed IPC messages */ }
+            handled = true;
+        }
+        return IntPtr.Zero;
     }
 
     private void QueuePreviewUpdate()
