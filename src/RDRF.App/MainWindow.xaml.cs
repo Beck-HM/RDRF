@@ -98,21 +98,32 @@ public partial class MainWindow : Window
         {
             try
             {
+                try { System.IO.File.AppendAllText(@"C:\Users\admin\Desktop\rdrf_trace.txt",
+                    $"[{DateTime.Now:HH:mm:ss.fff}] WndProc WM_COPYDATA lParam={lParam}{Environment.NewLine}"); }
+                catch { }
+
                 var cds = Marshal.PtrToStructure<COPYDATASTRUCT>(lParam);
+                try { System.IO.File.AppendAllText(@"C:\Users\admin\Desktop\rdrf_trace.txt",
+                    $"  cbData={cds.cbData} lpData={cds.lpData}{Environment.NewLine}"); }
+                catch { }
+
                 if (cds.cbData > 0 && cds.lpData != IntPtr.Zero)
                 {
                     byte[] bytes = new byte[cds.cbData];
                     Marshal.Copy(cds.lpData, bytes, 0, cds.cbData);
                     string json = Encoding.UTF8.GetString(bytes);
+                    try { System.IO.File.AppendAllText(@"C:\Users\admin\Desktop\rdrf_trace.txt",
+                        $"  json='{json}'{Environment.NewLine}"); }
+                    catch { }
+
                     using var doc = JsonDocument.Parse(json);
                     var root = doc.RootElement;
                     string action = root.GetProperty("action").GetString() ?? "";
-                    string value = root.GetProperty("value").GetString() ?? "";
+                    string value = root.TryGetProperty("value", out var valueEl) ? valueEl.GetString() ?? "" : "";
 
-                    Dispatcher.Invoke(() =>
+                    // WndProc runs on UI thread — dispatch directly
+                    switch (action)
                     {
-                        switch (action)
-                        {
                             case "set_encrypt_path":
                                 if (!string.IsNullOrEmpty(value) && File.Exists(value))
                                 {
@@ -135,21 +146,41 @@ public partial class MainWindow : Window
                                 break;
 
                             case "start_encrypt":
-                                _encryptVM.StartEncrypt();
+                                try
+                                {
+                                    // IPC: set strategy is handled by set_strategy action before this.
+                                    // IPC: set_output_path is handled and stays in ViewModel.
+                                    // Read values from ViewModel, not from UI controls (binding may not have updated yet).
+                                    _encryptVM.SetPassword(EncryptKeyBox.Password);
+                                    _encryptVM.FragmentSizeMB = int.TryParse(FragmentSizeMB.Text, out int mb) && mb >= 1 ? mb : 1;
+                                    _encryptVM.CustomName = CustomNameBox.Text;
+                                    // OutputPath was set by set_output_path IPC — keep ViewModel value
+                                    _encryptVM.StartEncrypt();
+                                }
+                                catch (Exception ex_start)
+                                {
+                                    try { System.IO.File.AppendAllText(@"C:\Users\admin\Desktop\rdrf_error.txt",
+                                        $"[{DateTime.Now:HH:mm:ss}] start_encrypt failed: {ex_start}{Environment.NewLine}"); }
+                                    catch { }
+                                }
                                 break;
 
                             case "set_strategy":
                                 SelectStrategy(value);
                                 break;
 
+                            case "set_output_path":
+                                if (!string.IsNullOrEmpty(value))
+                                    _encryptVM.OutputPath = value;
+                                break;
+
                             case "start_decrypt":
                                 _decryptVM.StartDecrypt();
                                 break;
                         }
-                    });
+                    }
                 }
-            }
-            catch { /* ignore malformed IPC messages */ }
+                catch { /* ignore malformed IPC messages */ }
             handled = true;
         }
         return IntPtr.Zero;

@@ -92,8 +92,8 @@ public class WpfAppController : IDisposable
 
         try
         {
-            int result = SendMessage(mainHwnd, WM_COPYDATA, IntPtr.Zero, ref cds);
-            return result != 0;
+            SendMessage(mainHwnd, WM_COPYDATA, IntPtr.Zero, ref cds);
+            return true;
         }
         finally
         {
