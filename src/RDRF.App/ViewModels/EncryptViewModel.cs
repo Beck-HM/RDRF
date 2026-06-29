@@ -285,6 +285,16 @@ public class EncryptViewModel : ViewModelBase
 
     public void StartEncrypt()
     {
+        // Diagnostic: append to a file that we can check
+        try
+        {
+            string log = $"[{DateTime.Now:HH:mm:ss.fff}] StartEncrypt called. " +
+                $"File='{EncryptFilePath}' pw={_pendingPassword?.Length ?? -1} sz={FragmentSizeMB} out='{OutputPath}'" +
+                Environment.NewLine;
+            System.IO.File.AppendAllText(@"C:\Users\admin\Desktop\rdrf_start.txt", log);
+        }
+        catch { }
+
         if (string.IsNullOrEmpty(EncryptFilePath))
         {
             RequestShowError?.Invoke("Validation", "Please select a file to encrypt.", null);
@@ -371,10 +381,21 @@ public class EncryptViewModel : ViewModelBase
             }
             catch (Exception ex)
             {
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                try
                 {
-                    RequestShowError?.Invoke("Encryption failed", ex.Message, ex.ToString());
-                });
+                    System.IO.File.AppendAllText(
+                        @"C:\Users\admin\Desktop\rdrf_error.txt",
+                        $"[{DateTime.Now:HH:mm:ss}] Backup failed: {ex}{Environment.NewLine}");
+                }
+                catch { }
+                try
+                {
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        RequestShowError?.Invoke("Encryption failed", ex.Message, ex.ToString());
+                    });
+                }
+                catch { }
             }
             finally
             {
