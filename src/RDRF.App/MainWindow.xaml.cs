@@ -138,6 +138,10 @@ public partial class MainWindow : Window
                                 _encryptVM.StartEncrypt();
                                 break;
 
+                            case "set_strategy":
+                                SelectStrategy(value);
+                                break;
+
                             case "start_decrypt":
                                 _decryptVM.StartDecrypt();
                                 break;
