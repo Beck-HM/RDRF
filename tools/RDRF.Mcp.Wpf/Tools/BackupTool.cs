@@ -27,11 +27,13 @@ public class BackupTool : IMcpTool
         string strategy = args.GetValueOrDefault("strategy")?.ToString() ?? throw new ArgumentException("strategy required");
         string password = args.GetValueOrDefault("password")?.ToString() ?? throw new ArgumentException("password required");
 
-        // IPC: set file path and password
+        // IPC: set strategy, file path, password, then trigger
+        _sendIpc($@"{{""action"":""set_strategy"",""value"":""{strategy}""}}");
+        await Task.Delay(200);
         _sendIpc($@"{{""action"":""set_encrypt_path"",""value"":""{filePath.Replace("\"", "\\\"")}""}}");
-        await Task.Delay(200);
+        await Task.Delay(150);
         _sendIpc($@"{{""action"":""set_password"",""value"":""{password.Replace("\"", "\\\"")}""}}");
-        await Task.Delay(200);
+        await Task.Delay(150);
 
         // IPC: trigger encryption — WPF app runs it in background thread
         _sendIpc($@"{{""action"":""start_encrypt""}}");
