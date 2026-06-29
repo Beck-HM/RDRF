@@ -133,6 +133,14 @@ public partial class MainWindow : Window
                             case "set_decrypt_password":
                                 DecryptKeyBox.Password = value;
                                 break;
+
+                            case "start_encrypt":
+                                _encryptVM.StartEncrypt();
+                                break;
+
+                            case "start_decrypt":
+                                _decryptVM.StartDecrypt();
+                                break;
                         }
                     });
                 }
