@@ -470,7 +470,7 @@ public class DecryptViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private void StartDecrypt()
+    public void StartDecrypt()
     {
         if (string.IsNullOrEmpty(_decryptIndexPath) || _decryptService == null || _pendingPassword == null || _pendingPassword.Length == 0)
         {

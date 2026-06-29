@@ -23,36 +23,26 @@ public class RestoreTool : IMcpTool
     {
         string indexPath = args.GetValueOrDefault("indexPath")?.ToString() ?? throw new ArgumentException("indexPath required");
         string password = args.GetValueOrDefault("password")?.ToString() ?? throw new ArgumentException("password required");
-        string? outputPath = args.GetValueOrDefault("outputPath")?.ToString();
 
-        // Click Decrypt tab
-        await WpfElementFinder.ClickButton("TabDecrypt", 5000);
-
-        // Send index path to WPF app via IPC
+        // IPC: set index path and password
         _sendIpc($@"{{""action"":""set_decrypt_path"",""value"":""{indexPath.Replace("\"", "\\\"")}""}}");
-        await Task.Delay(500);
-
-        // Send decrypt password via IPC
+        await Task.Delay(200);
         _sendIpc($@"{{""action"":""set_decrypt_password"",""value"":""{password.Replace("\"", "\\\"")}""}}");
-        await Task.Delay(300);
+        await Task.Delay(200);
 
-        // Click Start Decryption
-        await WpfElementFinder.ClickButton("StartDecryptButton", 5000);
+        // IPC: trigger decryption
+        _sendIpc($@"{{""action"":""start_decrypt""}}");
 
-        // Wait for completion
-        string? stageText = null;
-        for (int i = 0; i < 60; i++)
-        {
-            await Task.Delay(5000);
-            stageText = await WpfElementFinder.GetText("DecryptStageText", 3000);
-            if (stageText == null || stageText.Contains("Complete", StringComparison.OrdinalIgnoreCase))
-                break;
-        }
+        // Single UIA read to confirm decryption started
+        await Task.Delay(2000);
+        string? stageText = await WpfElementFinder.GetTextOnce("DecryptStageText", 3000);
+        if (string.IsNullOrEmpty(stageText))
+            stageText = await WpfElementFinder.GetTextOnce("DecryptPercentText", 2000);
 
         var result = new
         {
-            status = stageText?.Contains("Complete") == true ? "success" : "unknown",
-            stage = stageText,
+            status = "started",
+            stage = stageText ?? "decrypting",
             indexPath
         };
         return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });

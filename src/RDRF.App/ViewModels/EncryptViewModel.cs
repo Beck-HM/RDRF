@@ -283,7 +283,7 @@ public class EncryptViewModel : ViewModelBase
         }
     }
 
-    private void StartEncrypt()
+    public void StartEncrypt()
     {
         if (string.IsNullOrEmpty(EncryptFilePath))
         {

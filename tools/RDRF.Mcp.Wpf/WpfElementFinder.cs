@@ -240,6 +240,33 @@ return 'false'
     }
 
     /// <summary>
+    /// Quick single-shot text read — tries once, no retry loop, much faster.
+    /// </summary>
+    public static async Task<string?> GetTextOnce(string automationId, int timeoutMs = 5000)
+    {
+        string script = $@"
+Add-Type -AssemblyName UIAutomationClient
+$cond = New-Object System.Windows.Automation.PropertyCondition(
+    [System.Windows.Automation.AutomationElement]::AutomationIdProperty, '$automationId')
+$el = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst(
+    [System.Windows.Automation.TreeScope]::Descendants, $cond)
+if ($el -ne $null) {{
+    $tp = $null
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$tp)) {{
+        return $tp.DocumentRange.GetText(-1).Trim()
+    }}
+    return $el.Current.Name
+}}
+return $null
+";
+        try
+        {
+            return await ExecutePowershellAsync(script, timeoutMs + 3000);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
     /// Get the text content of an element by AutomationId using TextPattern or Name.
     /// </summary>
     public static async Task<string?> GetText(string automationId, int timeoutMs = 15000)

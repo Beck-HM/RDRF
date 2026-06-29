@@ -27,22 +27,25 @@ public class BackupTool : IMcpTool
         string strategy = args.GetValueOrDefault("strategy")?.ToString() ?? throw new ArgumentException("strategy required");
         string password = args.GetValueOrDefault("password")?.ToString() ?? throw new ArgumentException("password required");
 
-        // IPC: set file path
+        // IPC: set file path and password
         _sendIpc($@"{{""action"":""set_encrypt_path"",""value"":""{filePath.Replace("\"", "\\\"")}""}}");
         await Task.Delay(200);
-
-        // IPC: set password
         _sendIpc($@"{{""action"":""set_password"",""value"":""{password.Replace("\"", "\\\"")}""}}");
         await Task.Delay(200);
 
-        // UIA: click Encrypt tab (already should be active by default)
-        // (UI automation for clicking Start button is available but may need
-        //  foreground focus — consider starting encryption via future IPC action)
+        // IPC: trigger encryption — WPF app runs it in background thread
+        _sendIpc($@"{{""action"":""start_encrypt""}}");
+
+        // Wait briefly for confirmation that encryption started (1-shot UIA check)
+        await Task.Delay(2000);
+        string? stageText = await WpfElementFinder.GetTextOnce("EncryptStageText", 3000);
+        if (string.IsNullOrEmpty(stageText))
+            stageText = await WpfElementFinder.GetTextOnce("EncryptPercentText", 2000);
 
         var result = new
         {
-            status = "data_sent",
-            note = "File path and password sent to RDRF desktop. Click Start Encryption manually.",
+            status = "started",
+            stage = stageText ?? "encrypting",
             filePath,
             strategy
         };
