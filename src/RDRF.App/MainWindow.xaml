@@ -299,16 +299,19 @@
                         HorizontalAlignment="Center">
                     <StackPanel Orientation="Horizontal">
                         <Button x:Name="TabEncrypt"
+                                AutomationProperties.AutomationId="TabEncrypt"
                                 Content="Encrypt"
                                 Style="{StaticResource TabButtonActiveStyle}"
                                 Click="TabEncrypt_Click"
                                 Margin="0,0,2,0" />
                         <Button x:Name="TabDecrypt"
+                                AutomationProperties.AutomationId="TabDecrypt"
                                 Content="Decrypt"
                                 Style="{StaticResource TabButtonStyle}"
                                 Click="TabDecrypt_Click"
                                 Margin="2,0,2,0" />
                         <Button x:Name="TabHistory"
+                                AutomationProperties.AutomationId="TabHistory"
                                 Content="History"
                                 Style="{StaticResource TabButtonStyle}"
                                 Click="TabHistory_Click"
@@ -797,9 +800,11 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" x:Name="EncryptStageText"
+                                                   AutomationProperties.AutomationId="EncryptStageText"
                                                    Text="{Binding StageText}"
                                                    Foreground="{StaticResource TextSecondaryBrush}" FontSize="13" />
                                         <TextBlock Grid.Column="1" x:Name="EncryptPercentText"
+                                                   AutomationProperties.AutomationId="EncryptPercentText"
                                                    Text="{Binding PercentText}"
                                                    Foreground="{StaticResource AccentBrush}" FontSize="13" FontWeight="SemiBold" />
                                     </Grid>
@@ -826,6 +831,7 @@
 
                             <!-- Start Button -->
                             <Button x:Name="StartEncryptButton"
+                                    AutomationProperties.AutomationId="StartEncrypt"
                                     Content="Start Encryption"
                                     Style="{StaticResource PrimaryButtonStyle}"
                                     Height="48"
@@ -957,9 +963,10 @@
                                                        Foreground="{StaticResource TextSecondaryBrush}"
                                                        Margin="0,0,0,2" />
                                             <TextBlock x:Name="InfoFileName"
-                                                        Text="{Binding InfoFileName}"
-                                                        FontSize="13"
-                                                        Foreground="{StaticResource TextPrimaryBrush}" />
+                                                         AutomationProperties.AutomationId="InfoFileName"
+                                                         Text="{Binding InfoFileName}"
+                                                         FontSize="13"
+                                                         Foreground="{StaticResource TextPrimaryBrush}" />
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,12">
@@ -968,9 +975,10 @@
                                                        Foreground="{StaticResource TextSecondaryBrush}"
                                                        Margin="0,0,0,2" />
                                             <TextBlock x:Name="InfoFileSize"
-                                                        Text="{Binding InfoFileSize}"
-                                                        FontSize="13"
-                                                        Foreground="{StaticResource TextPrimaryBrush}" />
+                                                         AutomationProperties.AutomationId="InfoFileSize"
+                                                         Text="{Binding InfoFileSize}"
+                                                         FontSize="13"
+                                                         Foreground="{StaticResource TextPrimaryBrush}" />
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,12">
@@ -979,9 +987,10 @@
                                                        Foreground="{StaticResource TextSecondaryBrush}"
                                                        Margin="0,0,0,2" />
                                             <TextBlock x:Name="InfoStrategy"
-                                                        Text="{Binding InfoStrategy}"
-                                                        FontSize="13"
-                                                        Foreground="{StaticResource TextPrimaryBrush}" />
+                                                         AutomationProperties.AutomationId="InfoStrategy"
+                                                         Text="{Binding InfoStrategy}"
+                                                         FontSize="13"
+                                                         Foreground="{StaticResource TextPrimaryBrush}" />
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,12">
@@ -990,9 +999,10 @@
                                                        Foreground="{StaticResource TextSecondaryBrush}"
                                                        Margin="0,0,0,2" />
                                             <TextBlock x:Name="InfoFragmentCount"
-                                                        Text="{Binding InfoFragmentCount}"
-                                                        FontSize="13"
-                                                        Foreground="{StaticResource TextPrimaryBrush}" />
+                                                         AutomationProperties.AutomationId="InfoFragmentCount"
+                                                         Text="{Binding InfoFragmentCount}"
+                                                         FontSize="13"
+                                                         Foreground="{StaticResource TextPrimaryBrush}" />
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="2" Grid.Column="0">
@@ -1001,9 +1011,10 @@
                                                        Foreground="{StaticResource TextSecondaryBrush}"
                                                        Margin="0,0,0,2" />
                                             <TextBlock x:Name="InfoCreated"
-                                                        Text="{Binding InfoCreated}"
-                                                        FontSize="13"
-                                                        Foreground="{StaticResource TextPrimaryBrush}" />
+                                                         AutomationProperties.AutomationId="InfoCreated"
+                                                         Text="{Binding InfoCreated}"
+                                                         FontSize="13"
+                                                         Foreground="{StaticResource TextPrimaryBrush}" />
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="2" Grid.Column="1">
@@ -1149,9 +1160,11 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" x:Name="DecryptStageText"
+                                                   AutomationProperties.AutomationId="DecryptStageText"
                                                    Text="{Binding StageText}"
                                                    Foreground="{StaticResource TextSecondaryBrush}" FontSize="13" />
                                         <TextBlock Grid.Column="1" x:Name="DecryptPercentText"
+                                                   AutomationProperties.AutomationId="DecryptPercentText"
                                                    Text="{Binding PercentText}"
                                                    Foreground="{StaticResource AccentBrush}" FontSize="13" FontWeight="SemiBold" />
                                     </Grid>
@@ -1178,6 +1191,7 @@
 
                             <!-- Start Button -->
                             <Button x:Name="StartDecryptButton"
+                                    AutomationProperties.AutomationId="StartDecrypt"
                                     Content="Start Decryption"
                                     Style="{StaticResource PrimaryButtonStyle}"
                                     Height="48"
@@ -1308,6 +1322,7 @@
 
                             <!-- Apply Button (shown when incremental selected) -->
                             <Button x:Name="HistoryApplyButton"
+                                    AutomationProperties.AutomationId="HistoryApply"
                                     Content="Apply Incremental Backup"
                                     Style="{StaticResource PrimaryButtonStyle}"
                                     Height="48"

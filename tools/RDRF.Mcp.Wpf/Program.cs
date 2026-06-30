@@ -35,7 +35,7 @@ server.RegisterTool(new LaunchTool(controller));
 server.RegisterTool(new CloseTool(controller));
 server.RegisterTool(new BackupTool(sendIpc));
 server.RegisterTool(new RestoreTool(sendIpc));
-server.RegisterTool(new InfoTool());
+server.RegisterTool(new InfoTool(sendIpc));
 
 // JSON-RPC 2.0 over stdio, newline-delimited
 await foreach (var json in ReadStdInAsync())

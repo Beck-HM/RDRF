@@ -291,7 +291,7 @@ public class EncryptViewModel : ViewModelBase
             string log = $"[{DateTime.Now:HH:mm:ss.fff}] StartEncrypt called. " +
                 $"File='{EncryptFilePath}' pw={_pendingPassword?.Length ?? -1} sz={FragmentSizeMB} out='{OutputPath}'" +
                 Environment.NewLine;
-            System.IO.File.AppendAllText(@"C:\Users\admin\Desktop\rdrf_start.txt", log);
+            System.IO.File.AppendAllText(@"F:\RDRF\RDRF.NET\tests\RDRF_TestOutput\rdrf_start.txt", log);
         }
         catch { }
 
@@ -384,7 +384,7 @@ public class EncryptViewModel : ViewModelBase
                 try
                 {
                     System.IO.File.AppendAllText(
-                        @"C:\Users\admin\Desktop\rdrf_error.txt",
+                        @"F:\RDRF\RDRF.NET\tests\RDRF_TestOutput\rdrf_error.txt",
                         $"[{DateTime.Now:HH:mm:ss}] Backup failed: {ex}{Environment.NewLine}");
                 }
                 catch { }
