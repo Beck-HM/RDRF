@@ -1,77 +1,75 @@
-# RDRF WPF MCP - Full Strategy Test (single MCP process)
+# RDRF WPF MCP - Full Strategy Verification
 $ErrorActionPreference = "Continue"
 $root = "F:\RDRF\RDRF.NET"
-$mcp = "$root\tools\RDRF.Mcp.Wpf"
-$testFile = "$env:TEMP\rdrf_strategy_test_50mb.dat"
-$storageDir = "$env:TEMP\rdrf_test_backups"
+$testOut = "$root\tests\RDRF_TestOutput"
+$mcpWpf = "$root\tools\RDRF.Mcp.Wpf"
+$mcpCore = "$root\tools\RDRF.Mcp.Core"
+$testFile = "$testOut\verify_10mb.dat"
+$storageDir = "$testOut\verify_backups"
+$restoreDir = "$testOut\verify_restored"
+New-Item -ItemType Directory -Force -Path $storageDir, $restoreDir | Out-Null
+Remove-Item "$storageDir\*" -Force -ErrorAction SilentlyContinue
+Remove-Item "$restoreDir\*" -Recurse -Force -ErrorAction SilentlyContinue
 
-# Cleanup previous
-Remove-Item "$env:TEMP\rdrf_mcp_test.txt" -Force -ErrorAction SilentlyContinue
+$passed = 0; $failed = 0
+Get-Process "RDRF.App" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
 
 Write-Host "=== Creating 10MB test file ===" -ForegroundColor Cyan
+$rng = New-Object System.Random(42)
 $bytes = New-Object byte[] (10 * 1024 * 1024)
-$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-$rng.GetBytes($bytes)
+$rng.NextBytes($bytes)
+$shaFile = [System.Security.Cryptography.SHA256]::Create().ComputeHash($bytes)
+$expectedHash = [BitConverter]::ToString($shaFile).Replace("-", "").ToLower()
 [System.IO.File]::WriteAllBytes($testFile, $bytes)
-$escapedFile = $testFile.Replace('\', '/')
-$escapedDir = $storageDir.Replace('\', '/')
 
 $strategies = @("FSS1", "FSS3", "FSS5", "FSS6", "FSS6.1", "FSS6.2")
-$backupResults = @{}
-
-# Build all requests for a single MCP session
-$requests = @()
-
-# Launch
-$requests += '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"wpf_launch","arguments":{}}}'
 
 foreach ($strategy in $strategies) {
-    $req = ('{"jsonrpc":"2.0","id":' + (2 + $strategies.IndexOf($strategy)) + ',"method":"tools/call","params":{"name":"wpf_backup","arguments":{"filePath":"' + $escapedFile + '","strategy":"' + $strategy + '","password":"test123","storageDir":"' + $escapedDir + '"}}}')
-    $requests += $req
-}
+    Write-Host ("`n===== " + $strategy + " =====") -ForegroundColor Yellow
+    Remove-Item "$storageDir\*" -Force -ErrorAction SilentlyContinue
 
-# Close at the end
-$requests += '{"jsonrpc":"2.0","id":99,"method":"tools/call","params":{"name":"wpf_close","arguments":{}}}'
+    $reqs = @()
+    $reqs += '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"wpf_launch","arguments":{}}}'
+    $ef = $testFile.Replace('\', '/')
+    $ed = $storageDir.Replace('\', '/')
+    $reqs += ('{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"wpf_backup","arguments":{"filePath":"' + $ef + '","strategy":"' + $strategy + '","password":"verify123","storageDir":"' + $ed + '"}}}')
+    ($reqs -join "`n") | dotnet run --project $mcpWpf -c Release --no-build 2>&1 | Out-Null
 
-Write-Host "Launching MCP server with $($requests.Count) requests..." -ForegroundColor Cyan
-
-# Run all requests through a single MCP server process
-$allReqs = $requests -join "`n"
-$response = $allReqs | dotnet run --project $mcp -c Release --no-build 2>&1
-
-Write-Host ""
-Write-Host "===== RAW RESPONSE =====" -ForegroundColor Cyan
-Write-Host $response
-Write-Host ""
-
-# Check backup files after all strategies run
-Start-Sleep -Seconds 10
-
-Write-Host "===== CHECKING BACKUP FILES =====" -ForegroundColor Yellow
-if (Test-Path $storageDir) {
-    $fingerprints = Get-ChildItem "$storageDir\*.indrdrf" -ErrorAction SilentlyContinue
-    if ($fingerprints.Count -gt 0) {
-        Write-Host ("Found " + $fingerprints.Count + " backup(s):") -ForegroundColor Green
-        foreach ($f in $fingerprints) {
-            $fp = $f.BaseName
-            $frags = Get-ChildItem "$storageDir\$fp*" | Measure-Object | Select-Object -ExpandProperty Count
-            Write-Host ("  " + $fp.Substring(0, 16) + "... - " + $frags + " file(s)")
-        }
-    } else {
-        Write-Host "No .indrdrf files found" -ForegroundColor Red
-        $allFiles = Get-ChildItem $storageDir -ErrorAction SilentlyContinue
-        if ($allFiles.Count -gt 0) {
-            Write-Host ("Files in storageDir: " + ($allFiles | Select-Object -First 10 | ForEach-Object { $_.Name }) -join ", ")
-        } else {
-            Write-Host "storageDir is empty" -ForegroundColor Red
-        }
+    $indexFile = $null
+    $timeout = [datetime]::Now.AddSeconds(60)
+    while ([datetime]::Now -lt $timeout) {
+        $indexFile = Get-ChildItem "$storageDir\*.indrdrf" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($indexFile -ne $null) { break }
+        Start-Sleep -Seconds 3
     }
-} else {
-    Write-Host "storageDir does not exist" -ForegroundColor Red
+    if ($indexFile -eq $null) { Write-Host "  FAIL (no backup)"; $failed++; continue }
+
+    '{"jsonrpc":"2.0","id":99,"method":"tools/call","params":{"name":"wpf_close","arguments":{}}}' | dotnet run --project $mcpWpf -c Release --no-build 2>&1 | Out-Null
+    Start-Sleep -Seconds 2
+
+    $restorePath = "$restoreDir\$strategy.dat"
+    $idxPath = ($indexFile.FullName).Replace('\', '/')
+    $outPath = $restorePath.Replace('\', '/')
+    $reqRestore = @()
+    $reqRestore += ('{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"restore","arguments":{"indexPath":"' + $idxPath + '","outputPath":"' + $outPath + '","password":"verify123"}}}')
+    $restoreResp = ($reqRestore -join "`n") | dotnet run --project $mcpCore -c Release --no-build 2>&1
+
+    if (-not ($restoreResp -match 'outputPath' -and $restoreResp -match 'size')) { Write-Host "  FAIL (restore)"; $failed++; continue }
+
+    Start-Sleep -Seconds 2
+    if (Test-Path $restorePath) {
+        $restoredBytes = [System.IO.File]::ReadAllBytes($restorePath)
+        $restoredHash = [BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash($restoredBytes)).Replace("-", "").ToLower()
+        if ($restoredHash -eq $expectedHash) { Write-Host "  PASS"; $passed++ }
+        else { Write-Host "  FAIL (SHA256 mismatch)"; $failed++ }
+    } else { Write-Host "  FAIL (file not found)"; $failed++ }
 }
+
+Write-Host ("`nRESULTS: $passed PASS, $failed FAIL") -ForegroundColor Yellow
 
 # Cleanup
 Remove-Item $testFile -Force -ErrorAction SilentlyContinue
-Remove-Item "$storageDir\*" -Force -Recurse -ErrorAction SilentlyContinue
-
-Write-Host "Done" -ForegroundColor Green
+Remove-Item $storageDir -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item $restoreDir -Recurse -Force -ErrorAction SilentlyContinue
+Get-Process "RDRF.App" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue

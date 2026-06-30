@@ -98,23 +98,13 @@ public partial class MainWindow : Window
         {
             try
             {
-                try { System.IO.File.AppendAllText(@"C:\Users\admin\Desktop\rdrf_trace.txt",
-                    $"[{DateTime.Now:HH:mm:ss.fff}] WndProc WM_COPYDATA lParam={lParam}{Environment.NewLine}"); }
-                catch { }
-
                 var cds = Marshal.PtrToStructure<COPYDATASTRUCT>(lParam);
-                try { System.IO.File.AppendAllText(@"C:\Users\admin\Desktop\rdrf_trace.txt",
-                    $"  cbData={cds.cbData} lpData={cds.lpData}{Environment.NewLine}"); }
-                catch { }
 
                 if (cds.cbData > 0 && cds.lpData != IntPtr.Zero)
                 {
                     byte[] bytes = new byte[cds.cbData];
                     Marshal.Copy(cds.lpData, bytes, 0, cds.cbData);
                     string json = Encoding.UTF8.GetString(bytes);
-                    try { System.IO.File.AppendAllText(@"C:\Users\admin\Desktop\rdrf_trace.txt",
-                        $"  json='{json}'{Environment.NewLine}"); }
-                    catch { }
 
                     using var doc = JsonDocument.Parse(json);
                     var root = doc.RootElement;
@@ -159,7 +149,7 @@ public partial class MainWindow : Window
                                 }
                                 catch (Exception ex_start)
                                 {
-                                    try { System.IO.File.AppendAllText(@"C:\Users\admin\Desktop\rdrf_error.txt",
+                                    try { System.IO.File.AppendAllText(@"F:\RDRF\RDRF.NET\tests\RDRF_TestOutput\rdrf_error.txt",
                                         $"[{DateTime.Now:HH:mm:ss}] start_encrypt failed: {ex_start}{Environment.NewLine}"); }
                                     catch { }
                                 }
@@ -174,8 +164,41 @@ public partial class MainWindow : Window
                                     _encryptVM.OutputPath = value;
                                 break;
 
+                            case "set_decrypt_output_path":
+                                if (!string.IsNullOrEmpty(value))
+                                    _decryptVM.OutputPath = value;
+                                break;
+
                             case "start_decrypt":
-                                _decryptVM.StartDecrypt();
+                                try
+                                {
+                                    _decryptVM.SetPassword(DecryptKeyBox.Password);
+                                    _decryptVM.StartDecrypt();
+                                }
+                                catch (Exception ex_start)
+                                {
+                                    try { System.IO.File.AppendAllText(@"F:\RDRF\RDRF.NET\tests\RDRF_TestOutput\rdrf_error.txt",
+                                        $"[{DateTime.Now:HH:mm:ss}] start_decrypt failed: {ex_start}{Environment.NewLine}"); }
+                                    catch { }
+                                }
+                                break;
+
+                            case "read_backup_info":
+                                var info = new
+                                {
+                                    file = _decryptVM.InfoFileName ?? "",
+                                    size = _decryptVM.InfoFileSize ?? "",
+                                    strategy = _decryptVM.InfoStrategy ?? "",
+                                    fragments = _decryptVM.InfoFragmentCount ?? "",
+                                    created = _decryptVM.InfoCreated ?? "",
+                                };
+                                try
+                                {
+                                    string infoJson = System.Text.Json.JsonSerializer.Serialize(info);
+                                    System.IO.File.WriteAllText(
+                                        @"F:\RDRF\RDRF.NET\tests\RDRF_TestOutput\rdrf_info.json", infoJson);
+                                }
+                                catch { }
                                 break;
                         }
                     }

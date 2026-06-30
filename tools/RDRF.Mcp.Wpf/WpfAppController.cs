@@ -44,61 +44,80 @@ public class WpfAppController : IDisposable
             _process.Dispose();
             _process = null;
         }
+
+        // Kill any remaining RDRF.App processes (orphans from previous runs)
+        foreach (var p in Process.GetProcessesByName("RDRF.App"))
+        {
+            try
+            {
+                p.CloseMainWindow();
+                if (!p.WaitForExit(3000))
+                    p.Kill();
+                p.Dispose();
+            }
+            catch { }
+        }
     }
 
     /// <summary>
     /// Send a JSON message to the RDRF.App main window via WM_COPYDATA.
+    /// Retries up to 10 times with 1s delay to wait for window readiness.
     /// </summary>
     public bool SendIpcMessage(string json)
     {
-        // Find RDRF.App main window by process name
-        IntPtr mainHwnd = IntPtr.Zero;
-        if (_process != null && !_process.HasExited)
+        for (int attempt = 0; attempt < 10; attempt++)
         {
-            mainHwnd = _process.MainWindowHandle;
-            if (mainHwnd == IntPtr.Zero)
+            IntPtr hwnd = FindTargetWindow();
+            if (hwnd != IntPtr.Zero)
             {
-                _process.WaitForInputIdle(5000);
-                mainHwnd = _process.MainWindowHandle;
-            }
-        }
-
-        // Fallback: search for any RDRF.App window
-        if (mainHwnd == IntPtr.Zero)
-        {
-            var procs = Process.GetProcessesByName("RDRF.App");
-            foreach (var p in procs)
-            {
-                if (p.MainWindowHandle != IntPtr.Zero)
+                byte[] bytes = Encoding.UTF8.GetBytes(json);
+                var cds = new COPYDATASTRUCT
                 {
-                    mainHwnd = p.MainWindowHandle;
-                    _process = p;
-                    break;
+                    dwData = IntPtr.Zero,
+                    cbData = bytes.Length,
+                    lpData = Marshal.AllocHGlobal(bytes.Length),
+                };
+                Marshal.Copy(bytes, 0, cds.lpData, bytes.Length);
+
+                try
+                {
+                    SendMessage(hwnd, WM_COPYDATA, IntPtr.Zero, ref cds);
+                    return true;
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(cds.lpData);
                 }
             }
+            Thread.Sleep(1000);
+        }
+        return false;
+    }
+
+    private IntPtr FindTargetWindow()
+    {
+        if (_process != null && !_process.HasExited)
+        {
+            IntPtr hwnd = _process.MainWindowHandle;
+            if (hwnd == IntPtr.Zero)
+            {
+                _process.WaitForInputIdle(5000);
+                hwnd = _process.MainWindowHandle;
+            }
+            if (hwnd != IntPtr.Zero)
+                return hwnd;
         }
 
-        if (mainHwnd == IntPtr.Zero)
-            return false;
-
-        byte[] bytes = Encoding.UTF8.GetBytes(json);
-        var cds = new COPYDATASTRUCT
+        var procs = Process.GetProcessesByName("RDRF.App");
+        foreach (var p in procs)
         {
-            dwData = IntPtr.Zero,
-            cbData = bytes.Length,
-            lpData = Marshal.AllocHGlobal(bytes.Length),
-        };
-        Marshal.Copy(bytes, 0, cds.lpData, bytes.Length);
-
-        try
-        {
-            SendMessage(mainHwnd, WM_COPYDATA, IntPtr.Zero, ref cds);
-            return true;
+            if (p.MainWindowHandle != IntPtr.Zero)
+            {
+                _process = p;
+                return p.MainWindowHandle;
+            }
         }
-        finally
-        {
-            Marshal.FreeHGlobal(cds.lpData);
-        }
+        return IntPtr.Zero;
     }
 
     public void Dispose()

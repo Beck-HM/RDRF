@@ -13,7 +13,7 @@ public class BackupTool : IMcpTool
     public Dictionary<string, object> InputSchema => new()
     {
         ["filePath"] = new { type = "string", description = "Full path to the file to backup" },
-        ["strategy"] = new { type = "string", description = "FSS strategy (FSS1, FSS3, FSS6, FSS6.1, etc.)" },
+        ["strategy"] = new { type = "string", description = "FSS strategy (FSS1, FSS3, FSS6, FSS6.1, FSS6.2, etc.)" },
         ["password"] = new { type = "string", description = "Encryption password" },
         ["storageDir"] = new { type = "string", description = "Storage directory for backup files" },
         ["fragmentSize"] = new { type = "number", description = "Fragment size in MB (default: 1)" },
@@ -29,21 +29,34 @@ public class BackupTool : IMcpTool
         string password = args.GetValueOrDefault("password")?.ToString() ?? throw new ArgumentException("password required");
         string? outputPath = args.GetValueOrDefault("storageDir")?.ToString();
 
-        // IPC: set strategy, output path, file path, password, then trigger
-        _sendIpc($@"{{""action"":""set_strategy"",""value"":""{strategy}""}}");
+        // Navigate to Encrypt tab via UIA
+        await WpfElementFinder.ClickButton("TabEncrypt", 5000);
+
+        // Click strategy card via UIA; fall back to IPC for strategies without a UI card
+        string strategyId = "Strategy" + strategy.Replace(".", "");
+        bool cardClicked = await WpfElementFinder.ClickButton(strategyId, 3000);
+        if (!cardClicked)
+            _sendIpc($@"{{""action"":""set_strategy"",""value"":""{strategy}""}}");
+
+        // IPC: set file path
+        _sendIpc($@"{{""action"":""set_encrypt_path"",""value"":""{filePath.Replace("\"", "\\\"")}""}}");
         await Task.Delay(100);
+
+        // IPC: set output path (optional)
         if (!string.IsNullOrEmpty(outputPath))
         {
             _sendIpc($@"{{""action"":""set_output_path"",""value"":""{outputPath.Replace("\"", "\\\"")}""}}");
             await Task.Delay(100);
         }
-        _sendIpc($@"{{""action"":""set_encrypt_path"",""value"":""{filePath.Replace("\"", "\\\"")}""}}");
-        await Task.Delay(100);
+
+        // IPC: set password
         _sendIpc($@"{{""action"":""set_password"",""value"":""{password.Replace("\"", "\\\"")}""}}");
         await Task.Delay(100);
+
+        // IPC: start encrypt
         _sendIpc($@"{{""action"":""start_encrypt""}}");
 
-        // Wait briefly for confirmation that encryption started (1-shot UIA check)
+        // UIA: read status
         await Task.Delay(2000);
         string? stageText = await WpfElementFinder.GetTextOnce("EncryptStageText", 3000);
         if (string.IsNullOrEmpty(stageText))
@@ -54,7 +67,8 @@ public class BackupTool : IMcpTool
             status = "started",
             stage = stageText ?? "encrypting",
             filePath,
-            strategy
+            strategy,
+            uiaStrategyClick = cardClicked
         };
         return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
     }
