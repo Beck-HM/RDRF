@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private AppConfig _config = new();
 
     private readonly Dictionary<string, Button> _strategyBorders = new();
+    private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _notifyIcon;
 
     private const int WM_COPYDATA = 0x004A;
 
@@ -81,6 +82,32 @@ public partial class MainWindow : Window
 
         // HwndSource hook for WM_COPYDATA IPC (used by rdrf-mcp-wpf)
         SourceInitialized += OnSourceInitialized;
+
+        // NotifyIcon for system tray
+        _notifyIcon = new Hardcodet.Wpf.TaskbarNotification.TaskbarIcon
+        {
+            IconSource = new System.Windows.Media.Imaging.BitmapImage(
+                new Uri("pack://application:,,,/rdrf.ico")),
+            ToolTipText = "RDRF"
+        };
+        _notifyIcon.TrayLeftMouseUp += (_, _) =>
+        {
+            Show();
+            WindowState = WindowState.Normal;
+            Activate();
+        };
+    }
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (_config.CloseBehavior == "tray")
+        {
+            Hide();
+            e.Cancel = true;
+            return;
+        }
+        _notifyIcon?.Dispose();
+        base.OnClosing(e);
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -305,6 +332,49 @@ public partial class MainWindow : Window
         _decryptVM.StopFragmentWatcher();
     }
 
+    private void TabSettings_Click(object sender, RoutedEventArgs e)
+    {
+        TabSettings.Style = (Style)FindResource("TabButtonActiveStyle");
+        TabEncrypt.Style = (Style)FindResource("TabButtonStyle");
+        TabDecrypt.Style = (Style)FindResource("TabButtonStyle");
+        TabHistory.Style = (Style)FindResource("TabButtonStyle");
+        SettingsPage.Visibility = Visibility.Visible;
+        EncryptPage.Visibility = Visibility.Collapsed;
+        DecryptPage.Visibility = Visibility.Collapsed;
+        HistoryPage.Visibility = Visibility.Collapsed;
+        _decryptVM.StopFragmentWatcher();
+    }
+
+    private void SettingsBrowseOutput_Click(object sender, RoutedEventArgs e)
+    {
+        using var dialog = new System.Windows.Forms.FolderBrowserDialog();
+        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            SettingsOutputPath.Text = dialog.SelectedPath;
+    }
+
+    private void SettingsTheme_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (SettingsTheme.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+            ApplyTheme(tag);
+    }
+
+    private void ApplyTheme(string theme)
+    {
+        var uri = theme == "light" ? "Themes/Light.xaml" : "Themes/Dark.xaml";
+        var dict = new ResourceDictionary { Source = new Uri(uri, UriKind.Relative) };
+        System.Windows.Application.Current.Resources.MergedDictionaries[0] = dict;
+    }
+
+    private void SettingsSave_Click(object sender, RoutedEventArgs e)
+    {
+        _config.DefaultOutputPath = SettingsOutputPath.Text;
+        if (SettingsTheme.SelectedItem is ComboBoxItem themeItem)
+            _config.Theme = themeItem.Tag as string ?? "dark";
+        if (SettingsCloseBehavior.SelectedItem is ComboBoxItem closeItem)
+            _config.CloseBehavior = closeItem.Tag as string ?? "exit";
+        SaveConfig();
+    }
+
     // ── Strategy Selection ──
 
     private bool _fsaEnabled;
@@ -522,6 +592,11 @@ public partial class MainWindow : Window
                 _config.FragmentSizeMB = fragSizeMB;
             _config.OutputPath = EncryptOutputPath.Text;
             _config.DecryptOutputPath = DecryptOutputPath.Text;
+            _config.DefaultOutputPath = SettingsOutputPath.Text;
+            if (SettingsTheme.SelectedItem is ComboBoxItem themeItem)
+                _config.Theme = themeItem.Tag as string ?? "dark";
+            if (SettingsCloseBehavior.SelectedItem is ComboBoxItem closeItem)
+                _config.CloseBehavior = closeItem.Tag as string ?? "exit";
 
             Directory.CreateDirectory(_configDir);
             string json = JsonSerializer.Serialize(_config, new JsonSerializerOptions { WriteIndented = true });
@@ -541,6 +616,17 @@ public partial class MainWindow : Window
             EncryptOutputPath.Text = _config.OutputPath;
         if (!string.IsNullOrEmpty(_config.DecryptOutputPath))
             DecryptOutputPath.Text = _config.DecryptOutputPath;
+
+        SettingsOutputPath.Text = _config.DefaultOutputPath;
+
+        foreach (ComboBoxItem item in SettingsTheme.Items)
+            if (item.Tag as string == _config.Theme)
+                SettingsTheme.SelectedItem = item;
+        foreach (ComboBoxItem item in SettingsCloseBehavior.Items)
+            if (item.Tag as string == _config.CloseBehavior)
+                SettingsCloseBehavior.SelectedItem = item;
+
+        ApplyTheme(_config.Theme);
     }
 }
 
@@ -549,4 +635,7 @@ public class AppConfig
     public string OutputPath { get; set; } = "./backup";
     public string DecryptOutputPath { get; set; } = "./restored";
     public int FragmentSizeMB { get; set; } = 1;
+    public string DefaultOutputPath { get; set; } = "./backup";
+    public string Theme { get; set; } = "dark";
+    public string CloseBehavior { get; set; } = "exit";
 }

@@ -13,7 +13,8 @@
         Background="{StaticResource BackgroundBrush}"
         WindowStyle="None"
         AllowsTransparency="True"
-        ResizeMode="CanResizeWithGrip">
+        ResizeMode="CanResizeWithGrip"
+        Icon="rdrf.ico">
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
@@ -283,10 +284,10 @@
                 <StackPanel Orientation="Horizontal"
                             VerticalAlignment="Center"
                             Margin="16,0,0,0">
-                    <Ellipse Width="10"
-                             Height="10"
-                             Fill="{StaticResource AccentBrush}"
-                             Margin="0,0,8,0" />
+                    <Image Width="20"
+                           Height="20"
+                           Source="rdrf.ico"
+                           Margin="0,0,8,0" />
                     <TextBlock Text="RDRF"
                                Foreground="{StaticResource TextPrimaryBrush}"
                                FontSize="14"
@@ -319,6 +320,12 @@
                                 Content="History"
                                 Style="{StaticResource TabButtonStyle}"
                                 Click="TabHistory_Click"
+                                Margin="2,0,2,0" />
+                        <Button x:Name="TabSettings"
+                                AutomationProperties.AutomationId="TabSettings"
+                                Content="Settings"
+                                Style="{StaticResource TabButtonStyle}"
+                                Click="TabSettings_Click"
                                 Margin="2,0,0,0" />
                     </StackPanel>
                 </Border>
@@ -1463,6 +1470,97 @@
                                     </Border>
                                 </StackPanel>
                             </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- Settings Page -->
+                <Grid x:Name="SettingsPage"
+                      Visibility="Collapsed"
+                      Margin="24,16,24,16">
+                    <ScrollViewer>
+                        <StackPanel MaxWidth="520">
+                            <TextBlock Text="Settings"
+                                       FontSize="22"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       Margin="0,0,0,24" />
+
+                            <!-- Default Output Path -->
+                            <TextBlock Text="Default Output Path"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       Margin="0,0,0,4" />
+                            <TextBlock Text="Storage directory for backup files"
+                                       FontSize="12"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,0,0,8" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="SettingsOutputPath"
+                                         Style="{StaticResource TextBoxStyle}"
+                                         Height="36"
+                                         Padding="10,0"
+                                         FontSize="13"
+                                         VerticalContentAlignment="Center" />
+                                <Button Grid.Column="1"
+                                        Content="Browse"
+                                        Width="80"
+                                        Height="36"
+                                        Margin="8,0,0,0"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Click="SettingsBrowseOutput_Click" />
+                            </Grid>
+
+                            <!-- Theme -->
+                            <TextBlock Text="Theme"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       Margin="0,20,0,4" />
+                            <ComboBox x:Name="SettingsTheme"
+                                      Height="36"
+                                      FontSize="13"
+                                      Margin="0,0,0,4"
+                                      Background="{StaticResource BackgroundBrush}"
+                                      Foreground="{StaticResource TextPrimaryBrush}"
+                                      BorderBrush="{StaticResource BorderBrush}"
+                                      SelectionChanged="SettingsTheme_Changed">
+                                <ComboBoxItem Content="Dark" Tag="dark" />
+                                <ComboBoxItem Content="Light" Tag="light" />
+                            </ComboBox>
+
+                            <!-- Close Behavior -->
+                            <TextBlock Text="Close Behavior"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       Margin="0,20,0,4" />
+                            <TextBlock Text="What happens when you close the window"
+                                       FontSize="12"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,0,0,8" />
+                            <ComboBox x:Name="SettingsCloseBehavior"
+                                      Height="36"
+                                      FontSize="13"
+                                      Background="{StaticResource BackgroundBrush}"
+                                      Foreground="{StaticResource TextPrimaryBrush}"
+                                      BorderBrush="{StaticResource BorderBrush}">
+                                <ComboBoxItem Content="Exit application" Tag="exit" />
+                                <ComboBoxItem Content="Minimize to system tray" Tag="tray" />
+                            </ComboBox>
+
+                            <!-- Save -->
+                            <Button Content="Save Settings"
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    Height="48"
+                                    FontSize="16"
+                                    Margin="0,32,0,0"
+                                    Click="SettingsSave_Click" />
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>

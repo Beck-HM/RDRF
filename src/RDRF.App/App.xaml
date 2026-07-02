@@ -4,85 +4,65 @@
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-        <!-- Theme Colors -->
-        <Color x:Key="BackgroundColor">#FF1E1E2E</Color>
-        <Color x:Key="SurfaceColor">#FF2A2A3C</Color>
-        <Color x:Key="SurfaceHighlightColor">#FF35354A</Color>
-        <Color x:Key="BorderColor">#FF3D3D56</Color>
-        <Color x:Key="TextPrimaryColor">#FFE0E0E8</Color>
-        <Color x:Key="TextSecondaryColor">#FF9090A8</Color>
-        <Color x:Key="AccentColor">#FF7C6BF2</Color>
-        <Color x:Key="AccentHoverColor">#FF9588F5</Color>
-        <Color x:Key="SuccessColor">#FF50FA7B</Color>
-        <Color x:Key="WarningColor">#FFFFB86C</Color>
-        <Color x:Key="ErrorColor">#FFFF5555</Color>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Dark.xaml" />
+            </ResourceDictionary.MergedDictionaries>
 
-        <!-- Brushes -->
-        <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}" />
-        <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}" />
-        <SolidColorBrush x:Key="SurfaceHighlightBrush" Color="{StaticResource SurfaceHighlightColor}" />
-        <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}" />
-        <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}" />
-        <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}" />
-        <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
-        <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}" />
-        <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}" />
-        <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}" />
-        <SolidColorBrush x:Key="ErrorBrush" Color="{StaticResource ErrorColor}" />
+            <!-- Font Sizes -->
+            <sys:Double x:Key="FontSizeSmall">12</sys:Double>
+            <sys:Double x:Key="FontSizeNormal">14</sys:Double>
+            <sys:Double x:Key="FontSizeLarge">16</sys:Double>
+            <sys:Double x:Key="FontSizeXLarge">20</sys:Double>
+            <sys:Double x:Key="FontSizeTitle">28</sys:Double>
 
-        <!-- Font Sizes -->
-        <sys:Double x:Key="FontSizeSmall">12</sys:Double>
-        <sys:Double x:Key="FontSizeNormal">14</sys:Double>
-        <sys:Double x:Key="FontSizeLarge">16</sys:Double>
-        <sys:Double x:Key="FontSizeXLarge">20</sys:Double>
-        <sys:Double x:Key="FontSizeTitle">28</sys:Double>
+            <!-- Corner Radius -->
+            <CornerRadius x:Key="CornerRadiusSmall">4</CornerRadius>
+            <CornerRadius x:Key="CornerRadiusNormal">8</CornerRadius>
+            <CornerRadius x:Key="CornerRadiusLarge">12</CornerRadius>
 
-        <!-- Corner Radius -->
-        <CornerRadius x:Key="CornerRadiusSmall">4</CornerRadius>
-        <CornerRadius x:Key="CornerRadiusNormal">8</CornerRadius>
-        <CornerRadius x:Key="CornerRadiusLarge">12</CornerRadius>
+            <!-- Custom ScrollBar -->
+            <Style x:Key="FlatScrollBarThumb" TargetType="Thumb">
+                <Setter Property="Background" Value="#4A4A5C" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="MinHeight" Value="30" />
+                <Setter Property="MinWidth" Value="6" />
+                <Setter Property="IsTabStop" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Thumb">
+                            <Border Background="{TemplateBinding Background}"
+                                    CornerRadius="3" Margin="1" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
 
-        <!-- Custom ScrollBar -->
-        <Style x:Key="FlatScrollBarThumb" TargetType="Thumb">
-            <Setter Property="Background" Value="#4A4A5C" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="MinHeight" Value="30" />
-            <Setter Property="MinWidth" Value="6" />
-            <Setter Property="IsTabStop" Value="False" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Thumb">
-                        <Border Background="{TemplateBinding Background}"
-                                CornerRadius="3" Margin="1" />
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+            <Style TargetType="ScrollBar">
+                <Setter Property="Width" Value="8" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ScrollBar">
+                            <Border Background="Transparent">
+                                <Track x:Name="PART_Track"
+                                       ViewportSize="{TemplateBinding ViewportSize}"
+                                       Minimum="{TemplateBinding Minimum}"
+                                       Maximum="{TemplateBinding Maximum}"
+                                       Value="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Value, Mode=TwoWay}"
+                                       Orientation="{TemplateBinding Orientation}">
+                                    <Track.Thumb>
+                                        <Thumb Style="{StaticResource FlatScrollBarThumb}" />
+                                    </Track.Thumb>
+                                </Track>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
 
-        <Style TargetType="ScrollBar">
-            <Setter Property="Width" Value="8" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ScrollBar">
-                        <Border Background="Transparent">
-                            <Track x:Name="PART_Track"
-                                   ViewportSize="{TemplateBinding ViewportSize}"
-                                   Minimum="{TemplateBinding Minimum}"
-                                   Maximum="{TemplateBinding Maximum}"
-                                   Value="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Value, Mode=TwoWay}"
-                                   Orientation="{TemplateBinding Orientation}">
-                                <Track.Thumb>
-                                    <Thumb Style="{StaticResource FlatScrollBarThumb}" />
-                                </Track.Thumb>
-                            </Track>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style TargetType="ScrollViewer">
-            <Setter Property="BorderThickness" Value="0" />
-        </Style>
+            <Style TargetType="ScrollViewer">
+                <Setter Property="BorderThickness" Value="0" />
+            </Style>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>
