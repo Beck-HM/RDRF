@@ -84,11 +84,28 @@ public partial class MainWindow : Window
         SourceInitialized += OnSourceInitialized;
 
         // NotifyIcon for system tray
+        var showItem = new System.Windows.Controls.MenuItem { Header = "Show" };
+        showItem.Click += (_, _) =>
+        {
+            Show();
+            WindowState = WindowState.Normal;
+            Activate();
+        };
+        var exitItem = new System.Windows.Controls.MenuItem { Header = "Exit" };
+        exitItem.Click += (_, _) =>
+        {
+            _notifyIcon?.Dispose();
+            System.Windows.Application.Current.Shutdown();
+        };
         _notifyIcon = new Hardcodet.Wpf.TaskbarNotification.TaskbarIcon
         {
             IconSource = new System.Windows.Media.Imaging.BitmapImage(
                 new Uri("pack://application:,,,/rdrf.ico")),
-            ToolTipText = "RDRF"
+            ToolTipText = "RDRF",
+            ContextMenu = new System.Windows.Controls.ContextMenu
+            {
+                Items = { showItem, exitItem }
+            }
         };
         _notifyIcon.TrayLeftMouseUp += (_, _) =>
         {
@@ -355,25 +372,9 @@ public partial class MainWindow : Window
             SettingsOutputPath.Text = dialog.SelectedPath;
     }
 
-    private void Theme_Checked(object sender, RoutedEventArgs e)
-    {
-        if (ThemeDark.IsChecked == true)
-            ApplyTheme("dark");
-        else if (ThemeLight.IsChecked == true)
-            ApplyTheme("light");
-    }
-
-    private void ApplyTheme(string theme)
-    {
-        var uri = theme == "light" ? "Themes/Light.xaml" : "Themes/Dark.xaml";
-        var dict = new ResourceDictionary { Source = new Uri(uri, UriKind.Relative) };
-        System.Windows.Application.Current.Resources.MergedDictionaries[0] = dict;
-    }
-
     private void SettingsSave_Click(object sender, RoutedEventArgs e)
     {
         _config.DefaultOutputPath = SettingsOutputPath.Text;
-        _config.Theme = ThemeDark.IsChecked == true ? "dark" : "light";
         _config.CloseBehavior = CloseExit.IsChecked == true ? "exit" : "tray";
         SaveConfig();
     }
@@ -596,7 +597,6 @@ public partial class MainWindow : Window
             _config.OutputPath = EncryptOutputPath.Text;
             _config.DecryptOutputPath = DecryptOutputPath.Text;
             _config.DefaultOutputPath = SettingsOutputPath.Text;
-            _config.Theme = ThemeDark.IsChecked == true ? "dark" : "light";
             _config.CloseBehavior = CloseExit.IsChecked == true ? "exit" : "tray";
 
             Directory.CreateDirectory(_configDir);
@@ -619,11 +619,8 @@ public partial class MainWindow : Window
             DecryptOutputPath.Text = _config.DecryptOutputPath;
 
         SettingsOutputPath.Text = _config.DefaultOutputPath;
-        ThemeDark.IsChecked = _config.Theme == "dark";
-        ThemeLight.IsChecked = _config.Theme == "light";
         CloseExit.IsChecked = _config.CloseBehavior == "exit";
         CloseTray.IsChecked = _config.CloseBehavior == "tray";
-        ApplyTheme(_config.Theme);
     }
 }
 
@@ -633,6 +630,5 @@ public class AppConfig
     public string DecryptOutputPath { get; set; } = "./restored";
     public int FragmentSizeMB { get; set; } = 1;
     public string DefaultOutputPath { get; set; } = "./backup";
-    public string Theme { get; set; } = "dark";
     public string CloseBehavior { get; set; } = "exit";
 }
