@@ -307,6 +307,7 @@ public partial class MainWindow : Window
         EncryptPage.Visibility = Visibility.Visible;
         DecryptPage.Visibility = Visibility.Collapsed;
         HistoryPage.Visibility = Visibility.Collapsed;
+        SettingsPage.Visibility = Visibility.Collapsed;
         _decryptVM.StopFragmentWatcher();
     }
 
@@ -318,6 +319,7 @@ public partial class MainWindow : Window
         DecryptPage.Visibility = Visibility.Visible;
         EncryptPage.Visibility = Visibility.Collapsed;
         HistoryPage.Visibility = Visibility.Collapsed;
+        SettingsPage.Visibility = Visibility.Collapsed;
         _decryptVM.StopFragmentWatcher();
     }
 
@@ -329,20 +331,21 @@ public partial class MainWindow : Window
         HistoryPage.Visibility = Visibility.Visible;
         EncryptPage.Visibility = Visibility.Collapsed;
         DecryptPage.Visibility = Visibility.Collapsed;
+        SettingsPage.Visibility = Visibility.Collapsed;
         _decryptVM.StopFragmentWatcher();
     }
 
-    private void TabSettings_Click(object sender, RoutedEventArgs e)
+    private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        TabSettings.Style = (Style)FindResource("TabButtonActiveStyle");
-        TabEncrypt.Style = (Style)FindResource("TabButtonStyle");
-        TabDecrypt.Style = (Style)FindResource("TabButtonStyle");
-        TabHistory.Style = (Style)FindResource("TabButtonStyle");
-        SettingsPage.Visibility = Visibility.Visible;
-        EncryptPage.Visibility = Visibility.Collapsed;
-        DecryptPage.Visibility = Visibility.Collapsed;
-        HistoryPage.Visibility = Visibility.Collapsed;
-        _decryptVM.StopFragmentWatcher();
+        bool isOpen = SettingsPage.Visibility == Visibility.Visible;
+        SettingsPage.Visibility = isOpen ? Visibility.Collapsed : Visibility.Visible;
+        if (SettingsPage.Visibility == Visibility.Visible)
+        {
+            EncryptPage.Visibility = Visibility.Collapsed;
+            DecryptPage.Visibility = Visibility.Collapsed;
+            HistoryPage.Visibility = Visibility.Collapsed;
+            _decryptVM.StopFragmentWatcher();
+        }
     }
 
     private void SettingsBrowseOutput_Click(object sender, RoutedEventArgs e)
@@ -352,10 +355,12 @@ public partial class MainWindow : Window
             SettingsOutputPath.Text = dialog.SelectedPath;
     }
 
-    private void SettingsTheme_Changed(object sender, SelectionChangedEventArgs e)
+    private void Theme_Checked(object sender, RoutedEventArgs e)
     {
-        if (SettingsTheme.SelectedItem is ComboBoxItem item && item.Tag is string tag)
-            ApplyTheme(tag);
+        if (ThemeDark.IsChecked == true)
+            ApplyTheme("dark");
+        else if (ThemeLight.IsChecked == true)
+            ApplyTheme("light");
     }
 
     private void ApplyTheme(string theme)
@@ -368,10 +373,8 @@ public partial class MainWindow : Window
     private void SettingsSave_Click(object sender, RoutedEventArgs e)
     {
         _config.DefaultOutputPath = SettingsOutputPath.Text;
-        if (SettingsTheme.SelectedItem is ComboBoxItem themeItem)
-            _config.Theme = themeItem.Tag as string ?? "dark";
-        if (SettingsCloseBehavior.SelectedItem is ComboBoxItem closeItem)
-            _config.CloseBehavior = closeItem.Tag as string ?? "exit";
+        _config.Theme = ThemeDark.IsChecked == true ? "dark" : "light";
+        _config.CloseBehavior = CloseExit.IsChecked == true ? "exit" : "tray";
         SaveConfig();
     }
 
@@ -593,10 +596,8 @@ public partial class MainWindow : Window
             _config.OutputPath = EncryptOutputPath.Text;
             _config.DecryptOutputPath = DecryptOutputPath.Text;
             _config.DefaultOutputPath = SettingsOutputPath.Text;
-            if (SettingsTheme.SelectedItem is ComboBoxItem themeItem)
-                _config.Theme = themeItem.Tag as string ?? "dark";
-            if (SettingsCloseBehavior.SelectedItem is ComboBoxItem closeItem)
-                _config.CloseBehavior = closeItem.Tag as string ?? "exit";
+            _config.Theme = ThemeDark.IsChecked == true ? "dark" : "light";
+            _config.CloseBehavior = CloseExit.IsChecked == true ? "exit" : "tray";
 
             Directory.CreateDirectory(_configDir);
             string json = JsonSerializer.Serialize(_config, new JsonSerializerOptions { WriteIndented = true });
@@ -618,14 +619,10 @@ public partial class MainWindow : Window
             DecryptOutputPath.Text = _config.DecryptOutputPath;
 
         SettingsOutputPath.Text = _config.DefaultOutputPath;
-
-        foreach (ComboBoxItem item in SettingsTheme.Items)
-            if (item.Tag as string == _config.Theme)
-                SettingsTheme.SelectedItem = item;
-        foreach (ComboBoxItem item in SettingsCloseBehavior.Items)
-            if (item.Tag as string == _config.CloseBehavior)
-                SettingsCloseBehavior.SelectedItem = item;
-
+        ThemeDark.IsChecked = _config.Theme == "dark";
+        ThemeLight.IsChecked = _config.Theme == "light";
+        CloseExit.IsChecked = _config.CloseBehavior == "exit";
+        CloseTray.IsChecked = _config.CloseBehavior == "tray";
         ApplyTheme(_config.Theme);
     }
 }
