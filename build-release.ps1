@@ -85,6 +85,7 @@ foreach ($entry in $cliTargets.GetEnumerator()) {
   if ($LASTEXITCODE -ne 0) { throw "Publish failed for $rid" }
   Copy-Item "$root\tools\RDRF.Plugins.Path\bin\Release\net8.0\RDRF.Plugins.Path.dll" "$out\plugins\" -Force
   Copy-Item "$root\tools\RDRF.Plugins.Rest\bin\Release\net8.0\RDRF.Plugins.Rest.dll" "$out\plugins\" -Force
+  Copy-Item "$root\rdrf.ico" "$out\" -Force
 }
 
 # === Step 6: Publish WPF (Windows only, single-file) ===
@@ -99,6 +100,18 @@ Remove-Item "$wpfOut\*.pdb" -Force -ErrorAction SilentlyContinue
 Remove-Item "$wpfOut\*.xml" -Force -ErrorAction SilentlyContinue
 Write-Host "       WPF OK (single-file: $((Get-Item "$wpfOut\RDRF.App.exe").Length / 1MB) MB)." -ForegroundColor Green
 
+# === Step 7: Package LORM tar.gz ===
+Write-Host "[7/7] Packaging LORM tar.gz..." -ForegroundColor Yellow
+$lormOut = "F:\RDRF\RDRF-LORM"
+foreach ($rid in @("linux-x64", "osx-x64", "osx-arm64")) {
+  $dir = $targets[$rid]
+  $tarname = "rdrf-$Version-$rid.tar.gz"
+  $tarPath = "$lormOut\$tarname"
+  Write-Host "       $tarname" -ForegroundColor Gray
+  tar -czf $tarPath -C (Resolve-Path "$dir\..") (Split-Path $dir -Leaf) 2>&1 | Out-Null
+}
+Write-Host "       LORM packages OK." -ForegroundColor Green
+
 # === Summary ===
 Write-Host "" -ForegroundColor Cyan
 Write-Host "=== Build Complete: v$Version ===" -ForegroundColor Cyan
@@ -107,7 +120,7 @@ Write-Host "RDRF-Windows (x64):" -ForegroundColor White
 Write-Host "  WPF (single-file): $($targets['win-x64-app'])" -ForegroundColor Gray
 Write-Host "  CLI: $($targets['win-x64-cli'])" -ForegroundColor Gray
 Write-Host "RDRF-LORM:" -ForegroundColor White
-Write-Host "  Linux:  $($targets['linux-x64'])" -ForegroundColor Gray
-Write-Host "  macOS intel: $($targets['osx-x64'])" -ForegroundColor Gray
-Write-Host "  macOS arm:   $($targets['osx-arm64'])" -ForegroundColor Gray
+Write-Host "  Linux:  $lormOut\rdrf-$Version-linux-x64.tar.gz" -ForegroundColor Gray
+Write-Host "  macOS intel: $lormOut\rdrf-$Version-osx-x64.tar.gz" -ForegroundColor Gray
+Write-Host "  macOS arm:   $lormOut\rdrf-$Version-osx-arm64.tar.gz" -ForegroundColor Gray
 Write-Host ""
