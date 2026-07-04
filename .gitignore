@@ -6,13 +6,23 @@ obj/
 *.cache
 *.log
 *.nupkg
+*.zip
 .vs/
 .DS_Store
 Thumbs.db
+dist/
+results.csv
+rdrf_metadata.json
+test_out.txt
 
 # Test output
 tests/RDRF_TestOutput/
 tests/*.mp4
+tests/cli_demo/
+tests/cli_test.txt
+
+# Design docs (not tracked in repo)
+docs/
 
 # Scratch/temp
 tools/EtnDemo.Interactive/
