@@ -9,7 +9,7 @@ class Program
         // Force English for all built-in System.CommandLine text
         CultureInfo.DefaultThreadCurrentUICulture = new CultureInfo("en-US");
 
-        var root = new RootCommand("RDRF - Resilient Distributed Replication Format");
+        var root = new RootCommand("RDRF - Redundant Distributed Recovery File");
         root.Subcommands.Add(new BackupCommand());
         root.Subcommands.Add(new RestoreCommand());
         root.Subcommands.Add(new InfoCommand());
