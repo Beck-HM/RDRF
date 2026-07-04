@@ -13,8 +13,7 @@
         Background="{StaticResource BackgroundBrush}"
         WindowStyle="None"
         AllowsTransparency="True"
-        ResizeMode="CanResizeWithGrip"
-        Icon="rdrf.ico">
+        ResizeMode="CanResizeWithGrip">
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
@@ -284,9 +283,9 @@
                 <StackPanel Orientation="Horizontal"
                             VerticalAlignment="Center"
                             Margin="16,0,0,0">
-                    <Image Width="20"
+                    <Image x:Name="AppIconImage"
+                           Width="20"
                            Height="20"
-                           Source="rdrf.ico"
                            Margin="0,0,8,0" />
                     <TextBlock Text="RDRF"
                                Foreground="{StaticResource TextPrimaryBrush}"
