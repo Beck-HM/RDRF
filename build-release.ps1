@@ -6,8 +6,8 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $targets = @{
-  "win-x64"       = "F:\RDRF\RDRF-Windows\cli"
-  "win-x64-app"  = "F:\RDRF\RDRF-Windows\app"
+  "win-x64-cli"  = "F:\RDRF\RDRF-Windows\cli"
+  "win-x64-app"  = "F:\RDRF\RDRF-Windows"
   "linux-x64"    = "F:\RDRF\RDRF-LORM\linux-x64\cli"
   "osx-x64"      = "F:\RDRF\RDRF-LORM\osx-x64\cli"
   "osx-arm64"    = "F:\RDRF\RDRF-LORM\osx-arm64\cli"
@@ -68,14 +68,18 @@ Write-Host "       Plugins OK." -ForegroundColor Green
 # === Step 4: Create output directories ===
 Write-Host "[4/6] Preparing output directories..." -ForegroundColor Yellow
 foreach ($path in $targets.Values) {
-  New-Item -ItemType Directory -Force -Path "$path\plugins" | Out-Null
+  New-Item -ItemType Directory -Force -Path $path | Out-Null
+}
+New-Item -ItemType Directory -Force -Path "$($targets['win-x64-cli'])\plugins" | Out-Null
+foreach ($rid in @("linux-x64", "osx-x64", "osx-arm64")) {
+  New-Item -ItemType Directory -Force -Path "$($targets[$rid])\plugins" | Out-Null
 }
 
 # === Step 5: Publish CLI targets ===
 Write-Host "[5/6] Publishing CLI targets..." -ForegroundColor Yellow
-$cliRids = @("win-x64", "linux-x64", "osx-x64", "osx-arm64")
-foreach ($rid in $cliRids) {
-  $out = $targets[$rid]
+$cliTargets = @{ "win-x64" = "win-x64-cli"; "linux-x64" = "linux-x64"; "osx-x64" = "osx-x64"; "osx-arm64" = "osx-arm64" }
+foreach ($entry in $cliTargets.GetEnumerator()) {
+  $rid = $entry.Key; $out = $targets[$entry.Value]
   Write-Host "       Publishing $rid -> $out" -ForegroundColor Gray
   dotnet publish "$root\src\RDRF.Cli" -c Release -o $out --self-contained true -r $rid --nologo
   if ($LASTEXITCODE -ne 0) { throw "Publish failed for $rid" }
@@ -83,20 +87,25 @@ foreach ($rid in $cliRids) {
   Copy-Item "$root\tools\RDRF.Plugins.Rest\bin\Release\net8.0\RDRF.Plugins.Rest.dll" "$out\plugins\" -Force
 }
 
-# === Step 6: Publish WPF (Windows only) ===
-Write-Host "[6/6] Publishing WPF app..." -ForegroundColor Yellow
+# === Step 6: Publish WPF (Windows only, single-file) ===
+Write-Host "[6/6] Publishing WPF app (single-file)..." -ForegroundColor Yellow
 $wpfOut = $targets["win-x64-app"]
-dotnet publish "$root\src\RDRF.App" -c Release -o $wpfOut --self-contained true -r win-x64 --nologo
+Remove-Item "$wpfOut\*" -Recurse -Force -ErrorAction SilentlyContinue
+dotnet publish "$root\src\RDRF.App" -c Release -o $wpfOut --self-contained true -r win-x64 --nologo `
+  /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
 if ($LASTEXITCODE -ne 0) { throw "WPF publish failed" }
-Write-Host "       WPF OK." -ForegroundColor Green
+# Remove debug symbols and xml from release output
+Remove-Item "$wpfOut\*.pdb" -Force -ErrorAction SilentlyContinue
+Remove-Item "$wpfOut\*.xml" -Force -ErrorAction SilentlyContinue
+Write-Host "       WPF OK (single-file: $((Get-Item "$wpfOut\RDRF.App.exe").Length / 1MB) MB)." -ForegroundColor Green
 
 # === Summary ===
 Write-Host "" -ForegroundColor Cyan
 Write-Host "=== Build Complete: v$Version ===" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "RDRF-Windows (x64):" -ForegroundColor White
-Write-Host "  CLI: $($targets['win-x64'])" -ForegroundColor Gray
-Write-Host "  WPF: $($targets['win-x64-app'])" -ForegroundColor Gray
+Write-Host "  WPF (single-file): $($targets['win-x64-app'])" -ForegroundColor Gray
+Write-Host "  CLI: $($targets['win-x64-cli'])" -ForegroundColor Gray
 Write-Host "RDRF-LORM:" -ForegroundColor White
 Write-Host "  Linux:  $($targets['linux-x64'])" -ForegroundColor Gray
 Write-Host "  macOS intel: $($targets['osx-x64'])" -ForegroundColor Gray
