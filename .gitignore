@@ -15,6 +15,11 @@ results.csv
 rdrf_metadata.json
 test_out.txt
 
+# Benchmark & test results
+*.csv
+*.trx
+tests/TestResults/
+
 # Test output
 tests/RDRF_TestOutput/
 tests/*.mp4
