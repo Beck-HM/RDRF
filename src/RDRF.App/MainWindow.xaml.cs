@@ -83,6 +83,30 @@ public partial class MainWindow : Window
         // HwndSource hook for WM_COPYDATA IPC (used by rdrf-mcp-wpf)
         SourceInitialized += OnSourceInitialized;
 
+        // Set window icon from embedded assembly icon
+        try
+        {
+            var hIcon = System.Drawing.Icon.ExtractAssociatedIcon(
+                System.IO.Path.Combine(System.AppContext.BaseDirectory, "RDRF.App.exe"));
+            if (hIcon != null)
+                Icon = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
+                    hIcon.Handle,
+                    new System.Windows.Int32Rect(0, 0, 32, 32),
+                    System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+
+            // Also set the title bar icon image
+            using var iconStream = new System.IO.MemoryStream();
+            hIcon?.Save(iconStream);
+            iconStream.Position = 0;
+            var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+            bitmap.BeginInit();
+            bitmap.StreamSource = iconStream;
+            bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            bitmap.EndInit();
+            AppIconImage.Source = bitmap;
+        }
+        catch { }
+
         // NotifyIcon for system tray
         var showItem = new System.Windows.Controls.MenuItem { Header = "Show" };
         showItem.Click += (_, _) =>
@@ -312,6 +336,13 @@ public partial class MainWindow : Window
             WindowBorder.CornerRadius = new CornerRadius(0);
             WindowBorder.BorderThickness = new Thickness(0);
         }
+    }
+
+    public void LoadIndexFile(string path)
+    {
+        TabDecrypt_Click(null, null);
+        _decryptVM.SetIndexPath(path);
+        DecryptKeyBox.Focus();
     }
 
     // ── Tab Switching ──
