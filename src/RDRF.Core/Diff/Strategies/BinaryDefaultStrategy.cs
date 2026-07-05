@@ -2,6 +2,10 @@ using System.Text;
 
 namespace RDRF.Core.Diff.Strategies;
 
+/// <summary>
+/// Binary fallback diff: compares file sizes only.
+/// </summary>
+
 public class BinaryDefaultStrategy : IDiffStrategy
 {
     public string Name => "binary_default";
@@ -43,3 +47,4 @@ public class BinaryDefaultStrategy : IDiffStrategy
         };
     }
 }
+

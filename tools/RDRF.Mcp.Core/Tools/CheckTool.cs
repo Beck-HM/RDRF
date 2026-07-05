@@ -3,6 +3,10 @@ using RDRF.Core.Versioning;
 
 namespace RDRF.Mcp.Core.Tools;
 
+/// <summary>
+/// MCP tool: show version history.
+/// </summary>
+
 public class CheckTool : IMcpTool
 {
     public string Name => "check";
@@ -37,3 +41,4 @@ public class CheckTool : IMcpTool
         return Task.FromResult(JsonSerializer.Serialize(list, new JsonSerializerOptions { WriteIndented = true }));
     }
 }
+

@@ -2,6 +2,10 @@ using RDRF.Core.Index;
 
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// Interface for all FSS fragment encoding/decoding/stripping strategies.
+/// </summary>
+
 public interface IFssStrategy
 {
     string Level { get; }
@@ -21,3 +25,4 @@ public interface IFssStrategy
 
     byte[] StripSingle(byte[] encodedFragment, int index, List<int>? originalSizes = null);
 }
+

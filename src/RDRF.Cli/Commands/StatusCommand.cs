@@ -11,6 +11,10 @@ using System.Text;
 
 namespace RDRF.Cli.Commands;
 
+/// <summary>
+/// Show per-fragment integrity status. CLI: rdrf status.
+/// </summary>
+
 public class StatusCommand : Command
 {
     public StatusCommand() : base("status", "Show per-fragment status and integrity for a backup")
@@ -179,3 +183,10 @@ public class StatusCommand : Command
         return $"{bytes} B";
     }
 }
+
+
+
+
+
+
+

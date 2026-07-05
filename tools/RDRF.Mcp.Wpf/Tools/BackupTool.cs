@@ -2,6 +2,10 @@ using System.Text.Json;
 
 namespace RDRF.Mcp.Wpf.Tools;
 
+/// <summary>
+/// MCP tool: backup via WPF UI (UIA + IPC).
+/// </summary>
+
 public class BackupTool : IMcpTool
 {
     private readonly Func<string, bool> _sendIpc;
@@ -73,3 +77,4 @@ public class BackupTool : IMcpTool
         return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
     }
 }
+

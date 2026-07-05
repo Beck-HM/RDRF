@@ -1,8 +1,12 @@
-﻿using RDRF.Core.Dssa;
+using RDRF.Core.Dssa;
 using Spectre.Console;
 using System.CommandLine;
 
 namespace RDRF.Cli.Commands;
+
+/// <summary>
+/// Register a storage backend. CLI: rdrf init.
+/// </summary>
 
 public class InitCommand : Command
 {
@@ -98,3 +102,10 @@ public class InitCommand : Command
         return entry;
     }
 }
+
+
+
+
+
+
+

@@ -11,6 +11,9 @@ using RDRF.Core;
 
 namespace RDRF.App.ViewModels;
 
+/// <summary>
+/// Encrypt tab ViewModel: file selection, strategy, progress, FSA mode.
+/// </summary>
 public class EncryptViewModel : ViewModelBase
 {
     private string _selectedStrategy = "FSS1";
@@ -464,4 +467,6 @@ public class EncryptViewModel : ViewModelBase
         }
     }
 }
+
+
 

@@ -8,6 +8,10 @@ using RDRF.Core.Versioning;
 
 namespace RDRF.Core.Dssa;
 
+/// <summary>
+/// Pull fragments/RC from remote backends. Supports version-specific pulls via VersionRecord lookup.
+/// </summary>
+
 public static class PullService
 {
     public static async Task<int> Run(string indexPath, byte[] password, string? versionArg,
@@ -252,5 +256,6 @@ public static class PullService
         return errors > 0 ? 1 : 0;
     }
 }
+
 
 

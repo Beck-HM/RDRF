@@ -3,6 +3,9 @@ using System.Windows.Media;
 
 namespace RDRF.App.ViewModels;
 
+/// <summary>
+/// Tree node for file change visualization in the History tab.
+/// </summary>
 public class FileTreeNode
 {
     public string Name { get; set; } = string.Empty;
@@ -32,3 +35,5 @@ public class FileTreeNode
 
     public string Icon => IsDirectory ? "\U0001F4C1" : "\U0001F4C4";
 }
+
+

@@ -3,6 +3,10 @@ using YamlDotNet.Serialization.NamingConventions;
 
 namespace RDRF.Core.Dssa;
 
+/// <summary>
+/// CRUD operations for YAML backend configuration file (rdrf_config.yaml).
+/// </summary>
+
 public static class ConfigManager
 {
     private static readonly string DefaultPath =
@@ -158,3 +162,4 @@ public static class ConfigManager
         return y;
     }
 }
+

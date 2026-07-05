@@ -2,6 +2,10 @@ using System.Text;
 
 namespace RDRF.Core.Diff.Strategies;
 
+/// <summary>
+/// Section/key-value INI diff parser.
+/// </summary>
+
 public class IniDiffStrategy : IDiffStrategy
 {
     public string Name => "ini";
@@ -173,3 +177,4 @@ public class IniDiffStrategy : IDiffStrategy
         return result;
     }
 }
+

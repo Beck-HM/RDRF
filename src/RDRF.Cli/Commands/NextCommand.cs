@@ -11,6 +11,10 @@ using System.Text;
 
 namespace RDRF.Cli.Commands;
 
+/// <summary>
+/// Create an incremental versioned backup. CLI: rdrf next.
+/// </summary>
+
 public class NextCommand : Command
 {
     public NextCommand() : base("next", "Create an incremental versioned backup")
@@ -145,3 +149,10 @@ public class NextCommand : Command
         return RDRF.Core.FragmentEngine.Frags.MergeFragments(stripped);
     }
 }
+
+
+
+
+
+
+

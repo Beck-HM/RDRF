@@ -1,5 +1,9 @@
 namespace RDRF.Mcp.Wpf.Tools;
 
+/// <summary>
+/// MCP tool: close the RDRF desktop application.
+/// </summary>
+
 public class CloseTool : IMcpTool
 {
     private readonly WpfAppController _controller;
@@ -16,3 +20,4 @@ public class CloseTool : IMcpTool
         return Task.FromResult("RDRF application closed");
     }
 }
+

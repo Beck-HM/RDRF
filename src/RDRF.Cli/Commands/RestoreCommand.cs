@@ -10,6 +10,10 @@ using System.Text;
 
 namespace RDRF.Cli.Commands;
 
+/// <summary>
+/// Restore a backup from its index file. CLI: rdrf res.
+/// </summary>
+
 public class RestoreCommand : Command
 {
     public RestoreCommand() : base("res", "Restore a backup from its index file")
@@ -117,3 +121,10 @@ public class RestoreCommand : Command
         }
     }
 }
+
+
+
+
+
+
+

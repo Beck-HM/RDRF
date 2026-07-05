@@ -4,6 +4,10 @@ using RDRF.Core.Integrity;
 
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// FSS5: cross-recovery encoding. Each fragment embeds two neighbor fragments.
+/// </summary>
+
 public class Fss5CrossRecovery : IFssStrategy
 {
     public string Level => Constants.FssLevel5;
@@ -223,3 +227,4 @@ public class Fss5CrossRecovery : IFssStrategy
         known[encodedIdx] = combined;
     }
 }
+

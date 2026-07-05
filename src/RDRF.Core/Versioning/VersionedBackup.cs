@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO.Hashing;
 using System.Security.Cryptography;
 using RDRF.Core.Compression;
@@ -9,6 +9,10 @@ using RDRF.Core.Index;
 using RDRF.Core.Dssa;
 
 namespace RDRF.Core.Versioning;
+
+/// <summary>
+/// Incremental versioned backup pipeline: dedup, diff, index merge, refCount GC, orphan cleanup.
+/// </summary>
 
 public static class VersionedBackup
 {
@@ -104,15 +108,45 @@ private static async Task<string> IncrementalBackupAsync(
     byte[] salt = new byte[Constants.SaltPrefixLength];
     Buffer.BlockCopy(prevIndexBytes, 0, salt, 0, Constants.SaltPrefixLength);
 
-    // Read new file and split into raw fragments
-    byte[] newData = await File.ReadAllBytesAsync(filePath, ct).ConfigureAwait(false);
+    // Stream file → hash(sample) → split raw
     int fragSize = fragmentSize > 0 ? fragmentSize : 1024 * 1024;
-
-    // Compute SHA256 fingerprint
+    var rawFragments = new List<byte[]>();
     string fileFingerprint;
+    long newFileSize;
+
+    using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
+        FileShare.Read, 65536, FileOptions.SequentialScan))
     using (var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
     {
-        hasher.AppendData(newData);
+        var fragBuf = new byte[fragSize];
+        int fragOff = 0;
+        long totalRead = 0;
+        int bytesRead;
+
+        while ((bytesRead = await fs.ReadAsync(fragBuf.AsMemory(fragOff, fragSize - fragOff), ct).ConfigureAwait(false)) > 0)
+        {
+            hasher.AppendData(fragBuf.AsSpan(fragOff, bytesRead));
+            fragOff += bytesRead;
+            totalRead += bytesRead;
+
+            if (fragOff < fragSize)
+                continue;
+
+            byte[] frag = new byte[fragSize];
+            Buffer.BlockCopy(fragBuf, 0, frag, 0, fragSize);
+            rawFragments.Add(frag);
+            fragOff = 0;
+        }
+
+        // Last partial fragment
+        if (fragOff > 0)
+        {
+            byte[] frag = new byte[fragOff];
+            Buffer.BlockCopy(fragBuf, 0, frag, 0, fragOff);
+            rawFragments.Add(frag);
+        }
+
+        newFileSize = totalRead;
         fileFingerprint = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
     }
 
@@ -124,9 +158,24 @@ private static async Task<string> IncrementalBackupAsync(
     }
 
     // Compute diff for display (on uncompressed data, sample head only)
-    long sampleSize = newData.Length > 256 * 1024 ? 64 * 1024 : 0;
-    byte[] oldData = ReadDecryptedOriginal(storage, prevFingerprint, password, sampleSize);
-    byte[] newSample = sampleSize > 0 ? newData.AsSpan(0, (int)sampleSize).ToArray() : newData;
+    long sampleSize = rawFragments.Count > 0 ? Math.Min(rawFragments[0].Length, 64 * 1024) : 0;
+    if (rawFragments.Count == 1 && rawFragments[0].Length <= 256 * 1024)
+        sampleSize = 0; // use full data
+    byte[] newSample;
+    if (sampleSize > 0)
+    {
+        newSample = new byte[sampleSize];
+        Buffer.BlockCopy(rawFragments[0], 0, newSample, 0, (int)sampleSize);
+    }
+    else
+    {
+        // Reconstruct full file from fragments for small files
+        using var ms = new MemoryStream();
+        foreach (var f in rawFragments) ms.Write(f);
+        newSample = ms.ToArray();
+    }
+
+    byte[] oldData = ReadDecryptedOriginal(storage, prevFingerprint, password, newSample.Length > 256 * 1024 ? 64 * 1024 : newSample.Length);
     var diffResult = new DiffEngine().ComputeDiff(oldData, newSample);
 
     var fileEntries = new List<FileEntry>
@@ -138,16 +187,6 @@ private static async Task<string> IncrementalBackupAsync(
             Diff = diffResult.HumanDiff,
         }
     };
-
-    // Split raw (uncompressed) data into fragments, hash for dedup
-    var rawFragments = new List<byte[]>();
-    for (int off = 0; off < newData.Length; off += fragSize)
-    {
-        int len = Math.Min(fragSize, newData.Length - off);
-        byte[] frag = new byte[len];
-        Buffer.BlockCopy(newData, off, frag, 0, len);
-        rawFragments.Add(frag);
-    }
 
     // Compute raw fragment hashes (on UNCOMPRESSED data) and query dedup map
     var newRawHashes = new List<byte[]>(rawFragments.Count);
@@ -264,7 +303,7 @@ private static async Task<string> IncrementalBackupAsync(
         await orchestrator.BuildChangedFragmentsIndex(
             compressedFrags, changedRaw, changedIdxMap, changedFlags,
             actualFingerprint, fileFingerprint, Path.GetFileName(filePath),
-            newData.Length, fssStrategy, fragmentSize, customName, prevFingerprint,
+            newFileSize, fssStrategy, fragmentSize, customName, prevFingerprint,
             prevRawHashes, progress, ct,
             compressionMethod: Constants.CompressionLz4)
             .ConfigureAwait(false);
@@ -517,3 +556,4 @@ private static async Task<string> IncrementalBackupAsync(
         storage.WriteIndex(fingerprint, saltedIndex);
     }
 }
+

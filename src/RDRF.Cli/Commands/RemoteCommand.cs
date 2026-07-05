@@ -1,10 +1,14 @@
-﻿using RDRF.Core.Encryption;
+using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Core.Dssa;
 using Spectre.Console;
 using System.CommandLine;
 
 namespace RDRF.Cli.Commands;
+
+/// <summary>
+/// Register a project and bind storage backends. CLI: rdrf remote.
+/// </summary>
 
 public class RemoteCommand : Command
 {
@@ -72,3 +76,10 @@ public class RemoteCommand : Command
         });
     }
 }
+
+
+
+
+
+
+

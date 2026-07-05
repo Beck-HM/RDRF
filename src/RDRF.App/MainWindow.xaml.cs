@@ -27,6 +27,7 @@ public partial class MainWindow : Window
 
     private readonly Dictionary<string, Button> _strategyBorders = new();
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _notifyIcon;
+    private int _allowedIpcPid;
 
     private const int WM_COPYDATA = 0x004A;
 
@@ -37,6 +38,9 @@ public partial class MainWindow : Window
         public int cbData;
         public IntPtr lpData;
     }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
     public MainWindow()
     {
@@ -165,6 +169,16 @@ public partial class MainWindow : Window
     {
         if (msg == WM_COPYDATA)
         {
+            // Validate sender process
+            GetWindowThreadProcessId(wParam, out uint senderPid);
+            if (_allowedIpcPid == 0)
+                _allowedIpcPid = (int)senderPid;
+            else if (_allowedIpcPid != (int)senderPid)
+            {
+                handled = true;
+                return IntPtr.Zero;
+            }
+
             try
             {
                 var cds = Marshal.PtrToStructure<COPYDATASTRUCT>(lParam);

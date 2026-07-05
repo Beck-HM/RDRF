@@ -5,6 +5,10 @@ using RDRF.Mcp.Wpf.Tools;
 
 Console.Error.WriteLine("[rdrf-mcp-wpf] starting...");
 
+string? apiKey = Environment.GetEnvironmentVariable("RDRF_MCP_KEY");
+if (!string.IsNullOrEmpty(apiKey))
+    Console.Error.WriteLine($"[rdrf-mcp-wpf] api-key auth enabled");
+
 // Determine path to RDRF.App.exe (same directory as this project's parent)
 string appDir = AppContext.BaseDirectory;
 string appExe = Path.Combine(appDir, "RDRF.App.exe");
@@ -71,6 +75,17 @@ await foreach (var json in ReadStdInAsync())
             }
             else if (method == "tools/call")
             {
+                if (!string.IsNullOrEmpty(apiKey))
+                {
+                    string? requestKey = root.TryGetProperty("params", out var p) && p.TryGetProperty("apiKey", out var ak) ? ak.GetString() : null;
+                    if (requestKey != apiKey)
+                    {
+                        if (id != null)
+                            WriteJson(new { jsonrpc = "2.0", id = id, error = new { code = -32001, message = "Unauthorized: invalid or missing apiKey" } });
+                        continue;
+                    }
+                }
+
                 var name = root.GetProperty("params").GetProperty("name").GetString() ?? "";
                 var argsEl = root.GetProperty("params").GetProperty("arguments");
                 var argsDict = JsonSerializer.Deserialize<Dictionary<string, object?>>(argsEl.GetRawText())

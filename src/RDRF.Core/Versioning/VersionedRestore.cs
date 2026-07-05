@@ -4,6 +4,10 @@ using RDRF.Core.Dssa;
 
 namespace RDRF.Core.Versioning;
 
+/// <summary>
+/// Static helpers for versioned restore and version history retrieval from index files.
+/// </summary>
+
 public static class VersionedRestore
 {
     public static bool Restore(
@@ -41,3 +45,4 @@ public static class VersionedRestore
         }
     }
 }
+

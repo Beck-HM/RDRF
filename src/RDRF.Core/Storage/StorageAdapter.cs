@@ -42,6 +42,10 @@ public abstract class DssaAdapter
         => throw new NotSupportedException();
 }
 
+/// <summary>
+/// Abstract DssaAdapter + LocalDssaAdapter for local filesystem fragment/index/RC storage.
+/// </summary>
+
 public class LocalDssaAdapter : DssaAdapter
 {
     private readonly string _basePath;
@@ -162,3 +166,4 @@ public class LocalDssaAdapter : DssaAdapter
 
     public string GetBasePath() => _basePath;
 }
+

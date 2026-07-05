@@ -5,6 +5,10 @@ using RDRF.Core.Versioning;
 
 namespace RDRF.Mcp.Core.Tools;
 
+/// <summary>
+/// MCP tool: create incremental versioned backup.
+/// </summary>
+
 public class NextTool : IMcpTool
 {
     public string Name => "next";
@@ -45,3 +49,4 @@ public class NextTool : IMcpTool
         return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
     }
 }
+

@@ -13,6 +13,9 @@ using RDRF.Core.Dssa;
 
 namespace RDRF.App.ViewModels;
 
+/// <summary>
+/// History tab ViewModel: version browsing, incremental backup, diff view.
+/// </summary>
 public class VersionHistoryItem
 {
     public int Version { get; set; }
@@ -367,3 +370,5 @@ public class HistoryViewModel : ViewModelBase
         }
     }
 }
+
+

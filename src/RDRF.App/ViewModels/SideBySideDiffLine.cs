@@ -3,6 +3,9 @@ using RDRF.Core.Diff;
 
 namespace RDRF.App.ViewModels;
 
+/// <summary>
+/// Diff line model for WPF side-by-side view with color brushes.
+/// </summary>
 public class SideBySideDiffLine
 {
     public DiffLineType Type { get; }
@@ -49,3 +52,5 @@ public class SideBySideDiffLine
         NewFg = type == DiffLineType.Addition ? Green : type == DiffLineType.Header ? Purple : Light;
     }
 }
+
+

@@ -5,6 +5,10 @@ using RDRF.Core.Index;
 
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// FSS5+: seed-based RS(K,K). Any single fragment can rebuild all data.
+/// </summary>
+
 public class Fss5PSend : IFssStrategy
 {
     public string Level => Constants.FssLevel5P;
@@ -186,3 +190,4 @@ public class Fss5PSend : IFssStrategy
         return Array.Empty<byte>();
     }
 }
+

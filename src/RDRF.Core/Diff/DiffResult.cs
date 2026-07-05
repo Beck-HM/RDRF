@@ -1,5 +1,9 @@
 namespace RDRF.Core.Diff;
 
+/// <summary>
+/// DTOs: DiffResult, DiffLine, DiffLineType enum for diff output.
+/// </summary>
+
 public enum DiffLineType
 {
     Header,
@@ -8,11 +12,19 @@ public enum DiffLineType
     Deletion
 }
 
+/// <summary>
+/// DTOs: DiffResult, DiffLine, DiffLineType enum for diff output.
+/// </summary>
+
 public class DiffLine
 {
     public DiffLineType Type { get; set; }
     public string Text { get; set; } = "";
 }
+
+/// <summary>
+/// DTOs: DiffResult, DiffLine, DiffLineType enum for diff output.
+/// </summary>
 
 public class DiffResult
 {
@@ -31,3 +43,4 @@ public class DiffResult
     public double ChangeRatio { get; set; }
     public Dictionary<string, object>? Metadata { get; set; }
 }
+

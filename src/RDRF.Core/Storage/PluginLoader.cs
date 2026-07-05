@@ -3,6 +3,10 @@ using System.Reflection;
 
 namespace RDRF.Core.Dssa;
 
+/// <summary>
+/// Loads IStorageBackendFactory plugins from DLL files at runtime.
+/// </summary>
+
 public static class PluginLoader
 {
     public static List<IStorageBackendFactory> Load(string directory)
@@ -35,3 +39,4 @@ public static class PluginLoader
         return factories;
     }
 }
+

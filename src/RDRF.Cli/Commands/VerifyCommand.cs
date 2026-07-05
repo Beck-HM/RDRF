@@ -11,6 +11,10 @@ using System.Text;
 
 namespace RDRF.Cli.Commands;
 
+/// <summary>
+/// Run ETN cross-validation on FSS6.x backups. CLI: rdrf verify.
+/// </summary>
+
 public class VerifyCommand : Command
 {
     public VerifyCommand() : base("verify", "Run ETN cross-validation on FSS6 backup via index file")
@@ -165,3 +169,10 @@ public class VerifyCommand : Command
         return s;
     }
 }
+
+
+
+
+
+
+

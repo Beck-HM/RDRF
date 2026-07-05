@@ -2,6 +2,10 @@ using System.Text;
 
 namespace RDRF.Core.Diff.Strategies;
 
+/// <summary>
+/// Line-based text diff with LCS-like matching and unified output.
+/// </summary>
+
 public class TextGenericStrategy : IDiffStrategy
 {
     public string Name => "text_generic";
@@ -286,3 +290,4 @@ public class TextGenericStrategy : IDiffStrategy
         public string NewLine { get; set; } = "";
     }
 }
+

@@ -1,5 +1,9 @@
 namespace RDRF.Core.Diff;
 
+/// <summary>
+/// Interface for diff strategies (MatchScore/ComputeDiff/FormatRaw).
+/// </summary>
+
 public interface IDiffStrategy
 {
     string Name { get; }
@@ -8,3 +12,4 @@ public interface IDiffStrategy
 
     DiffResult ComputeDiff(byte[] oldData, byte[] newData, string? label);
 }
+

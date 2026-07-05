@@ -1,5 +1,9 @@
 namespace RDRF.Core;
 
+/// <summary>
+/// Progress report DTO for backup/restore operations.
+/// </summary>
+
 public class RdrfProgressReport
 {
     public string Stage { get; set; } = string.Empty;
@@ -8,3 +12,4 @@ public class RdrfProgressReport
     public long CurrentBytes { get; set; }
     public long TotalBytes { get; set; }
 }
+

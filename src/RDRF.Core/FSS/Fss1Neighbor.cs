@@ -3,6 +3,10 @@ using RDRF.Core.Index;
 
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// FSS1: neighbor duplication. Each fragment stores self + next fragment (concatenated).
+/// </summary>
+
 public class Fss1Neighbor : IFssStrategy
 {
     public string Level => Constants.FssLevel1;
@@ -125,3 +129,4 @@ public class Fss1Neighbor : IFssStrategy
         return result;
     }
 }
+

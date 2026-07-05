@@ -6,6 +6,10 @@ using RDRF.Core.Metadata;
 
 namespace RDRF.Core;
 
+/// <summary>
+/// Fragment recovery via missing detection, hash verification, and FSS decode.
+/// </summary>
+
 public enum RecoveryStatus
 {
     Unknown,
@@ -13,6 +17,10 @@ public enum RecoveryStatus
     Partial,
     Failed
 }
+
+/// <summary>
+/// Fragment recovery via missing detection, hash verification, and FSS decode.
+/// </summary>
 
 public class RecoveryResult
 {
@@ -24,6 +32,10 @@ public class RecoveryResult
     public int RecoveredFromFss { get; set; }
     public Dictionary<int, byte[]> RecoveredFragments { get; set; } = new();
 }
+
+/// <summary>
+/// Fragment recovery via missing detection, hash verification, and FSS decode.
+/// </summary>
 
 public class RecoveryExecutor
 {
@@ -159,3 +171,4 @@ public class RecoveryExecutor
         return Task.Run(() => ExecuteRecovery(index, availableFragments, metadata, skipVerification));
     }
 }
+

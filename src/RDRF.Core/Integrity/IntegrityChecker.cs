@@ -4,6 +4,10 @@ using System.Text;
 
 namespace RDRF.Core.Integrity;
 
+/// <summary>
+/// SHA256 hash computation, hex conversion, and constant-time comparison utilities.
+/// </summary>
+
 public static class IntegrityChecker
 {
     public static string HashBytes(byte[] data)
@@ -83,3 +87,4 @@ public static class IntegrityChecker
         return sb.ToString();
     }
 }
+

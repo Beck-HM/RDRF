@@ -2,6 +2,10 @@ using RDRF.Core.Index;
 
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// FSS2: FSS1 + SHA256 per fragment. Enables integrity verification on read.
+/// </summary>
+
 public class Fss2Verify : IFssStrategy
 {
     private readonly Fss1Neighbor _fss1 = new();
@@ -134,3 +138,4 @@ public class Fss2Verify : IFssStrategy
         return _fss1.StripSingle(data, index, originalSizes);
     }
 }
+

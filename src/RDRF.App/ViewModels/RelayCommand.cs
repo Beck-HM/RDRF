@@ -2,6 +2,9 @@ using System.Windows.Input;
 
 namespace RDRF.App.ViewModels;
 
+/// <summary>
+/// ICommand implementation for WPF binding with CanExecute support.
+/// </summary>
 public class RelayCommand : ICommand
 {
     private readonly Action<object?> _execute;
@@ -23,3 +26,5 @@ public class RelayCommand : ICommand
 
     public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
 }
+
+

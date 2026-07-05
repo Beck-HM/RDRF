@@ -1,4 +1,4 @@
-﻿using RDRF.Core.Encryption;
+using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Core.Dssa;
 using Spectre.Console;
@@ -7,6 +7,10 @@ using System.Security.Cryptography;
 using System.Text;
 
 namespace RDRF.Cli.Commands;
+
+/// <summary>
+/// Remove backend, purge version, or clean local fragments. CLI: rdrf remove.
+/// </summary>
 
 public class RemoveBackendCommand : Command
 {
@@ -170,3 +174,10 @@ public class RemoveBackendCommand : Command
         });
     }
 }
+
+
+
+
+
+
+

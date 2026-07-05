@@ -4,6 +4,10 @@ using RDRF.Core.Dssa;
 
 namespace RDRF.Core.ETN;
 
+/// <summary>
+/// 2-tier precision ETN cross-validation: index/RC/fragment block comparison with consensus.
+/// </summary>
+
 public static class EtnPrecision
 {
     public static PrecisionResult Analyze(
@@ -351,6 +355,10 @@ public static class EtnPrecision
     }
 }
 
+/// <summary>
+/// 2-tier precision ETN cross-validation: index/RC/fragment block comparison with consensus.
+/// </summary>
+
 public class PrecisionResult
 {
     public bool IsValid { get; set; } = true;
@@ -364,3 +372,4 @@ public class PrecisionResult
     public List<int> CorruptedFragmentTrailers { get; set; } = new();
     public string? ErrorMessage { get; set; }
 }
+

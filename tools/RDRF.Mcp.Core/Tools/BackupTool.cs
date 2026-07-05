@@ -6,6 +6,10 @@ using RDRF.Core.Index;
 
 namespace RDRF.Mcp.Core.Tools;
 
+/// <summary>
+/// MCP tool: backup a file via Core.
+/// </summary>
+
 public class BackupTool : IMcpTool
 {
     public string Name => "backup";
@@ -53,3 +57,4 @@ public class BackupTool : IMcpTool
         return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
     }
 }
+

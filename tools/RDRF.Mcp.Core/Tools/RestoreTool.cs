@@ -5,6 +5,10 @@ using RDRF.Core.Versioning;
 
 namespace RDRF.Mcp.Core.Tools;
 
+/// <summary>
+/// MCP tool: restore via Core.
+/// </summary>
+
 public class RestoreTool : IMcpTool
 {
     public string Name => "restore";
@@ -53,3 +57,4 @@ public class RestoreTool : IMcpTool
         return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
     }
 }
+

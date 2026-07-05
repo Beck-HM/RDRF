@@ -3,6 +3,10 @@ using System.Text.Json;
 
 namespace RDRF.Core.Diff.Strategies;
 
+/// <summary>
+/// Semantic JSON diff comparing elements by path.
+/// </summary>
+
 public class JsonDiffStrategy : IDiffStrategy
 {
     public string Name => "json";
@@ -157,3 +161,4 @@ public class JsonDiffStrategy : IDiffStrategy
         _ => el.GetRawText(),
     };
 }
+

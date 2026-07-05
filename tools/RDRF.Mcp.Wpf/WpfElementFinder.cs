@@ -5,6 +5,31 @@ namespace RDRF.Mcp.Wpf;
 
 public static class WpfElementFinder
 {
+    /// <summary>
+    /// Escape a string for safe use inside a PowerShell single-quoted string.
+    /// In PowerShell single-quoted strings, only ' needs to be doubled.
+    /// To prevent injection via closing quote + additional commands, we also
+    /// strip characters that break out of the expression context: $ ( ) { } ; | &amp;.
+    /// </summary>
+    private static string EscapePsString(string s)
+    {
+        var sb = new System.Text.StringBuilder(s.Length);
+        foreach (char c in s)
+        {
+            switch (c)
+            {
+                case '\'': sb.Append("''"); break;
+                case '$':  sb.Append("`$"); break;
+                case '`':  sb.Append("``"); break;
+                case '"':  sb.Append("`\""); break;
+                case '\n': sb.Append("`n"); break;
+                case '\r': sb.Append("`r"); break;
+                default:   sb.Append(c); break;
+            }
+        }
+        return sb.ToString();
+    }
+
     public static async Task<string> ExecutePowershellAsync(string script, int timeoutMs = 30000)
     {
         var psi = new ProcessStartInfo
@@ -44,17 +69,18 @@ public static class WpfElementFinder
     /// </summary>
     public static async Task<string?> FindElementByAutomationId(string automationId, int timeoutMs = 15000)
     {
+        string aid = EscapePsString(automationId);
         string script = $@"
 Add-Type -AssemblyName UIAutomationClient
 $sw = [Diagnostics.Stopwatch]::StartNew()
 while ($sw.ElapsedMilliseconds -lt $timeoutMs) {{
     $root = [System.Windows.Automation.AutomationElement]::RootElement
     $cond = New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::AutomationIdProperty, '$automationId')
+        [System.Windows.Automation.AutomationElement]::AutomationIdProperty, '{aid}')
     $el = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
     if ($el -ne $null) {{
         $rect = $el.Current.BoundingRectangle
-        $result = @{{ automationId = '$automationId'
+        $result = @{{ automationId = '{aid}'
                      x = $rect.X; y = $rect.Y
                      width = $rect.Width; height = $rect.Height
                      name = $el.Current.Name
@@ -82,13 +108,14 @@ return $null
     /// </summary>
     public static async Task<bool> ClickButton(string automationId, int timeoutMs = 15000)
     {
+        string aid = EscapePsString(automationId);
         string script = $@"
 Add-Type -AssemblyName UIAutomationClient
 $sw = [Diagnostics.Stopwatch]::StartNew()
 while ($sw.ElapsedMilliseconds -lt $timeoutMs) {{
     $root = [System.Windows.Automation.AutomationElement]::RootElement
     $cond = New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::AutomationIdProperty, '$automationId')
+        [System.Windows.Automation.AutomationElement]::AutomationIdProperty, '{aid}')
     $el = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
     if ($el -ne $null) {{
         $invoke = $null
@@ -110,19 +137,20 @@ return 'false'
     /// </summary>
     public static async Task<bool> SetText(string automationId, string text, int timeoutMs = 15000)
     {
-        string escaped = text.Replace("'", "''");
+        string aid = EscapePsString(automationId);
+        string escaped = EscapePsString(text);
         string script = $@"
 Add-Type -AssemblyName UIAutomationClient
 $sw = [Diagnostics.Stopwatch]::StartNew()
 while ($sw.ElapsedMilliseconds -lt $timeoutMs) {{
     $root = [System.Windows.Automation.AutomationElement]::RootElement
     $cond = New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::AutomationIdProperty, '$automationId')
+        [System.Windows.Automation.AutomationElement]::AutomationIdProperty, '{aid}')
     $el = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
     if ($el -ne $null) {{
         $vp = $null
         if ($el.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$vp)) {{
-            $vp.SetValue('$escaped')
+            $vp.SetValue('{escaped}')
             return 'true'
         }}
     }}
@@ -138,11 +166,12 @@ return 'false'
     {
         // Find RDRF window, then search TextBlocks inside for matching text.
         // When found, walk up the UIA tree to find the clickable parent Border.
+        string target = EscapePsString(text);
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("Add-Type -AssemblyName UIAutomationClient");
         sb.AppendLine("$sw = [Diagnostics.Stopwatch]::StartNew()");
         sb.AppendLine("$timeoutMs = " + timeoutMs);
-        sb.AppendLine("$target = '" + text.Replace("'", "''") + "'");
+        sb.AppendLine("$target = '" + target + "'");
         sb.AppendLine("$walker = New-Object System.Windows.Automation.TreeWalker([System.Windows.Automation.Condition]::TrueCondition)");
         sb.AppendLine("while ($sw.ElapsedMilliseconds -lt $timeoutMs) {");
         // Find RDRF window
@@ -205,13 +234,15 @@ return 'false'
 
     private static string SetTextByKeyboardScript(string automationId, string text, int timeoutMs)
     {
+        string aid = EscapePsString(automationId);
+        string val = EscapePsString(text);
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("Add-Type -AssemblyName UIAutomationClient");
         sb.AppendLine("Add-Type -AssemblyName System.Windows.Forms");
         sb.AppendLine("$sw = [Diagnostics.Stopwatch]::StartNew()");
         sb.AppendLine("$timeoutMs = " + timeoutMs);
-        sb.AppendLine("$aid = '" + automationId.Replace("'", "''") + "'");
-        sb.AppendLine("$val = '" + text.Replace("'", "''") + "'");
+        sb.AppendLine("$aid = '" + aid + "'");
+        sb.AppendLine("$val = '" + val + "'");
         sb.AppendLine("while ($sw.ElapsedMilliseconds -lt $timeoutMs) {");
         sb.AppendLine("  $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, $aid)");
         sb.AppendLine("  $el = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)");
@@ -244,10 +275,11 @@ return 'false'
     /// </summary>
     public static async Task<string?> GetTextOnce(string automationId, int timeoutMs = 5000)
     {
+        string aid = EscapePsString(automationId);
         string script = $@"
 Add-Type -AssemblyName UIAutomationClient
 $cond = New-Object System.Windows.Automation.PropertyCondition(
-    [System.Windows.Automation.AutomationElement]::AutomationIdProperty, '$automationId')
+    [System.Windows.Automation.AutomationElement]::AutomationIdProperty, '{aid}')
 $el = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst(
     [System.Windows.Automation.TreeScope]::Descendants, $cond)
 if ($el -ne $null) {{
@@ -271,13 +303,14 @@ return $null
     /// </summary>
     public static async Task<string?> GetText(string automationId, int timeoutMs = 15000)
     {
+        string aid = EscapePsString(automationId);
         string script = $@"
 Add-Type -AssemblyName UIAutomationClient
 $sw = [Diagnostics.Stopwatch]::StartNew()
 while ($sw.ElapsedMilliseconds -lt $timeoutMs) {{
     $root = [System.Windows.Automation.AutomationElement]::RootElement
     $cond = New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::AutomationIdProperty, '$automationId')
+        [System.Windows.Automation.AutomationElement]::AutomationIdProperty, '{aid}')
     $el = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
     if ($el -ne $null) {{
         $tp = $null
