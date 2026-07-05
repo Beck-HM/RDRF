@@ -2,6 +2,10 @@ using RDRF.Core.Index;
 
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// FSS6.2: ETN + Duip fountain code repair trailer (strip-only, encode via FssRepairService).
+/// </summary>
+
 public class Fss62Etn : IFssStrategy
 {
     public string Level => Constants.FssLevel62;
@@ -31,3 +35,4 @@ public class Fss62Etn : IFssStrategy
         List<int>? originalSizes = null)
         => new();
 }
+

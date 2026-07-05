@@ -17,6 +17,31 @@ using RDRF.Core.Dssa;
 
 namespace RDRF.Core;
 
+/// <summary>
+/// Core restore pipeline orchestrator. Reverses the backup pipeline:
+///
+/// Pipeline:
+///   Read encrypted fragments → AES-CTR decrypt → Strip FSS/ETN headers
+///   → ETN cross-validation (FSS6.x) → Fragment recovery (if missing)
+///   → FSS decode → LZ4 decompress → Merge into output file
+///
+/// Two restore paths:
+///   Standard: loads all fragments, decrypts, validates, recovers, decodes.
+///   Streaming: sequentially reads, decrypts, strips, decompresses fragments
+///     and concatenates them directly (fast path, no recovery, no FSS decode).
+///     Only works when:
+///       - All fragments are present (no missing fragments)
+///       - FSS strategy ≤ FSS2R (no cross-fragment dependency)
+///       - FSS6 is not active
+///
+/// Call chain:
+///   RDRFEngine.RestoreFileAsync
+///   → RestoreOrchestrator.RestoreFileAsync → RestoreCoreAsync
+///     → TryStreamingRestoreCoreAsync (fast path)
+///       or DownloadAndDecryptFragmentsAsync → RunEtnCrossValidateAsync
+///       → RecoveryExecutor.ExecuteRecoveryAsync → FSSEngine.Decode
+///       → Write output file
+/// </summary>
 public class RestoreOrchestrator : IDisposable
 {
     private readonly byte[] _rcCode;

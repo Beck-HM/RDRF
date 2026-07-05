@@ -7,6 +7,10 @@ using RDRF.Core.FSS;
 
 namespace RDRF.Mcp.Core.Tools;
 
+/// <summary>
+/// MCP tool: run ETN cross-validation.
+/// </summary>
+
 public class VerifyTool : IMcpTool
 {
     public string Name => "verify";
@@ -67,3 +71,4 @@ public class VerifyTool : IMcpTool
         return Task.FromResult(JsonSerializer.Serialize(response, new JsonSerializerOptions { WriteIndented = true }));
     }
 }
+

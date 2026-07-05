@@ -7,6 +7,10 @@ using System.Text;
 
 namespace RDRF.Cli.Commands;
 
+/// <summary>
+/// Show version history with interactive diff view. CLI: rdrf check.
+/// </summary>
+
 public class CheckCommand : Command
 {
     public CheckCommand() : base("check", "Show version history with file tree and diffs")
@@ -200,3 +204,10 @@ public class CheckCommand : Command
         }
     }
 }
+
+
+
+
+
+
+

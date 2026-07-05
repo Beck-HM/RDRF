@@ -4,6 +4,10 @@ using RDRF.Mcp.Core.Tools;
 
 Console.Error.WriteLine("[rdrf-mcp-core] starting...");
 
+string? apiKey = Environment.GetEnvironmentVariable("RDRF_MCP_KEY");
+if (!string.IsNullOrEmpty(apiKey))
+    Console.Error.WriteLine($"[rdrf-mcp-core] api-key auth enabled");
+
 var server = new McpServer();
 server.RegisterTool(new BackupTool());
 server.RegisterTool(new RestoreTool());
@@ -62,6 +66,18 @@ await foreach (var json in ReadStdInAsync())
             }
             else if (method == "tools/call")
             {
+                // API key auth check
+                if (!string.IsNullOrEmpty(apiKey))
+                {
+                    string? requestKey = root.TryGetProperty("params", out var p) && p.TryGetProperty("apiKey", out var ak) ? ak.GetString() : null;
+                    if (requestKey != apiKey)
+                    {
+                        if (id != null)
+                            WriteJson(new { jsonrpc = "2.0", id = id, error = new { code = -32001, message = "Unauthorized: invalid or missing apiKey" } });
+                        continue;
+                    }
+                }
+
                 var name = root.GetProperty("params").GetProperty("name").GetString() ?? "";
                 var argsEl = root.GetProperty("params").GetProperty("arguments");
                 var argsDict = JsonSerializer.Deserialize<Dictionary<string, object?>>(argsEl.GetRawText())

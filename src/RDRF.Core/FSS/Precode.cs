@@ -5,6 +5,10 @@ using System.Runtime.Intrinsics.X86;
 
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// Precoding for LT fountain codes: interleaved XOR chain + global XOR with SIMD optimization.
+/// </summary>
+
 public static class Precode
 {
     public static byte[][] Encode(byte[][] source, int blockSize)
@@ -350,3 +354,4 @@ public static class Precode
         return derived;
     }
 }
+

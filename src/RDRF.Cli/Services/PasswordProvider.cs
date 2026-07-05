@@ -4,6 +4,10 @@ using System.Text;
 
 namespace RDRF.Cli.Services;
 
+/// <summary>
+/// Interactive secure password input via Spectre.Console.
+/// </summary>
+
 public static class PasswordProvider
 {
     public static byte[] ReadInteractive(string prompt = "Password:")
@@ -20,3 +24,10 @@ public static class PasswordProvider
         return [];
     }
 }
+
+
+
+
+
+
+

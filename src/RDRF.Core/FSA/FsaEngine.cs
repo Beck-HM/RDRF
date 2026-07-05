@@ -2,6 +2,10 @@ using System.Text.Json.Serialization;
 
 namespace RDRF.Core.FSA;
 
+/// <summary>
+/// FSA (Fragmentation Strategy Adapter) plan computation.\n/// Maps FSS strategies to encode/decode pipelines and estimates overhead.
+/// </summary>
+
 public class FsaEngine
 {
     private const string FamilyNeighbor = "neighbor_backup";
@@ -186,6 +190,10 @@ public class FsaEngine
     }
 }
 
+/// <summary>
+/// FSA (Fragmentation Strategy Adapter) plan computation.\n/// Maps FSS strategies to encode/decode pipelines and estimates overhead.
+/// </summary>
+
 public class FsaPlan
 {
     [JsonPropertyName("effective_primary")]
@@ -210,6 +218,10 @@ public class FsaPlan
     public bool IsSingleStrategy { get; set; }
 }
 
+/// <summary>
+/// FSA (Fragmentation Strategy Adapter) plan computation.\n/// Maps FSS strategies to encode/decode pipelines and estimates overhead.
+/// </summary>
+
 public class FsaStep
 {
     [JsonPropertyName("step")]
@@ -221,3 +233,4 @@ public class FsaStep
     [JsonPropertyName("family")]
     public string Family { get; set; } = string.Empty;
 }
+

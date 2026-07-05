@@ -7,6 +7,10 @@ using System.Text;
 
 namespace RDRF.Cli.Commands;
 
+/// <summary>
+/// Show diff between two versions. CLI: rdrf diff.
+/// </summary>
+
 public class DiffCommand : Command
 {
     public DiffCommand() : base("diff", "Show diff between two versions of a backup")
@@ -161,3 +165,10 @@ public class DiffCommand : Command
         }
     }
 }
+
+
+
+
+
+
+

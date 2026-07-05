@@ -2,6 +2,10 @@ using RDRF.Core.Index;
 
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// FSS3: 2D Reed-Solomon row+column encoding with sub-block parity.
+/// </summary>
+
 public class Fss3ReedSolomon : IFssStrategy
 {
     private const int SubBlockSize = 16;
@@ -310,3 +314,4 @@ public class Fss3ReedSolomon : IFssStrategy
         return true;
     }
 }
+

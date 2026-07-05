@@ -3,6 +3,10 @@ using System.Text;
 
 namespace RDRF.Core.FragmentEngine;
 
+/// <summary>
+/// Static Frags utility: split/merge files, fragment naming, fingerprint computation.
+/// </summary>
+
 public static class Frags
 {
     private const int DefaultFragmentSize = 1024 * 1024;
@@ -99,3 +103,4 @@ public static class Frags
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }
+

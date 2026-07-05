@@ -3,6 +3,10 @@ using RDRF.Core.FSS;
 
 namespace RDRF.Core.Dssa;
 
+/// <summary>
+/// CBOR-serialized RC (Recovery Container) with ETN block maps and fountain repair data.
+/// </summary>
+
 public class RcFile
 {
     public int Version { get; set; } = 1;
@@ -168,3 +172,4 @@ public class RcFile
         return list;
     }
 }
+

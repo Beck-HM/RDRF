@@ -16,6 +16,23 @@ using RDRF.Core.Dssa;
 
 namespace RDRF.Core;
 
+/// <summary>
+/// Core backup pipeline orchestrator. Manages the full lifecycle of a backup:
+///
+/// Pipeline:
+///   Stream read → Incremental SHA256 hash → Fragment (1 MB blocks)
+///   → LZ4 compress per block → FSS encode (strategy-dependent)
+///   → ETN cross-validation inject (FSS6.x) → Fountain code repair (FSS6.1/6.2)
+///   → Encrypt with embedded index header → Batch parallel write to storage
+///   → Write standalone Index file → Write RC file → Save metadata
+///
+/// Two constructors:
+///   (aesKey, rcCode, ...) — callers that already have a derived AES key.
+///   (rcCode, storage, salt, ...) — derives AES key via PBKDF2 with salt.
+///
+/// All public methods delegate to BackupCoreAsync. The sync wrappers are
+/// [Obsolete] and block on the async path via GetAwaiter().GetResult().
+/// </summary>
 public class BackupOrchestrator : IDisposable
 {
     private readonly byte[] _rcCode;
@@ -25,6 +42,11 @@ public class BackupOrchestrator : IDisposable
     private readonly FSSEngine _fss;
     private readonly FsaEngine _fsa;
     private readonly MetadataManager _metadata;
+
+    /// <summary>
+    /// Initializes with a pre-derived AES key. Used by callers that have
+    /// already performed key derivation (e.g. RDRFEngine with DeriveKeyLegacy).
+    /// </summary>
     public BackupOrchestrator(
         byte[] aesKey,
         byte[] rcCode,
@@ -41,6 +63,10 @@ public class BackupOrchestrator : IDisposable
         _metadata = metadata ?? new MetadataManager(null, skipLoad: true);
     }
 
+    /// <summary>
+    /// Initializes with a raw rcCode and salt. The AES key is derived via
+    /// EncryptionLayer.DeriveKey(rcCode, salt) using PBKDF2.
+    /// </summary>
     public BackupOrchestrator(
         byte[] rcCode,
         DssaAdapter storage,
@@ -59,6 +85,9 @@ public class BackupOrchestrator : IDisposable
         _metadata = metadata ?? new MetadataManager(null, skipLoad: true);
     }
 
+    /// <summary>
+    /// Synchronous backup. Blocks on the async pipeline.
+    /// </summary>
     [Obsolete("Use BackupFileAsync instead")]
     public string BackupFile(
         string filePath,
@@ -75,6 +104,9 @@ public class BackupOrchestrator : IDisposable
             .GetAwaiter().GetResult();
     }
 
+    /// <summary>
+    /// Synchronous backup with FileInfo. Blocks on the async pipeline.
+    /// </summary>
     [Obsolete("Use BackupFileAsync instead")]
     public string BackupFile(
         FileInfo filePath,
@@ -85,6 +117,9 @@ public class BackupOrchestrator : IDisposable
         IProgress<RdrfProgressReport>? progress = null)
         => BackupFile(filePath.FullName, fssStrategy, auxiliary, fragmentSize: fragmentSize, customName: customName, progress: progress);
 
+    /// <summary>
+    /// Asynchronous backup entry point.
+    /// </summary>
     public Task<string> BackupFileAsync(
         string filePath,
         string fssStrategy = "FSS1",
@@ -96,6 +131,9 @@ public class BackupOrchestrator : IDisposable
         CancellationToken cancellationToken = default)
         => BackupCoreAsync(filePath, fssStrategy, auxiliaryStrategies, originalFilename, fragmentSize, customName, progress, cancellationToken);
 
+    /// <summary>
+    /// Asynchronous backup with FileInfo.
+    /// </summary>
     public Task<string> BackupFileAsync(
         FileInfo filePath,
         string fssStrategy = "FSS1",
@@ -106,6 +144,52 @@ public class BackupOrchestrator : IDisposable
         CancellationToken cancellationToken = default)
         => BackupFileAsync(filePath.FullName, fssStrategy, auxiliary, fragmentSize: fragmentSize, customName: customName, progress: progress, cancellationToken: cancellationToken);
 
+    /// <summary>
+    /// Core backup pipeline (private, async).
+    ///
+    /// Pipeline phases:
+    ///   Phase 1 — Stream & fragment:
+    ///     Open a FileStream, read sequentially, fill 1 MB fragment buffers,
+    ///     compute SHA256 incrementally, LZ4-compress each fragment, pad to
+    ///     fragment size boundary. Accumulates rawFragments (uncompressed for
+    ///     dedup hashing) and originalFragments (LZ4 + padded for encoding).
+    ///
+    ///   Phase 2 — FSS encode:
+    ///     Execute the FSA plan's EncodeSteps. Each step applies an FSS strategy
+    ///     (encode or etn_inject) to the fragment list. The number of fragments
+    ///     may grow (parity fragments) or stay the same.
+    ///
+    ///   Phase 3 — ETN + fountain repair:
+    ///     If FSS6.x is active, inject ETN cross-validation block maps into
+    ///     Index, fragments, and RC. For FSS6.1/6.2, generate fountain code
+    ///     repair data (LT or Duip) and append repair trailers to fragments.
+    ///
+    ///   Phase 4 — Encrypt & write:
+    ///     Each fragment is prepended with an encrypted header containing an
+    ///     embedded (stripped) Index. Fragments are encrypted with AES-CTR
+    ///     via FragmentFileHeader.EncryptWithEmbeddedIndex. Written in batches
+    ///     of 8 with Parallel.ForEachAsync and retry logic.
+    ///
+    ///   Phase 5 — Index + RC write:
+    ///     The standalone Index file (with full ETN block maps) is AES-CTR
+    ///     encrypted and written. If salt-based key derivation is active, the
+    ///     salt is prepended. The RC file (recovery container) is encrypted
+    ///     and written separately.
+    ///
+    /// Call chain:
+    ///   RDRFEngine.BackupFileAsync
+    ///   → BackupOrchestrator.BackupCoreAsync
+    ///     → FsaEngine.Compute (plan)
+    ///     → FileStream + IncrementalHash (Phase 1)
+    ///     → FSSEngine.Encode (Phase 2)
+    ///     → Fss6Etn.InjectCrossValidation (Phase 3)
+    ///     → FssRepairService.Generate61/62 (Phase 3)
+    ///     → FragmentFileHeader.EncryptWithEmbeddedIndex (Phase 4)
+    ///     → DssaAdapter.WriteFragmentAsync (Phase 4)
+    ///     → EncryptionLayer.EncryptIndexWithKey/SaltPrefix (Phase 5)
+    ///     → DssaAdapter.WriteIndexAsync / WriteRcAsync (Phase 5)
+    ///     → MetadataManager.SaveBackup
+    /// </summary>
     private async Task<string> BackupCoreAsync(
         string filePath,
         string fssStrategy,
@@ -121,6 +205,10 @@ public class BackupOrchestrator : IDisposable
         string filename = originalFilename ?? fileInfo.Name;
         long fileSize = fileInfo.Length;
 
+        const long maxFileSize = 4L * 1024 * 1024 * 1024; // 4 GB
+        if (fileSize > maxFileSize)
+            throw new InvalidOperationException($"File too large ({fileSize:N0} bytes). Maximum supported size is {maxFileSize:N0} bytes.");
+
         Debug.WriteLine($"Backing up: {filename} ({fileSize:N0} bytes)");
 
         int fragSize = fragmentSize > 0 ? fragmentSize : 1024 * 1024;
@@ -131,46 +219,62 @@ public class BackupOrchestrator : IDisposable
         // Multi-strategy (auxiliary) temporarily disabled; single-strategy only.
         var plan = _fsa.Compute(fssStrategy, null);
 
-        // Phase 1: Read file → split raw → hash(original data) → LZ4 per block → pad
-        byte[] fileBytes = await File.ReadAllBytesAsync(filePath, cancellationToken).ConfigureAwait(false);
-        using (var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
-        {
-            hasher.AppendData(fileBytes);
-            fileFingerprint = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
-            long totalRead = 0;
-            long nextReport = 0;
-            foreach (var chunk in fileBytes.Chunk(65536))
-            {
-                totalRead += chunk.Length;
-                if (totalRead >= nextReport)
-                {
-                    progress?.Report(new RdrfProgressReport { Stage = "Read", CurrentBytes = totalRead, TotalBytes = fileSize });
-                    nextReport = totalRead + Math.Max(65536, fileSize / 100);
-                }
-            }
-        }
-        originalHash = fileFingerprint;
-
+        // Phase 1: Stream file → hash → split raw → LZ4 per block → pad
+        using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
+            FileShare.Read, 65536, FileOptions.SequentialScan);
+        using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var rawFragments = new List<byte[]>();
-        var originalFragments = new List<byte[]>();    // LZ4 + padded
-        var originalFragmentSizes = new List<int>();    // stored size before padding
+        var originalFragments = new List<byte[]>();
+        var originalFragmentSizes = new List<int>();
+        long totalRead = 0;
+        long nextReport = 0;
+        var fragBuf = new byte[fragSize];
+        int fragOff = 0;
 
-        for (int off = 0; off < fileBytes.Length; off += fragSize)
+        int bytesRead;
+        while ((bytesRead = await fs.ReadAsync(fragBuf.AsMemory(fragOff, fragSize - fragOff), cancellationToken).ConfigureAwait(false)) > 0)
         {
-            int len = Math.Min(fragSize, fileBytes.Length - off);
-            byte[] raw = new byte[len];
-            Buffer.BlockCopy(fileBytes, off, raw, 0, len);
-            rawFragments.Add(raw);
+            hasher.AppendData(fragBuf.AsSpan(fragOff, bytesRead));
+            fragOff += bytesRead;
+            totalRead += bytesRead;
 
+            if (totalRead >= nextReport)
+            {
+                progress?.Report(new RdrfProgressReport { Stage = "Read", CurrentBytes = totalRead, TotalBytes = fileSize });
+                nextReport = totalRead + Math.Max(65536, fileSize / 100);
+            }
+
+            if (fragOff < fragSize)
+                continue;
+
+            byte[] raw = new byte[fragSize];
+            Buffer.BlockCopy(fragBuf, 0, raw, 0, fragSize);
+            rawFragments.Add(raw);
             byte[] compressed = Compressor.AlwaysCompress(raw);
-            // Only keep LZ4 if it shrinks; otherwise store raw
             byte[] stored = compressed.Length < raw.Length ? compressed : raw;
             originalFragmentSizes.Add(stored.Length);
+            byte[] padded = new byte[fragSize];
+            Buffer.BlockCopy(stored, 0, padded, 0, Math.Min(stored.Length, fragSize));
+            originalFragments.Add(padded);
+            fragOff = 0;
+        }
 
+        // Last partial fragment
+        if (fragOff > 0)
+        {
+            byte[] raw = new byte[fragOff];
+            Buffer.BlockCopy(fragBuf, 0, raw, 0, fragOff);
+            rawFragments.Add(raw);
+            byte[] compressed = Compressor.AlwaysCompress(raw);
+            byte[] stored = compressed.Length < raw.Length ? compressed : raw;
+            originalFragmentSizes.Add(stored.Length);
             byte[] padded = new byte[fragSize];
             Buffer.BlockCopy(stored, 0, padded, 0, Math.Min(stored.Length, fragSize));
             originalFragments.Add(padded);
         }
+
+        fileFingerprint = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
+        originalHash = fileFingerprint;
 
         int originalFragmentCount = rawFragments.Count;
         var rawHashes = rawFragments.Select(f => XxHash128.Hash(f.AsSpan())).ToList();
@@ -377,6 +481,18 @@ public class BackupOrchestrator : IDisposable
         return fileFingerprint;
     }
 
+    /// <summary>
+    /// Builds a complete index for changed fragments during an incremental
+    /// (versioned) backup. Only fragments that differ from the previous version
+    /// are written; unchanged fragments reference the previous version's data
+    /// via SourceVersion.
+    ///
+    /// Pipeline (subset of BackupCoreAsync):
+    ///   FSA plan → FSS encode → ETN inject → FSS6.1 repair → embed in headers
+    ///   → Encrypt & write changed fragments → Write Index → Write RC
+    ///
+    /// Called from VersionedBackup.BackupAsync.
+    /// </summary>
     public async Task<RdrfIndex> BuildChangedFragmentsIndex(
         List<byte[]> allRawFragments,
         List<byte[]> changedRawFragments,
@@ -562,6 +678,10 @@ public class BackupOrchestrator : IDisposable
         return index;
     }
 
+    /// <summary>
+    /// Zeroes all sensitive key material from memory and disposes
+    /// the metadata manager. Suppresses finalization.
+    /// </summary>
     public void Dispose()
     {
         if (_rcCode != null && _rcCode.Length > 0)

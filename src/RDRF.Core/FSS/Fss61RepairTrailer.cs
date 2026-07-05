@@ -1,5 +1,9 @@
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// Binary trailer build/parse for FSS6.1 LT repair data appended to fragments.
+/// </summary>
+
 public static class Fss61RepairTrailer
 {
     public static byte[] Build(byte[] fragmentData, string aFingerprint, string cFingerprint,
@@ -105,3 +109,4 @@ public static class Fss61RepairTrailer
     private static string BytesToHex(byte[] bytes)
         => Convert.ToHexString(bytes).ToLowerInvariant();
 }
+

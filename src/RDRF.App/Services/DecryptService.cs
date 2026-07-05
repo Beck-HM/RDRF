@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Index;
@@ -7,6 +7,9 @@ using RDRF.Core.Dssa;
 
 namespace RDRF.App.Services;
 
+/// <summary>
+/// Restore service wrapper for index/fragment loading and recovery.
+/// </summary>
 public class BackupLoadResult
 {
     public string Fingerprint { get; init; } = string.Empty;
@@ -196,5 +199,7 @@ public class DecryptService : IDisposable
         GC.SuppressFinalize(this);
     }
 }
+
+
 
 

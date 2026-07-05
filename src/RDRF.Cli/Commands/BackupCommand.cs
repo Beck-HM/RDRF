@@ -9,6 +9,10 @@ using System.Text;
 
 namespace RDRF.Cli.Commands;
 
+/// <summary>
+/// Backup a file or directory with FSS strategy selection. CLI: rdrf backup.
+/// </summary>
+
 public class BackupCommand : Command
 {
     public BackupCommand() : base("backup", "Backup a file or directory to RDRF storage")
@@ -183,3 +187,10 @@ public class BackupCommand : Command
         });
     }
 }
+
+
+
+
+
+
+

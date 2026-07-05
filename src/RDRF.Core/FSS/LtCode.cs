@@ -8,6 +8,10 @@ using System.Security.Cryptography;
 
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// LT fountain codes: Robust Soliton Distribution, encoding, and Belief-Propagation decoding.
+/// </summary>
+
 public static class LtCode
 {
     public const int DefaultBlockSize = 256;
@@ -363,3 +367,4 @@ public static class LtCode
         return cdf.Length - 1;
     }
 }
+

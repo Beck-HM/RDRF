@@ -1,11 +1,19 @@
 namespace RDRF.Core.Versioning;
 
+/// <summary>
+/// DTOs for FileEntry and VersionRecord in the versioning chain.
+/// </summary>
+
 public class FileEntry
 {
     public string Path { get; set; } = string.Empty;
     public string ChangeType { get; set; } = "modified";
     public string Diff { get; set; } = string.Empty;
 }
+
+/// <summary>
+/// DTOs for FileEntry and VersionRecord in the versioning chain.
+/// </summary>
 
 public class VersionRecord
 {
@@ -17,3 +25,4 @@ public class VersionRecord
     public byte[]? Salt { get; set; }
     public List<FileEntry>? Files { get; set; }
 }
+

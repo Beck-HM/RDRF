@@ -2,6 +2,10 @@ using System.Text.Json;
 
 namespace RDRF.Mcp.Wpf.Tools;
 
+/// <summary>
+/// MCP tool: read backup metadata from WPF UI.
+/// </summary>
+
 public class InfoTool : IMcpTool
 {
     private readonly Func<string, bool> _sendIpc;
@@ -66,3 +70,4 @@ public class InfoTool : IMcpTool
         }, new JsonSerializerOptions { WriteIndented = true });
     }
 }
+

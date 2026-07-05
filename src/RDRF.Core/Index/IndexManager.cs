@@ -6,6 +6,10 @@ using RDRF.Core.Versioning;
 
 namespace RDRF.Core.Index;
 
+/// <summary>
+/// CBOR serialization/deserialization for RdrfIndex.\n/// Also provides BuildIndex factory. Format is CBOR map with snake_case keys.
+/// </summary>
+
 public static class IndexManager
 {
     public static RdrfIndex BuildIndex(
@@ -611,6 +615,10 @@ public static class IndexManager
     }
 }
 
+/// <summary>
+/// CBOR serialization/deserialization for RdrfIndex.\n/// Also provides BuildIndex factory. Format is CBOR map with snake_case keys.
+/// </summary>
+
 public class RdrfIndex
 {
     public string FileFingerprint { get; set; } = string.Empty;
@@ -645,6 +653,10 @@ public class RdrfIndex
     public FSS.Fss62RepairData? Fss62RepairC { get; set; }
 }
 
+/// <summary>
+/// CBOR serialization/deserialization for RdrfIndex.\n/// Also provides BuildIndex factory. Format is CBOR map with snake_case keys.
+/// </summary>
+
 public class FragmentInfo
 {
     public int Index { get; set; }
@@ -655,9 +667,14 @@ public class FragmentInfo
     public int? SourceIndex { get; set; }
 }
 
+/// <summary>
+/// CBOR serialization/deserialization for RdrfIndex.\n/// Also provides BuildIndex factory. Format is CBOR map with snake_case keys.
+/// </summary>
+
 public class DedupEntry
 {
     public string SourceFingerprint { get; set; } = string.Empty;
     public int SourceIndex { get; set; }
     public int RefCount { get; set; }
 }
+

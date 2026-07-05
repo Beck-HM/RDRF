@@ -2,6 +2,10 @@ using RDRF.Core.Encryption;
 
 namespace RDRF.Core.Dssa;
 
+/// <summary>
+/// Fragment file header (magic + metadata) and EncryptWithEmbeddedIndex logic.
+/// </summary>
+
 public static class FragmentFileHeader
 {
     public const int HeaderSize = 6;
@@ -80,3 +84,4 @@ public static class FragmentFileHeader
         return (null, decrypted, salt);
     }
 }
+

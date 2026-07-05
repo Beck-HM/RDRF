@@ -2,6 +2,10 @@ using System.Text.Json;
 
 namespace RDRF.Mcp.Wpf.Tools;
 
+/// <summary>
+/// MCP tool: launch the RDRF desktop application.
+/// </summary>
+
 public class LaunchTool : IMcpTool
 {
     private readonly WpfAppController _controller;
@@ -19,3 +23,4 @@ public class LaunchTool : IMcpTool
         return Task.FromResult(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
     }
 }
+

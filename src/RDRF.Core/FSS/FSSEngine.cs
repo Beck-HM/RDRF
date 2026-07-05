@@ -1,5 +1,9 @@
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// FSS strategy registry. Maps strategy name strings to IFssStrategy instances.
+/// </summary>
+
 public class FSSEngine
 {
     private readonly Dictionary<string, IFssStrategy> _strategyMap = new();
@@ -43,3 +47,4 @@ public class FSSEngine
         List<int>? originalSizes = null)
         => GetStrategy(level).Strip(encodedFragments, originalFragmentCount, originalSizes);
 }
+

@@ -4,6 +4,10 @@ using System.Buffers;
 
 namespace RDRF.Core.Compression;
 
+/// <summary>
+/// LZ4 compression/decompression with magic-byte detection.\n/// AlwaysCompress skips compression when overhead > 0.
+/// </summary>
+
 public static class Compressor
 {
     private static readonly HashSet<string> CompressedMagic = new(StringComparer.OrdinalIgnoreCase)
@@ -53,3 +57,4 @@ public static class Compressor
         return false;
     }
 }
+

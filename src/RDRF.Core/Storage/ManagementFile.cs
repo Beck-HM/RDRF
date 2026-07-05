@@ -2,6 +2,10 @@ using Microsoft.Data.Sqlite;
 
 namespace RDRF.Core.Dssa;
 
+/// <summary>
+/// SQLite management database for tracking backends, projects, versions, and fragment locations.
+/// </summary>
+
 public class ManagementFile
 {
     private readonly string _dbPath;
@@ -336,6 +340,10 @@ public class ManagementFile
     }
 }
 
+/// <summary>
+/// SQLite management database for tracking backends, projects, versions, and fragment locations.
+/// </summary>
+
 public class FragmentLocation
 {
     public int FragmentIndex { get; set; }
@@ -347,9 +355,14 @@ public class FragmentLocation
     public DateTimeOffset UploadedAt { get; set; }
 }
 
+/// <summary>
+/// SQLite management database for tracking backends, projects, versions, and fragment locations.
+/// </summary>
+
 public class RemoteConfig
 {
     public string Name { get; set; } = "";
     public string Type { get; set; } = "";
     public Dictionary<string, string> Config { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
+

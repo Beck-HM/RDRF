@@ -1,5 +1,9 @@
 namespace RDRF.Mcp.Wpf;
 
+/// <summary>
+/// MCP tool registry and IMcpTool interface.
+/// </summary>
+
 public class McpServer
 {
     private readonly Dictionary<string, IMcpTool> _tools = new();
@@ -29,6 +33,10 @@ public class McpServer
     }
 }
 
+/// <summary>
+/// MCP tool registry and IMcpTool interface.
+/// </summary>
+
 public interface IMcpTool
 {
     string Name { get; }
@@ -37,3 +45,4 @@ public interface IMcpTool
     string[] Required { get; }
     Task<string> ExecuteAsync(Dictionary<string, object?> args);
 }
+

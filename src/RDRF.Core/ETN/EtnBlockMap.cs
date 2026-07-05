@@ -2,6 +2,10 @@ using System.Security.Cryptography;
 
 namespace RDRF.Core.ETN;
 
+/// <summary>
+/// ETN block map building (2B+8B tiers), truncation, diff comparison, encoding.
+/// </summary>
+
 public static class EtnBlockMap
 {
     public const int BlockSize = 256;
@@ -214,3 +218,4 @@ public static class EtnBlockMap
 
     private static char HexChar(int val) => (char)(val < 10 ? '0' + val : 'a' + val - 10);
 }
+

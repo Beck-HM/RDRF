@@ -2,6 +2,10 @@ using System.Security.Cryptography;
 
 namespace RDRF.Core.Dssa;
 
+/// <summary>
+/// Multi-backend fragment orchestration: write, read, delete, ping across registered backends.
+/// </summary>
+
 public class StorageOrchestrator
 {
     private readonly List<string> _backendOrder = new();
@@ -228,3 +232,4 @@ public class StorageOrchestrator
     private static string BuildRcPath(string fingerprint, int version)
         => $"{fingerprint}_v{version}.rdrc";
 }
+

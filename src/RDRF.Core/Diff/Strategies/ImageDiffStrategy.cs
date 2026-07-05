@@ -3,6 +3,10 @@ using System.Text;
 
 namespace RDRF.Core.Diff.Strategies;
 
+/// <summary>
+/// Image metadata diff via System.Drawing (dimensions, format, DPI).
+/// </summary>
+
 public class ImageDiffStrategy : IDiffStrategy
 {
     public string Name => "image";
@@ -142,3 +146,4 @@ public class ImageDiffStrategy : IDiffStrategy
         return $"{bytes}B";
     }
 }
+

@@ -3,6 +3,10 @@ using System.Threading.Tasks;
 
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// Vandermonde-based Reed-Solomon erasure coding over GF(256). Encode/decode/matrix operations.
+/// </summary>
+
 public class ReedSolomon
 {
     private readonly int _dataShards;
@@ -269,3 +273,4 @@ public class ReedSolomon
         return ExpTable[LogTable[a] - LogTable[b] + 255];
     }
 }
+

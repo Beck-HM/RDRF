@@ -4,6 +4,9 @@ using RDRF.Core.Dssa;
 
 namespace RDRF.App.Services;
 
+/// <summary>
+/// Backup service wrapper for the WPF application layer.
+/// </summary>
 public class EncryptService : IDisposable
 {
     private readonly byte[] _rcCode;
@@ -44,3 +47,5 @@ public class EncryptService : IDisposable
         }
     }
 }
+
+

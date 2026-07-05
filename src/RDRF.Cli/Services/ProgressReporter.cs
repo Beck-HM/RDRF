@@ -3,6 +3,10 @@ using Spectre.Console;
 
 namespace RDRF.Cli.Services;
 
+/// <summary>
+/// Spectre.Console progress wrapper for backup/restore/push/pull.
+/// </summary>
+
 public static class ProgressReporter
 {
     public static async Task Run(string title, Func<IProgress<RdrfProgressReport>, Task> action)
@@ -29,3 +33,10 @@ public static class ProgressReporter
             });
     }
 }
+
+
+
+
+
+
+

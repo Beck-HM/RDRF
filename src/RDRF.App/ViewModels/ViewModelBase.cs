@@ -3,6 +3,9 @@ using System.Runtime.CompilerServices;
 
 namespace RDRF.App.ViewModels;
 
+/// <summary>
+/// MVVM base class with INotifyPropertyChanged and SetProperty helper.
+/// </summary>
 public abstract class ViewModelBase : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -22,3 +25,5 @@ public abstract class ViewModelBase : INotifyPropertyChanged
         return true;
     }
 }
+
+

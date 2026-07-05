@@ -2,6 +2,10 @@ using RDRF.Core.Index;
 
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// FSS2R: Reed-Solomon (K+1) parity shard per fragment group. Single-shard repair.
+/// </summary>
+
 public class Fss2RRepair : IFssStrategy
 {
     public string Level => Constants.FssLevel2R;
@@ -93,3 +97,4 @@ public class Fss2RRepair : IFssStrategy
         return encodedFragment;
     }
 }
+

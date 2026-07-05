@@ -31,6 +31,10 @@ public readonly struct EtnTrailerData
     }
 }
 
+/// <summary>
+/// ETN trailer binary format: build/parse 2B+8B hash pairs for Index + RC cross-ref.
+/// </summary>
+
 public static class EtnTrailer
 {
     public const int Trailer2BHashLen = 2;
@@ -107,3 +111,4 @@ public static class EtnTrailer
         }
     }
 }
+

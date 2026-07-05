@@ -7,6 +7,10 @@ using RDRF.Core.Index;
 
 namespace RDRF.Core.Dssa;
 
+/// <summary>
+/// Push fragments/RC to remote backends via round-robin distribution through registered plugins.
+/// </summary>
+
 public static class PushService
 {
     public static async Task<int> Run(string indexPath, byte[] password,
@@ -248,5 +252,6 @@ public static class PushService
         return registered;
     }
 }
+
 
 

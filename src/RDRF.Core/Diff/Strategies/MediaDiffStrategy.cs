@@ -3,6 +3,10 @@ using TagLib;
 
 namespace RDRF.Core.Diff.Strategies;
 
+/// <summary>
+/// Media metadata diff via TagLib (title, artist, duration, codec).
+/// </summary>
+
 public class MediaDiffStrategy : IDiffStrategy
 {
     public string Name => "media";
@@ -223,3 +227,4 @@ internal class StreamFileAbstraction : TagLib.File.IFileAbstraction
         stream.Close();
     }
 }
+

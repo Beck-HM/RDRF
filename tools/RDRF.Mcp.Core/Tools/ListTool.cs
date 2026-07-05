@@ -5,6 +5,10 @@ using RDRF.Core.Index;
 
 namespace RDRF.Mcp.Core.Tools;
 
+/// <summary>
+/// MCP tool: list backups in a storage directory.
+/// </summary>
+
 public class ListTool : IMcpTool
 {
     public string Name => "list";
@@ -67,3 +71,4 @@ public class ListTool : IMcpTool
         return Task.FromResult(JsonSerializer.Serialize(list, new JsonSerializerOptions { WriteIndented = true }));
     }
 }
+

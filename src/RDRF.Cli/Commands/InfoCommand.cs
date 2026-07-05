@@ -9,6 +9,10 @@ using System.Text;
 
 namespace RDRF.Cli.Commands;
 
+/// <summary>
+/// Show backup metadata from an index file. CLI: rdrf info.
+/// </summary>
+
 public class InfoCommand : Command
 {
     public InfoCommand() : base("info", "Show backup metadata and settings from index file")
@@ -92,3 +96,10 @@ public class InfoCommand : Command
         });
     }
 }
+
+
+
+
+
+
+

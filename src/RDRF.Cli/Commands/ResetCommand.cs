@@ -1,8 +1,12 @@
-﻿using RDRF.Core.Dssa;
+using RDRF.Core.Dssa;
 using Spectre.Console;
 using System.CommandLine;
 
 namespace RDRF.Cli.Commands;
+
+/// <summary>
+/// Update a backend configuration. CLI: rdrf reset.
+/// </summary>
 
 public class ResetCommand : Command
 {
@@ -67,3 +71,10 @@ public class ResetCommand : Command
         });
     }
 }
+
+
+
+
+
+
+

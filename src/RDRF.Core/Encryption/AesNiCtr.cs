@@ -8,6 +8,10 @@ using SCryptography = System.Security.Cryptography;
 
 namespace RDRF.Core.Encryption;
 
+/// <summary>
+/// Hardware-accelerated AES-256-CTR via AES-NI 8-block interleaving.\n/// CTR used instead of GCM to preserve ETN block-level integrity.
+/// </summary>
+
 public static class AesNiCtr
 {
     public static bool IsSupported => Aes.IsSupported;
@@ -353,3 +357,5 @@ public static class AesNiCtr
         }
     }
 }
+
+

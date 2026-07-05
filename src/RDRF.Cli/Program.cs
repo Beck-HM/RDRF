@@ -1,7 +1,10 @@
-﻿using RDRF.Cli.Commands;
+using RDRF.Cli.Commands;
 using System.CommandLine;
 using System.Globalization;
 
+/// <summary>
+/// Entry point. Parses args with System.CommandLine and dispatches to subcommands.
+/// </summary>
 class Program
 {
     static async Task<int> Main(string[] args)
@@ -29,3 +32,9 @@ class Program
         return await parseResult.InvokeAsync();
     }
 }
+
+
+
+
+
+

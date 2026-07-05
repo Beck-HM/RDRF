@@ -2,6 +2,10 @@ using System.Text.Json;
 
 namespace RDRF.Mcp.Wpf.Tools;
 
+/// <summary>
+/// MCP tool: restore via WPF UI (UIA + IPC).
+/// </summary>
+
 public class RestoreTool : IMcpTool
 {
     private readonly Func<string, bool> _sendIpc;
@@ -62,3 +66,4 @@ public class RestoreTool : IMcpTool
         return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
     }
 }
+

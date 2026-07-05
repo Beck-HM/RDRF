@@ -8,6 +8,10 @@ using System.Runtime.Intrinsics.X86;
 
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// Duip fountain codes: entropy-based encoding, 3-phase BP+global+Gaussian elimination decoding.
+/// </summary>
+
 public static class DuipCode
 {
     private const int MaxDegree = 8;
@@ -570,3 +574,4 @@ public static class DuipCode
         return (int)((XorShift64(ref state) >> 32) & 0x7FFFFFFF);
     }
 }
+

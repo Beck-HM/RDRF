@@ -1,5 +1,9 @@
 namespace RDRF.Core.Diff;
 
+/// <summary>
+/// Diff strategy selection and computation. Chooses strategy based on file type.
+/// </summary>
+
 public class DiffEngine
 {
     private readonly List<IDiffStrategy> _strategies;
@@ -58,3 +62,4 @@ public class DiffEngine
         return result;
     }
 }
+

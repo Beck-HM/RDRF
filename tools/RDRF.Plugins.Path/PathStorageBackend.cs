@@ -51,9 +51,12 @@ public class PathStorageBackend : IStorageBackend
 
     private string GetFullPath(string relativePath)
     {
-        if (relativePath.Contains(".."))
+        string combined = System.IO.Path.Combine(_basePath, relativePath);
+        string fullPath = System.IO.Path.GetFullPath(combined);
+        string baseFull = System.IO.Path.GetFullPath(_basePath);
+        if (!fullPath.StartsWith(baseFull, System.StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Path traversal detected in: " + relativePath);
-        return System.IO.Path.Combine(_basePath, relativePath);
+        return fullPath;
     }
 }
 

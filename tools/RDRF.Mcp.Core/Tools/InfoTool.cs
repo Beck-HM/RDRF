@@ -4,6 +4,10 @@ using RDRF.Core.Index;
 
 namespace RDRF.Mcp.Core.Tools;
 
+/// <summary>
+/// MCP tool: show backup metadata.
+/// </summary>
+
 public class InfoTool : IMcpTool
 {
     public string Name => "info";
@@ -45,3 +49,4 @@ public class InfoTool : IMcpTool
         return Task.FromResult(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
     }
 }
+

@@ -6,6 +6,10 @@ using RDRF.Core.Index;
 
 namespace RDRF.Core.FSS;
 
+/// <summary>
+/// FSS6.1/6.2 three-node independent repair generation and trailer append runner.
+/// </summary>
+
 public static class FssRepairService
 {
     // ── FSS6.1 Generation (backup) ──
@@ -402,3 +406,4 @@ internal static class RepairRunner
         return true;
     }
 }
+

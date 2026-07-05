@@ -3,6 +3,10 @@ using System.Text.Json;
 
 namespace RDRF.Core.Metadata;
 
+/// <summary>
+/// Thread-safe JSON metadata store with backup record tracking and persistence.
+/// </summary>
+
 public class MetadataManager
 {
     private static readonly object _fileLock = new();
@@ -232,11 +236,19 @@ public class MetadataManager
 
 // ── Data models ──
 
+/// <summary>
+/// Thread-safe JSON metadata store with backup record tracking and persistence.
+/// </summary>
+
 public class MetadataStore
 {
     public Dictionary<string, BackupRecord> Backups { get; set; } = new();
     public Dictionary<string, List<FragmentRecord>> Fragments { get; set; } = new();
 }
+
+/// <summary>
+/// Thread-safe JSON metadata store with backup record tracking and persistence.
+/// </summary>
 
 public class BackupRecord
 {
@@ -250,6 +262,10 @@ public class BackupRecord
     public string CreatedAt { get; set; } = "";
 }
 
+/// <summary>
+/// Thread-safe JSON metadata store with backup record tracking and persistence.
+/// </summary>
+
 public class FragmentRecord
 {
     public int FragmentIndex { get; set; }
@@ -257,3 +273,4 @@ public class FragmentRecord
     public string Status { get; set; } = "ok";
     public string CheckedAt { get; set; } = "";
 }
+

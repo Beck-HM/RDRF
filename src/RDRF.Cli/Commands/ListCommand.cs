@@ -1,8 +1,12 @@
-﻿using RDRF.Core.Dssa;
+using RDRF.Core.Dssa;
 using Spectre.Console;
 using System.CommandLine;
 
 namespace RDRF.Cli.Commands;
+
+/// <summary>
+/// List configured backends or registered projects. CLI: rdrf list.
+/// </summary>
 
 public class ListCommand : Command
 {
@@ -50,3 +54,10 @@ public class ListCommand : Command
         });
     }
 }
+
+
+
+
+
+
+
