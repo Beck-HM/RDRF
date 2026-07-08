@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using RDRF.Core.Diff;
 using RDRF.Core.Dssa;
 using Xunit;
@@ -139,7 +139,7 @@ public class VersioningTests
                 testFile, new LocalDssaAdapter(storageDir), password, "V1", "FSS1",
                 fragmentSize: fragSize);
 
-            // V2: change last 512 bytes — DedupMap is still empty, all 8 fragments written
+            // V2: change last 512 bytes - DedupMap is still empty, all 8 fragments written
             byte[] v2Data = new byte[2048];
             v2Data[0] = 0xff; v2Data[1] = 0xd8; v2Data[2] = 0xff; v2Data[3] = 0xe0;
             Buffer.BlockCopy(v1Base, 4, v2Data, 4, 1532);
@@ -151,7 +151,7 @@ public class VersioningTests
                 fragmentSize: fragSize);
 
             // V3: keep first 1536 bytes (same as V2), replace last 512 AGAIN
-            // Now DedupMap has entries from V2 — unchanged fragments should reference V2
+            // Now DedupMap has entries from V2 - unchanged fragments should reference V2
             byte[] v3Data = new byte[2048];
             v3Data[0] = 0xff; v3Data[1] = 0xd8; v3Data[2] = 0xff; v3Data[3] = 0xe0;
             Buffer.BlockCopy(v2Data, 4, v3Data, 4, 1532);
@@ -346,7 +346,7 @@ public class VersioningTests
         }
     }
 
-    // ── Dedup gap coverage ──
+    // -- Dedup gap coverage --
 
     private static async Task<(string fp1, string fp2, string fp3)> CreateThreeVersions(
         string dir, string file, byte[] password, string strategy, int fragSize,
@@ -441,7 +441,7 @@ public class VersioningTests
             string fp1 = await Versioning.VersionedBackup.BackupAsync(
                 file, new LocalDssaAdapter(dir), password, "V1", "FSS1", fragmentSize: fragSize);
 
-            // V2: 1024 bytes, completely different content — populates DedupMap
+            // V2: 1024 bytes, completely different content - populates DedupMap
             byte[] v2 = new byte[1024];
             rng.NextBytes(v2);
             File.WriteAllBytes(file, v2);
@@ -503,7 +503,7 @@ public class VersioningTests
             string fp1 = await Versioning.VersionedBackup.BackupAsync(
                 file, new LocalDssaAdapter(dir), password, "V1", "FSS1", fragmentSize: fragSize);
 
-            // V2: shrinks to 1024 bytes (4 fragments) — different content
+            // V2: shrinks to 1024 bytes (4 fragments) - different content
             byte[] v2 = new byte[1024];
             v2[0] = 0xff; v2[1] = 0xd8; v2[2] = 0xff; v2[3] = 0xe0;
             rng.NextBytes(v2.AsSpan(4));
@@ -557,7 +557,7 @@ public class VersioningTests
             var (fp1, fp2, fp3) = await CreateThreeVersions(
                 dir, file, password, "FSS1", fragSize, 2048);
 
-            // V4: completely different content — no fragments match V3
+            // V4: completely different content - no fragments match V3
             var rng = new Random(99);
             byte[] v4 = new byte[4096];
             v4[0] = 0xff; v4[1] = 0xd8; v4[2] = 0xff; v4[3] = 0xe0;

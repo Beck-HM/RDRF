@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\RDRF.App\RDRF.App.csproj" />
     <ProjectReference Include="..\..\src\RDRF.Core\RDRF.Core.csproj" />
   </ItemGroup>
 

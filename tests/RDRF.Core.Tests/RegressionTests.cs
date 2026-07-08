@@ -491,7 +491,7 @@ public class RegressionTests
         Assert.Equal(key1, key2);
     }
 
-    // 鈹€鈹€ CBOR round-trip tests 鈹€鈹€
+    // --- CBOR round-trip tests ---
 
     [Fact]
     public void RcFile_ToCborBytes_FromCbor_RoundTrip()

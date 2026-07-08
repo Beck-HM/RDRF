@@ -11,7 +11,7 @@ public class DiffStrategyTests
 
     public DiffStrategyTests(ITestOutputHelper output) => _output = output;
 
-    // ── JsonDiffStrategy ──
+    // -- JsonDiffStrategy --
 
     [Fact]
     public void Json_MatchScore_JsonExtension()
@@ -130,7 +130,7 @@ public class DiffStrategyTests
         Assert.Contains("Number", result.HumanDiff);
     }
 
-    // ── IniDiffStrategy ──
+    // -- IniDiffStrategy --
 
     [Fact]
     public void Ini_MatchScore_IniExtension()

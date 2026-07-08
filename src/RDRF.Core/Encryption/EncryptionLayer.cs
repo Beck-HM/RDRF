@@ -13,7 +13,7 @@ namespace RDRF.Core.Encryption;
 /// Why CTR over GCM:
 ///   RDRF originally used AES-GCM for fragment and index encryption.
 ///   AES-GCM provides authenticated encryption with a 16-byte integrity
-///   tag — any corruption makes decryption fail before the caller can
+///   tag - any corruption makes decryption fail before the caller can
 ///   inspect the data.
 ///
 ///   This conflicts with the ETN (Erasure-Tolerant Node) architecture.
@@ -21,30 +21,30 @@ namespace RDRF.Core.Encryption;
 ///   to perform cross-validation: it compares block-level hashes across
 ///   the three node types and repairs corrupted blocks from the healthy
 ///   nodes. If encryption produces an authentication tag, the data is
-///   atomic — a single bit flip causes tag mismatch → decryption throws
-///   → ETN never gets to inspect the blocks → repair is impossible.
+///   atomic - a single bit flip causes tag mismatch -> decryption throws
+///   -> ETN never gets to inspect the blocks -> repair is impossible.
 ///
 ///   Switching to AES-CTR (no authentication tag) resolves this:
 ///   ETN reads the raw decrypted data (CTR decrypt is bit-independent),
 ///   checks block-level integrity via its own hash comparison across
-///   Index ↔ Fragment ↔ RC, and repairs corruption at the 64-byte block
+///   Index <-> Fragment <-> RC, and repairs corruption at the 64-byte block
 ///   level. ETN itself IS the integrity layer; GCM's auth tag was
 ///   redundant and counterproductive.
 ///
 ///   This decision is documented in commits:
-///     83119a3 — switch RC/index encryption from AES-GCM to AES-CTR
+///     83119a3 - switch RC/index encryption from AES-GCM to AES-CTR
 ///              for ETN compatibility
-///     3021822 — CTR-only + ETN sole integrity: remove GCM fragment path
+///     3021822 - CTR-only + ETN sole integrity: remove GCM fragment path
 ///              + HMAC
 ///
 /// Key derivation:
-///   Legacy: SHA256(rcCode) — single hash, no salt.
-///   New: PBKDF2(rcCode, salt, 600k iterations, SHA256) — per-backup salt
+///   Legacy: SHA256(rcCode) - single hash, no salt.
+///   New: PBKDF2(rcCode, salt, 600k iterations, SHA256) - per-backup salt
 ///   stored in the first 32 bytes of the index file.
 ///
 /// Format detection:
 ///   DecryptIndexWithAutoDetect tries the salt-prefixed format first
-///   (data.Length ≥ 45 bytes). If the decrypted CBOR is valid, it returns.
+///   (data.Length >= 45 bytes). If the decrypted CBOR is valid, it returns.
 ///   Otherwise it falls back to the legacy SHA256-keyed format.
 ///   "Valid" means the CBOR map contains at least one known key
 ///   (file_fingerprint, version, or original_name).
@@ -75,7 +75,11 @@ public static class EncryptionLayer
 
     /// <summary>Encrypts plaintext with AES-CTR using an auto-generated nonce (prepended).</summary>
     public static byte[] EncryptFragmentWithKey(byte[] plaintext, byte[] aesKey)
-        => EncryptFragmentCtrWithKey(plaintext, aesKey);
+    {
+        if (plaintext.Length > Constants.MaxSingleEncryptSize)
+            throw new ArgumentException($"Encrypt size {plaintext.Length} exceeds per-call limit of {Constants.MaxSingleEncryptSize}");
+        return EncryptFragmentCtrWithKey(plaintext, aesKey);
+    }
 
     /// <summary>Encrypts with a caller-provided nonce. Output = nonce || ciphertext.</summary>
     public static byte[] EncryptFragmentWithKey(byte[] plaintext, byte[] aesKey, byte[] nonce)
@@ -228,7 +232,7 @@ public static class EncryptionLayer
     public static byte[] DecryptIndex(byte[] encryptedIndex, byte[] rcCode)
         => DecryptIndexWithKey(encryptedIndex, DeriveKeyLegacy(rcCode));
 
-    // ── Salt-prefixed index format (new) ──
+    // -- Salt-prefixed index format (new) --
 
     /// <summary>
     /// Encrypts index data with PBKDF2-derived key. Output:
@@ -271,7 +275,7 @@ public static class EncryptionLayer
 
     /// <summary>
     /// Decrypts index with auto-format detection. Tries salt-prefixed format
-    /// first (data.Length ≥ 45). If the decrypted CBOR is valid (contains at
+    /// first (data.Length >= 45). If the decrypted CBOR is valid (contains at
     /// least one expected key), returns that result. Falls back to legacy
     /// SHA256-keyed format.
     ///

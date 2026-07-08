@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+using System.Formats.Cbor;
+using System.Security.Cryptography;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using Xunit;
@@ -211,6 +212,53 @@ public class IndexManagerTests
         var idx = MakeIndex();
         var info = IndexManager.GetFragmentInfo(idx, 99);
         Assert.Null(info);
+    }
+
+    // -- CBOR deserialization guard tests --
+
+    [Fact]
+    public void DeserializeIndex_NullBytes_ThrowsArgumentNull()
+    {
+        Assert.Throws<ArgumentNullException>(() => IndexManager.DeserializeIndex(null!));
+    }
+
+    [Fact]
+    public void DeserializeIndex_EmptyBytes_Throws()
+    {
+        // The CborReader constructor may throw depending on the empty input.
+        // What matters is that it doesn't silently return a corrupt index.
+        Assert.ThrowsAny<Exception>(() => IndexManager.DeserializeIndex(Array.Empty<byte>()));
+    }
+
+    [Fact]
+    public void DeserializeIndex_TooLarge_ThrowsInvalidData()
+    {
+        // Create a CBOR that exceeds MaxIndexSize (100 MB)
+        var oversized = new byte[100 * 1024 * 1024 + 1];
+        Assert.Throws<InvalidDataException>(() => IndexManager.DeserializeIndex(oversized));
+    }
+
+    [Fact]
+    public void DeserializeIndex_TooManyFragments_ThrowsInvalidData()
+    {
+        // Craft CBOR with fragment_count > 10000
+        var writer = new CborWriter();
+        writer.WriteStartMap(1);
+        writer.WriteTextString("fragment_count");
+        writer.WriteInt32(10001);
+        writer.WriteEndMap();
+        byte[] cbor = writer.Encode();
+
+        var ex = Assert.Throws<InvalidDataException>(() => IndexManager.DeserializeIndex(cbor));
+        Assert.Contains("10001", ex.Message);
+    }
+
+    [Fact]
+    public void DeserializeIndex_CorruptCbor_Throws()
+    {
+        // Garbage bytes that aren't valid CBOR should throw some exception
+        var garbage = new byte[] { 0xFF, 0xFF, 0xFF, 0xFF };
+        Assert.ThrowsAny<Exception>(() => IndexManager.DeserializeIndex(garbage));
     }
 }
 

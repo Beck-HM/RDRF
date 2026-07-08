@@ -23,11 +23,13 @@ public class NextCommand : Command
         var messageOpt = new Option<string>("-m") { Description = "Commit message describing the change (required)" };
         var storageOpt = new Option<DirectoryInfo?>("-o") { Description = "Storage directory (default: ./backup/)" };
         var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (INSECURE: visible in process list; omit for secure prompt)" };
+        var realOpt = new Option<bool>("-real", "--real") { Description = "Real incremental mode: keep all version files permanently" };
 
         Arguments.Add(sourceArg);
         Options.Add(messageOpt);
         Options.Add(storageOpt);
         Options.Add(passwordOpt);
+        Add(realOpt);
 
         SetAction(async (ParseResult parseResult) =>
         {
@@ -35,6 +37,7 @@ public class NextCommand : Command
             var msg = parseResult.GetValue(messageOpt);
             var storageDir = parseResult.GetValue(storageOpt);
             var pwd = parseResult.GetValue(passwordOpt);
+            bool realMode = parseResult.GetValue(realOpt);
 
             if (!source.Exists)
             {
@@ -99,9 +102,13 @@ public class NextCommand : Command
             string newFp = "";
             await ProgressReporter.Run($"Incrementing {oldIndex.OriginalName}", async progress =>
             {
-                newFp = await VersionedBackup.BackupAsync(
-                    source.FullName, new LocalDssaAdapter(storagePath), password, msg,
-                    oldIndex.FssStrategy, progress: progress);
+                newFp = realMode
+                    ? await RealVersionedBackup.BackupAsync(
+                        source.FullName, new LocalDssaAdapter(storagePath), password, msg,
+                        oldIndex.FssStrategy, progress: progress)
+                    : await VersionedBackup.BackupAsync(
+                        source.FullName, new LocalDssaAdapter(storagePath), password, msg,
+                        oldIndex.FssStrategy, progress: progress);
             });
 
             byte[] newEncIdx = File.ReadAllBytes(Path.Combine(storagePath, newFp + ".indrdrf"));

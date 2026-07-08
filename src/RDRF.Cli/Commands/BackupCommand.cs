@@ -24,6 +24,7 @@ public class BackupCommand : Command
         var nameOpt = new Option<string?>("-name") { Description = "Custom name for the backup (optional)" };
         var nextOpt = new Option<bool>("-next", "--next") { Description = "Enable versioning (creates v1, supports 'rdrf next' for increments)" };
         var nodeOpt = new Option<bool>("-node", "--node") { Description = "Versioned backup with API distribution flag (use with rdrf remote + push)" };
+        var realOpt = new Option<bool>("-real", "--real") { Description = "Real incremental mode: keep all version files permanently" };
         var messageOpt = new Option<string?>("-m") { Description = "Commit message for the initial version (used with -next or -node)" };
         var fss1 = new Option<bool>("-fss1", new[] { "--fss1" }) { Description = "FSS1 strategy - single-dash for primary, double-dash for auxiliary" };
         var fss2 = new Option<bool>("-fss2", new[] { "--fss2" }) { Description = "FSS2 strategy - single-dash for primary, double-dash for auxiliary" };
@@ -44,7 +45,7 @@ public class BackupCommand : Command
         Options.Add(messageOpt);
         Add(fss1); Add(fss2); Add(fss2r);
         Add(fss3); Add(fss5); Add(fss5p); Add(fss61); Add(fss62);
-        Add(nextOpt); Add(nodeOpt);
+        Add(nextOpt); Add(nodeOpt); Add(realOpt);
 
         SetAction(async (ParseResult parseResult) =>
         {
@@ -110,8 +111,11 @@ public class BackupCommand : Command
                 string mode = enableNode ? "node" : "versioned";
                 await ProgressReporter.Run($"Backing up {nf.Name}", async prog =>
                 {
-                    fp = await VersionedBackup.BackupAsync(nf.FullName, new LocalDssaAdapter(storagePath), password,
-                        commitMsg ?? "Initial backup", strategy, fragmentSize, customName, auxiliary, prog);
+                    fp = enableNext && parseResult.GetValue(realOpt)
+                        ? await RealVersionedBackup.BackupAsync(nf.FullName, new LocalDssaAdapter(storagePath), password,
+                            commitMsg ?? "Initial backup", strategy, fragmentSize, customName, auxiliary, prog)
+                        : await VersionedBackup.BackupAsync(nf.FullName, new LocalDssaAdapter(storagePath), password,
+                            commitMsg ?? "Initial backup", strategy, fragmentSize, customName, auxiliary, prog);
                 });
                 var resultTable = new Table();
                 resultTable.Border(TableBorder.Rounded);

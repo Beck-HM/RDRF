@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
-using RDRF.Dssa;
+using RDRF.Core.Dssa;
 
 namespace RDRF.Plugins.Key;
 

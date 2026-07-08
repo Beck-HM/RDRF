@@ -61,7 +61,7 @@ public class VerifyCommand : Command
 
                 if (index.Fss6FragmentBlockMaps == null && index.Fss6RcBlockMap == null)
                 {
-                    AnsiConsole.MarkupLine("[red]Error: backup does not contain FSS6/ETN data — verification requires FSS6[/]");
+                    AnsiConsole.MarkupLine("[red]Error: backup does not contain FSS6/ETN data - verification requires FSS6[/]");
                     return 1;
                 }
 
@@ -114,12 +114,12 @@ public class VerifyCommand : Command
             statusTable.AddColumn("Details");
 
             string idxStatus = result.IndexCorrupted
-                ? $"[red]CORRUPTED[/] ({result.IndexCorruptedBlocks.Count} blocks{FormatBlockList(result.IndexCorruptedBlocks)})"
+                ? $"[red]CORRUPTED[/] ({result.IndexCorruptedBlocks.Count} blocks{FormatBlockList(result.IndexCorruptedBlocks).EscapeMarkup()})"
                 : "[green]OK[/]";
             statusTable.AddRow("Index", "", idxStatus);
 
             string rcStatus = result.RcCorrupted
-                ? $"[red]CORRUPTED[/] ({result.RcCorruptedBlocks.Count} blocks{FormatBlockList(result.RcCorruptedBlocks)})"
+                ? $"[red]CORRUPTED[/] ({result.RcCorruptedBlocks.Count} blocks{FormatBlockList(result.RcCorruptedBlocks).EscapeMarkup()})"
                 : "[green]OK[/]";
             statusTable.AddRow("RC", "", rcStatus);
 
@@ -131,7 +131,7 @@ public class VerifyCommand : Command
                     var blocks = result.CorruptedFragmentBlocks.ContainsKey(fi)
                         ? result.CorruptedFragmentBlocks[fi]
                         : new List<int>();
-                    fragDetail += $"\n  Fragment {fi}: {blocks.Count} blocks {FormatBlockList(blocks)}";
+                    fragDetail += $"\n  Fragment {fi}: {blocks.Count} blocks {FormatBlockList(blocks).EscapeMarkup()}";
                 }
                 statusTable.AddRow("Fragments", "", fragDetail);
             }
@@ -146,9 +146,13 @@ public class VerifyCommand : Command
 
             AnsiConsole.Write(statusTable);
 
+            int totalCorrupted = result.IndexCorruptedBlocks.Count + result.RcCorruptedBlocks.Count
+                + (result.CorruptedFragmentBlocks?.Values.Sum(v => v.Count) ?? 0);
             int suspicious = result.SuspiciousFragmentBlocks?.Values.Sum(v => v.Count) ?? 0;
             if (suspicious > 0)
-                AnsiConsole.MarkupLine($"[yellow]Suspicious (false positives): {suspicious}[/]");
+                AnsiConsole.MarkupLine($"[yellow]Suspicious (non-fatal): {suspicious} blocks with hash mismatch in only one source[/]");
+            if (totalCorrupted == 0 && suspicious == 0)
+                AnsiConsole.MarkupLine("[green]All nodes validated successfully.[/]");
 
             return 1;
             }

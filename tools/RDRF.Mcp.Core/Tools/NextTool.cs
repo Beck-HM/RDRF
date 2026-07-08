@@ -20,6 +20,7 @@ public class NextTool : IMcpTool
         ["storageDir"] = new { type = "string", description = "Storage directory (same as initial backup)" },
         ["message"] = new { type = "string", description = "Commit message describing the change" },
         ["password"] = new { type = "string", description = "Encryption password" },
+        ["real"] = new { type = "boolean", description = "Real incremental mode: keep all version files" },
     };
 
     public string[] Required => ["filePath", "storageDir", "message"];
@@ -37,8 +38,10 @@ public class NextTool : IMcpTool
         if (!File.Exists(filePath)) throw new FileNotFoundException($"File not found: {filePath}");
         if (!Directory.Exists(storageDir)) throw new DirectoryNotFoundException($"Storage directory not found: {storageDir}");
 
-        string fp = await VersionedBackup.BackupAsync(filePath, new LocalDssaAdapter(storageDir),
-            password, message);
+        bool realMode = args.GetValueOrDefault("real") is bool real && real;
+        string fp = realMode
+            ? await RealVersionedBackup.BackupAsync(filePath, new LocalDssaAdapter(storageDir), password, message)
+            : await VersionedBackup.BackupAsync(filePath, new LocalDssaAdapter(storageDir), password, message);
 
         var result = new Dictionary<string, object?>
         {

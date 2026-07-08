@@ -83,7 +83,7 @@ public class MetadataManager
         }
     }
 
-    // ── Backup Records ──
+    // -- Backup Records --
 
     public void SaveBackup(
         string fileFingerprint,
@@ -185,7 +185,7 @@ public class MetadataManager
         finally { _lock.ExitReadLock(); }
     }
 
-    // ── Fragment Status ──
+    // -- Fragment Status --
 
     public void MarkFragmentOk(string fileFingerprint, int fragmentIndex)
     {
@@ -234,7 +234,7 @@ public class MetadataManager
     }
 }
 
-// ── Data models ──
+// -- Data models --
 
 /// <summary>
 /// Thread-safe JSON metadata store with backup record tracking and persistence.

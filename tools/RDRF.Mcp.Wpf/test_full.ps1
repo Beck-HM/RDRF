@@ -1,10 +1,10 @@
 # RDRF MCP - Full Integration Test Suite
 # Tests: strategy backup (UIA), wpf_restore (IPC+UIA), wpf_info (IPC+UIA)
 $ErrorActionPreference = "Continue"
-$root = "F:\RDRF\RDRF.NET"
-$mcpWpf = "$root\tools\RDRF.Mcp.Wpf"
-$mcpCore = "$root\tools\RDRF.Mcp.Core"
-$testOut = "F:\RDRF\RDRF.NET\tests\RDRF_TestOutput"
+$root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$mcpWpf = Join-Path $root "tools\RDRF.Mcp.Wpf"
+$mcpCore = Join-Path $root "tools\RDRF.Mcp.Core"
+$testOut = Join-Path $root "tests\RDRF_TestOutput"
 $storageDir = "$testOut\rdrf_full_test"
 $restoreDir = "$testOut\rdrf_full_restored"
 New-Item -ItemType Directory -Force -Path $storageDir, $restoreDir | Out-Null
@@ -83,7 +83,7 @@ $rng.NextBytes($bytes)
 $expectedHash = SHA256-Hash $f
 
 $strategies = @("FSS1", "FSS3", "FSS5", "FSS6", "FSS6.1")
-# FSS6.2 has no UI card — falls back to IPC set_strategy, test separately
+# FSS6.2 has no UI card - falls back to IPC set_strategy, test separately
 
 foreach ($s in $strategies) {
     Write-Host ("`n--- Strategy: " + $s + " ---") -ForegroundColor Yellow

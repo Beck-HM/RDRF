@@ -2,7 +2,7 @@ namespace RDRF.Core.Dssa;
 
 public abstract class DssaAdapter
 {
-    // ── Synchronous API ──
+    // -- Synchronous API --
     public abstract byte[] ReadFragment(string filename);
     public abstract void WriteFragment(string filename, byte[] data);
     public abstract bool FragmentExists(string filename);
@@ -15,7 +15,7 @@ public abstract class DssaAdapter
     public abstract void WriteRc(string fileFingerprint, byte[] data);
     public abstract bool RcExists(string fileFingerprint);
 
-    // ── Asynchronous API (defaults fall back to sync) ──
+    // -- Asynchronous API (defaults fall back to sync) --
     public virtual Task<byte[]> ReadFragmentAsync(string filename, CancellationToken ct = default)
         => Task.Run(() => ReadFragment(filename), ct);
     public virtual Task WriteFragmentAsync(string filename, byte[] data, CancellationToken ct = default)
@@ -35,7 +35,9 @@ public abstract class DssaAdapter
     public virtual Task<bool> RcExistsAsync(string fileFingerprint, CancellationToken ct = default)
         => Task.FromResult(RcExists(fileFingerprint));
 
-    // ── Stream-based API ──
+    // -- Stream-based API --
+    public virtual string? FindLatestIndex() => null;
+
     public virtual Stream OpenReadFragment(string filename)
         => throw new NotSupportedException();
     public virtual Stream OpenWriteFragment(string filename)
@@ -88,7 +90,7 @@ public class LocalDssaAdapter : DssaAdapter
         }
         catch
         {
-            try { File.Delete(tmp); } catch { }
+            try { File.Delete(tmp); } catch { /* best-effort cleanup */ }
             throw;
         }
     }
@@ -145,7 +147,7 @@ public class LocalDssaAdapter : DssaAdapter
         return Task.FromResult(File.Exists(ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix)));
     }
 
-    // ── RC (cross-validation) file methods ──
+    // -- RC (cross-validation) file methods --
 
     public override byte[] ReadRc(string fileFingerprint)
         => File.ReadAllBytes(ResolvePath(_basePath, fileFingerprint + Constants.RcFileSuffix));
@@ -156,7 +158,7 @@ public class LocalDssaAdapter : DssaAdapter
     public override bool RcExists(string fileFingerprint)
         => File.Exists(ResolvePath(_basePath, fileFingerprint + Constants.RcFileSuffix));
 
-    // ── Stream-based overrides ──
+    // -- Stream-based overrides --
 
     public override Stream OpenReadFragment(string filename)
         => File.OpenRead(ResolvePath(_basePath, filename));
@@ -164,6 +166,17 @@ public class LocalDssaAdapter : DssaAdapter
     public override Stream OpenWriteFragment(string filename)
         => File.OpenWrite(ResolvePath(_basePath, filename));
 
+    public override string? FindLatestIndex()
+    {
+        string dir = _basePath;
+        if (!Directory.Exists(dir)) return null;
+        return Directory.GetFiles(dir, "*" + Constants.IndexFileSuffix)
+            .OrderByDescending(f => File.GetLastWriteTime(f))
+            .Select(f => Path.GetFileNameWithoutExtension(f))
+            .FirstOrDefault();
+    }
+
     public string GetBasePath() => _basePath;
 }
+
 

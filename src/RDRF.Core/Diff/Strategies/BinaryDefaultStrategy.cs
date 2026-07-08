@@ -26,7 +26,7 @@ public class BinaryDefaultStrategy : IDiffStrategy
         if (oldData.LongLength == newData.LongLength)
             sb.AppendLine($"File size unchanged: {oldData.Length} bytes");
         else
-            sb.AppendLine($"Old size: {oldData.Length} bytes → New size: {newData.Length} bytes");
+            sb.AppendLine($"Old size: {oldData.Length} bytes -> New size: {newData.Length} bytes");
 
         return new DiffResult
         {
@@ -36,7 +36,7 @@ public class BinaryDefaultStrategy : IDiffStrategy
             RemovedBytes = removedBytes,
             Lines = new List<DiffLine>
             {
-                new DiffLine { Type = DiffLineType.Header, Text = $"(binary) {label ?? "file"}: {oldData.Length} → {newData.Length} bytes" }
+                new DiffLine { Type = DiffLineType.Header, Text = $"(binary) {label ?? "file"}: {oldData.Length} -> {newData.Length} bytes" }
             },
             HumanDiff = sb.ToString(),
             DetectedFileType = "binary",

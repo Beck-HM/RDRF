@@ -1,6 +1,7 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using RDRF.Core.Dssa;
 using RDRF.Core.Encryption;
+using RDRF.Core.Index;
 using Xunit;
 
 namespace RDRF.Core.Tests;
@@ -101,6 +102,79 @@ public class EncryptionTests
 
         byte[] result = EncryptionLayer.DecryptAndStripFragment(fileData, aesKey);
         Assert.Equal(plaintext, result);
+    }
+
+    // -- Auto-detect format switching tests --
+
+    [Fact]
+    public void DecryptIndexWithAutoDetect_SaltPrefixed_ReturnsKeyAndCbor()
+    {
+        byte[] rc = EncryptionLayer.GenerateRcCode(32);
+        var index = IndexManager.BuildIndex(
+            fileFingerprint: "fp123",
+            originalFilename: "test.bin",
+            originalSize: 100,
+            fragmentHashes: new List<string> { "h1" },
+            originalHash: "oh",
+            fssStrategy: "FSS1",
+            originalFragmentSizes: new List<int> { 100 },
+            originalFragmentCount: 1);
+        byte[] indexBytes = IndexManager.SerializeIndex(index);
+        byte[] saltPrefixed = EncryptionLayer.EncryptIndexWithSaltPrefix(indexBytes, rc, out byte[] salt);
+        Assert.NotNull(salt);
+        Assert.Equal(Constants.SaltPrefixLength, salt.Length);
+
+        var (aesKey, cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(saltPrefixed, rc);
+        Assert.Equal(32, aesKey.Length);
+
+        var deserialized = IndexManager.DeserializeIndex(cbor);
+        Assert.Equal("fp123", deserialized.FileFingerprint);
+        Assert.Equal("test.bin", deserialized.OriginalName);
+    }
+
+    [Fact]
+    public void DecryptIndexWithAutoDetect_LegacyFormat_StillWorks()
+    {
+        byte[] rc = EncryptionLayer.GenerateRcCode(32);
+        var index = IndexManager.BuildIndex(
+            fileFingerprint: "legacy_fp",
+            originalFilename: "legacy.bin",
+            originalSize: 200,
+            fragmentHashes: new List<string> { "h1" },
+            originalHash: "oh",
+            fssStrategy: "FSS1",
+            originalFragmentSizes: new List<int> { 200 },
+            originalFragmentCount: 1);
+        byte[] indexBytes = IndexManager.SerializeIndex(index);
+        byte[] aesKey = EncryptionLayer.DeriveKeyLegacy(rc);
+        byte[] encrypted = EncryptionLayer.EncryptIndexWithKey(indexBytes, aesKey);
+
+        var (decryptedKey, cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encrypted, rc);
+        Assert.Equal(aesKey, decryptedKey);
+
+        var deserialized = IndexManager.DeserializeIndex(cbor);
+        Assert.Equal("legacy_fp", deserialized.FileFingerprint);
+    }
+
+    [Fact]
+    public void DecryptIndexWithAutoDetect_WrongPassword_Throws()
+    {
+        byte[] rc = EncryptionLayer.GenerateRcCode(32);
+        var index = IndexManager.BuildIndex(
+            fileFingerprint: "fp_wrong",
+            originalFilename: "secret.bin",
+            originalSize: 50,
+            fragmentHashes: new List<string> { "h1" },
+            originalHash: "oh",
+            fssStrategy: "FSS1",
+            originalFragmentSizes: new List<int> { 50 },
+            originalFragmentCount: 1);
+        byte[] indexBytes = IndexManager.SerializeIndex(index);
+        byte[] encrypted = EncryptionLayer.EncryptIndexWithSaltPrefix(indexBytes, rc, out _);
+
+        byte[] wrongRc = EncryptionLayer.GenerateRcCode(32);
+        Assert.Throws<CryptographicException>(() =>
+            EncryptionLayer.DecryptIndexWithAutoDetect(encrypted, wrongRc));
     }
 }
 

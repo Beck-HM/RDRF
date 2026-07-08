@@ -86,7 +86,7 @@ public class AesNiCtrTests
     public void CtrCrypt_CounterWraparound()
     {
         byte[] key = RandomNumberGenerator.GetBytes(32);
-        // Nonce with counter bytes set to max — forces wraparound on first increment
+        // Nonce with counter bytes set to max - forces wraparound on first increment
         byte[] nonce = new byte[12];
         nonce[11] = 0xFF;
 

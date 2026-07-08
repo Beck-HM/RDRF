@@ -12,7 +12,7 @@ namespace RDRF.Core.FSS;
 
 public static class FssRepairService
 {
-    // ── FSS6.1 Generation (backup) ──
+    // -- FSS6.1 Generation (backup) --
 
     public static (Fss61RepairData? A, Fss61RepairData? B, Fss61RepairData? C)
         Generate61(byte[] indexBytes, List<byte[]> fragments, byte[] rcBytes, int bs)
@@ -32,7 +32,7 @@ public static class FssRepairService
             fragments[i] = Fss61RepairTrailer.Build(fragments[i], fp, fp, a, c);
     }
 
-    // ── FSS6.2 Generation (backup) ──
+    // -- FSS6.2 Generation (backup) --
 
     public static (Fss62RepairData? A, Fss62RepairData? B, Fss62RepairData? C)
         Generate62(byte[] indexBytes, List<byte[]> fragments, byte[] rcBytes, int bs)
@@ -52,19 +52,19 @@ public static class FssRepairService
             fragments[i] = Fss62RepairTrailer.Build(fragments[i], fp, fp, a, c);
     }
 
-    // ── FSS6.1 Repair (restore) ──
+    // -- FSS6.1 Repair (restore) --
 
     public static bool TryRepair61(RdrfIndex index, ref byte[] rcBytes,
         Dictionary<int, byte[]> fragments, CrossValidationResult cv)
         => RepairRunner.TryFss61(index, ref rcBytes, fragments, cv);
 
-    // ── FSS6.2 Repair (restore) ──
+    // -- FSS6.2 Repair (restore) --
 
     public static bool TryRepair62(RdrfIndex index, ref byte[] rcBytes,
         Dictionary<int, byte[]> fragments, CrossValidationResult cv)
         => RepairRunner.TryFss62(index, ref rcBytes, fragments, cv);
 
-    // ── Primitives ──
+    // -- Primitives --
 
     internal static byte[][] SplitToBlocks(byte[] data, int blockSize)
     {

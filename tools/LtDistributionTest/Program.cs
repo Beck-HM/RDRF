@@ -8,9 +8,16 @@ using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using RDRF.Core.Dssa;
 
-string testFile = args.Length > 0 && File.Exists(args[0])
-    ? args[0]
-    : Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "tests", "2.mp4"));
+string testFile;
+if (args.Length > 0 && File.Exists(args[0]))
+    testFile = args[0];
+else
+{
+    string inputDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "tests", "RDRF_TestInput"));
+    if (!Directory.Exists(inputDir)) { Console.Error.WriteLine($"Test input dir not found: {inputDir}"); return 1; }
+    var files = Directory.GetFiles(inputDir);
+    testFile = files.Length > 0 ? files[0] : throw new FileNotFoundException($"No test file in {inputDir}");
+}
 if (!File.Exists(testFile)) { Console.Error.WriteLine($"File not found: {testFile}"); return 1; }
 
 byte[] originalHash = SHA256.HashData(File.ReadAllBytes(testFile));
@@ -39,12 +46,13 @@ foreach (double ratio in ratios)
         string pwd = strategy == "FSS6.1" ? "fss61_test" : "fss62_test";
         byte[] rcMaster = Encoding.UTF8.GetBytes(pwd);
 
-        string resultDir = Path.Combine(@"F:\RDRF\RDRF.NET\tests\RDRF_TestOutput",
+        string resultDir = Path.Combine(
+            Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "tests", "RDRF_TestOutput")),
             $"lt_{strategy.Replace(".", "_")}_r{ratio:F1}_{Guid.NewGuid():N}");
         Directory.CreateDirectory(resultDir);
         // Don't print resultDir per test, we'll aggregate
 
-        // ──── Backup ────
+        // ---- Backup ----
         var storage = new LocalDssaAdapter(resultDir);
         string fingerprint;
         using (var engine = new RDRFEngine(rcMaster, storage))
@@ -58,7 +66,7 @@ foreach (double ratio in ratios)
 
     Console.WriteLine($"Backup: {totalFrags} fragments, strategy={index.FssStrategy}");
 
-    // ──── Pre-load ────
+    // ---- Pre-load ----
     var allFragBytes = new byte[totalFrags][];
     for (int i = 0; i < totalFrags; i++)
         allFragBytes[i] = File.ReadAllBytes(Path.Combine(resultDir, $"{prefix}_{i}.rdrf"));

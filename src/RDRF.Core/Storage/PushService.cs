@@ -100,6 +100,11 @@ public static class PushService
         bool hasRc = File.Exists(rcPath);
 
         int totalItems = items.Count + (hasRc ? 1 : 0);
+        if (totalItems == 0)
+        {
+            Debug.WriteLine("All fragments already up-to-date. Nothing to push.");
+            return 0;
+        }
         int done = 0, errors = 0;
 
         if (dryRun)

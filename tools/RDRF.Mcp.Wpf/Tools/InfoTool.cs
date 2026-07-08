@@ -45,7 +45,7 @@ public class InfoTool : IMcpTool
         await Task.Delay(500);
 
         // Read info from temp file
-        string infoPath = @"F:\RDRF\RDRF.NET\tests\RDRF_TestOutput\rdrf_info.json";
+        string infoPath = Path.Combine(AppContext.BaseDirectory, "rdrf_TestOutput", "rdrf_info.json");
         string? json = null;
         for (int i = 0; i < 10; i++)
         {

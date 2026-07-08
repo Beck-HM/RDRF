@@ -134,13 +134,13 @@ public static class EtnPrecision
 
         for (int b = 0; b < actualIndexCount; b++)
         {
-            // Tier 1: 2B → pass or suspicious
+            // Tier 1: 2B -> pass or suspicious
             if (b < idx2BConsensus.Count && idx2BConsensus[b].Length >= 2 &&
                 actualIndexFlat[b * 32] == idx2BConsensus[b][0] &&
                 actualIndexFlat[b * 32 + 1] == idx2BConsensus[b][1])
                 continue;
 
-            // Tier 2: 8B → collision or corrupted
+            // Tier 2: 8B -> collision or corrupted
             bool b8BOk = (has8BTrailer && b < trailerIdx2BCounts[0] &&
                 Is8BMatch(actualIndexFlat, b,
                     trailerIdx8B[0].AsSpan(b * 8, 8).ToArray()));
@@ -251,6 +251,10 @@ public static class EtnPrecision
                 }
             }
 
+            // Only blocks where 2+ sources disagree are truly corrupted.
+            // Single-source mismatches (suspicious) are tracked separately
+            // and do not affect IsValid. The Verify CLI displays suspicious
+            // count separately to distinguish from confirmed corruption.
             if (corrupted.Count > 0)
             {
                 result.CorruptedFragments.Add(i);

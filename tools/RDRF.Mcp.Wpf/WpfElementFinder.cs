@@ -271,7 +271,7 @@ return 'false'
     }
 
     /// <summary>
-    /// Quick single-shot text read — tries once, no retry loop, much faster.
+    /// Quick single-shot text read - tries once, no retry loop, much faster.
     /// </summary>
     public static async Task<string?> GetTextOnce(string automationId, int timeoutMs = 5000)
     {

@@ -17,14 +17,18 @@ public static class EtnTestHelpers
         get
         {
             var dir = AppContext.BaseDirectory;
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 6; i++)
                 dir = Path.GetDirectoryName(dir)!;
-            return Path.Combine(dir, "2.mp4");
+            string inputDir = Path.Combine(dir, "tests", "RDRF_TestInput");
+            var files = Directory.GetFiles(inputDir);
+            if (files.Length == 0)
+                throw new FileNotFoundException($"No test file found in {inputDir}");
+            return files[0];
         }
     }
 
     public static string TestOutputDir =>
-        Path.Combine(Path.GetDirectoryName(TestFile)!, "RDRF_TestOutput");
+        Path.Combine(Path.GetDirectoryName(TestFile)!, "..", "RDRF_TestOutput");
 
     public static string CreateStorageDir()
     {

@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+using RDRF.Core.Abstractions;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Hashing;
 using System.Security.Cryptography;
@@ -21,9 +22,9 @@ namespace RDRF.Core;
 /// Core restore pipeline orchestrator. Reverses the backup pipeline:
 ///
 /// Pipeline:
-///   Read encrypted fragments → AES-CTR decrypt → Strip FSS/ETN headers
-///   → ETN cross-validation (FSS6.x) → Fragment recovery (if missing)
-///   → FSS decode → LZ4 decompress → Merge into output file
+///   Read encrypted fragments -> AES-CTR decrypt -> Strip FSS/ETN headers
+///   -> ETN cross-validation (FSS6.x) -> Fragment recovery (if missing)
+///   -> FSS decode -> LZ4 decompress -> Merge into output file
 ///
 /// Two restore paths:
 ///   Standard: loads all fragments, decrypts, validates, recovers, decodes.
@@ -31,16 +32,16 @@ namespace RDRF.Core;
 ///     and concatenates them directly (fast path, no recovery, no FSS decode).
 ///     Only works when:
 ///       - All fragments are present (no missing fragments)
-///       - FSS strategy ≤ FSS2R (no cross-fragment dependency)
+///       - FSS strategy <= FSS2R (no cross-fragment dependency)
 ///       - FSS6 is not active
 ///
 /// Call chain:
 ///   RDRFEngine.RestoreFileAsync
-///   → RestoreOrchestrator.RestoreFileAsync → RestoreCoreAsync
-///     → TryStreamingRestoreCoreAsync (fast path)
-///       or DownloadAndDecryptFragmentsAsync → RunEtnCrossValidateAsync
-///       → RecoveryExecutor.ExecuteRecoveryAsync → FSSEngine.Decode
-///       → Write output file
+///   -> RestoreOrchestrator.RestoreFileAsync -> RestoreCoreAsync
+///     -> TryStreamingRestoreCoreAsync (fast path)
+///       or DownloadAndDecryptFragmentsAsync -> RunEtnCrossValidateAsync
+///       -> RecoveryExecutor.ExecuteRecoveryAsync -> FSSEngine.Decode
+///       -> Write output file
 /// </summary>
 public class RestoreOrchestrator : IDisposable
 {
@@ -66,7 +67,7 @@ public class RestoreOrchestrator : IDisposable
         _recoveryExecutor = new RecoveryExecutor(_fss);
     }
 
-    // 鈹€鈹€ Public Restore Methods 鈹€鈹€
+    // --- Public Restore Methods ---
 
     public bool RestoreFile(
         string fileFingerprint,
@@ -88,7 +89,7 @@ public class RestoreOrchestrator : IDisposable
     public bool RestoreFile(string fileFingerprint, FileInfo outputPath, bool allowFssRecovery = true, string? filePrefix = null, IProgress<RdrfProgressReport>? progress = null)
         => RestoreFile(fileFingerprint, outputPath.FullName, allowFssRecovery, filePrefix, progress);
 
-    // 鈹€鈹€ Restore From Fragments 鈹€鈹€
+    // --- Restore From Fragments ---
 
     public bool RestoreFileFromFragments(
         string filePrefix,
@@ -127,7 +128,7 @@ public class RestoreOrchestrator : IDisposable
         return RestoreCore(idx, filePrefix, outputPath, allowFssRecovery, progress);
     }
 
-    // 鈹€鈹€ Async Restore 鈹€鈹€
+    // --- Async Restore ---
 
     public async Task<bool> RestoreFileAsync(
         string fileFingerprint,
@@ -189,7 +190,7 @@ public class RestoreOrchestrator : IDisposable
         return await RestoreCoreAsync(idx, filePrefix, outputPath, allowFssRecovery, progress, cancellationToken).ConfigureAwait(false);
     }
 
-    // 鈹€鈹€ Restore From Index Data (pre-loaded encrypted index) 鈹€鈹€
+    // --- Restore From Index Data (pre-loaded encrypted index) ---
 
     public bool RestoreFileFromIndexData(
         byte[] encryptedIndex,
@@ -203,7 +204,7 @@ public class RestoreOrchestrator : IDisposable
         return RestoreCore(index, filePrefix, outputPath, allowFssRecovery, progress);
     }
 
-    // 鈹€鈹€ Synchronous Core 鈹€鈹€
+    // --- Synchronous Core ---
 
     private bool RestoreCore(
         RdrfIndex index,
@@ -212,12 +213,14 @@ public class RestoreOrchestrator : IDisposable
         bool allowFssRecovery = true,
         IProgress<RdrfProgressReport>? progress = null)
     {
-        return Task.Run(() => RestoreCoreAsync(index, filePrefix, outputPath,
-            allowFssRecovery, progress, CancellationToken.None))
-            .GetAwaiter().GetResult();
+        var task = Task.Run(() => RestoreCoreAsync(index, filePrefix, outputPath,
+            allowFssRecovery, progress, CancellationToken.None));
+        if (task.Wait(TimeSpan.FromMinutes(30)))
+            return task.Result;
+        throw new TimeoutException($"Restore timed out after 30 minutes: {outputPath}");
     }
 
-    // 鈹€鈹€ Async Core 鈹€鈹€
+    // --- Async Core ---
 
     private async Task<bool> RestoreCoreAsync(
         RdrfIndex index,
@@ -364,7 +367,7 @@ public class RestoreOrchestrator : IDisposable
         return false;
     }
 
-    // 鈹€鈹€ Download and Decrypt Fragments 鈹€鈹€
+    // --- Download and Decrypt Fragments ---
     //
     // This is the fallback path (path B) used when fragments are missing or
     // corrupted. All fragments are loaded into memory simultaneously to allow
@@ -376,9 +379,11 @@ public class RestoreOrchestrator : IDisposable
         string filePrefix, int fragmentCount, string fileFingerprint,
         IProgress<RdrfProgressReport>? progress)
     {
-        return Task.Run(() => DownloadAndDecryptFragmentsAsync(filePrefix, fragmentCount,
-            fileFingerprint, progress, CancellationToken.None, null))
-            .GetAwaiter().GetResult();
+        var task = Task.Run(() => DownloadAndDecryptFragmentsAsync(filePrefix, fragmentCount,
+            fileFingerprint, progress, CancellationToken.None, null));
+        if (task.Wait(TimeSpan.FromMinutes(30)))
+            return task.Result;
+        throw new TimeoutException($"Fragment download timed out after 30 minutes: {filePrefix}");
     }
 
     private async Task<Dictionary<int, byte[]>> DownloadAndDecryptFragmentsAsync(
@@ -451,7 +456,7 @@ public class RestoreOrchestrator : IDisposable
         return new Dictionary<int, byte[]>(result);
     }
 
-    // 鈹€鈹€ ETN Cross-Validate 鈹€鈹€
+    // --- ETN Cross-Validate ---
 
     private async Task<bool> RunEtnCrossValidateAsync(
         RdrfIndex index, Dictionary<int, byte[]> decryptedFragments,
@@ -527,7 +532,7 @@ public class RestoreOrchestrator : IDisposable
     private static byte[] StripEtnOnly(byte[] frag)
         => EtnTrailer.Parse(frag).RawData;
 
-    // 鈹€鈹€ Strip FSS Encoding 鈹€鈹€
+    // --- Strip FSS Encoding ---
 
     private List<byte[]> StripFssEncoding(
         Dictionary<int, byte[]> decryptedFragments,
@@ -576,7 +581,7 @@ public class RestoreOrchestrator : IDisposable
         }
     }
 
-    // 鈹€鈹€ Streaming Restore 鈹€鈹€
+    // --- Streaming Restore ---
 
     private async Task<bool> TryStreamingRestoreCoreAsync(
         RdrfIndex index, string filePrefix, string outputPath,
@@ -668,7 +673,7 @@ public class RestoreOrchestrator : IDisposable
             }
 
             byte[] hashBytes = hasher.GetHashAndReset();
-            string restoredHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+            string restoredHash = Hex.EncodeLower(hashBytes);
             bool valid = IntegrityChecker.VerifyHash(restoredHash, index.OriginalHash);
             Debug.WriteLine($"  Integrity check: {(valid ? "PASS" : "FAIL")}");
             return valid;
@@ -680,7 +685,7 @@ public class RestoreOrchestrator : IDisposable
         }
     }
 
-    // 鈹€鈹€ Dispose 鈹€鈹€
+    // --- Dispose ---
 
     public void Dispose()
     {
@@ -691,5 +696,7 @@ public class RestoreOrchestrator : IDisposable
         GC.SuppressFinalize(this);
     }
 }
+
+
 
 

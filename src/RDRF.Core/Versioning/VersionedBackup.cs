@@ -1,3 +1,4 @@
+using RDRF.Core.Abstractions;
 using System.Diagnostics;
 using System.IO.Hashing;
 using System.Security.Cryptography;
@@ -37,26 +38,7 @@ public static class VersionedBackup
     }
 
     private static string? FindExistingIndex(DssaAdapter storage)
-    {
-        if (storage is LocalDssaAdapter local)
-        {
-            string dir = local.GetBasePath();
-            if (!Directory.Exists(dir)) return null;
-            string? newest = null;
-            DateTime newestTime = DateTime.MinValue;
-            foreach (string f in Directory.GetFiles(dir, "*" + Constants.IndexFileSuffix))
-            {
-                DateTime ft = File.GetLastWriteTimeUtc(f);
-                if (ft > newestTime)
-                {
-                    newestTime = ft;
-                    newest = Path.GetFileName(f);
-                }
-            }
-            return newest?[..^Constants.IndexFileSuffix.Length];
-        }
-        return null;
-    }
+        => storage.FindLatestIndex();
 
     private static async Task<string> FreshBackupAsync(
         string filePath, DssaAdapter storage,
@@ -75,7 +57,7 @@ public static class VersionedBackup
         return fingerprint;
     }
 
-    private static string HashKey(byte[] hash) => Convert.ToHexString(hash).ToLowerInvariant();
+    private static string HashKey(byte[] hash) => Hex.EncodeLower(hash);
 
 private static async Task<string> IncrementalBackupAsync(
     string filePath, DssaAdapter storage, string prevFingerprint,
@@ -108,7 +90,7 @@ private static async Task<string> IncrementalBackupAsync(
     byte[] salt = new byte[Constants.SaltPrefixLength];
     Buffer.BlockCopy(prevIndexBytes, 0, salt, 0, Constants.SaltPrefixLength);
 
-    // Stream file → hash(sample) → split raw
+    // Stream file -> hash(sample) -> split raw
     int fragSize = fragmentSize > 0 ? fragmentSize : 1024 * 1024;
     var rawFragments = new List<byte[]>();
     string fileFingerprint;
@@ -147,7 +129,7 @@ private static async Task<string> IncrementalBackupAsync(
         }
 
         newFileSize = totalRead;
-        fileFingerprint = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
+        fileFingerprint = Hex.EncodeLower(hasher.GetHashAndReset());
     }
 
     // Same fingerprint -> file unchanged -> just update commit message
@@ -241,7 +223,7 @@ private static async Task<string> IncrementalBackupAsync(
 
         using var orchestrator = new BackupOrchestrator((byte[])password.Clone(), storage, (byte[])salt.Clone());
 
-        // LZ4 compress raw fragments → keep only if smaller → pad → pass to BuildChangedFragmentsIndex
+        // LZ4 compress raw fragments -> keep only if smaller -> pad -> pass to BuildChangedFragmentsIndex
         var compressedFrags = new List<byte[]>();
         var originalSizes = new List<int>();
         foreach (var raw in rawFragments)
@@ -286,7 +268,7 @@ private static async Task<string> IncrementalBackupAsync(
         {
             if (!newHashKeys.Contains(oldKey) && dedupMap.TryGetValue(oldKey, out var entry))
             {
-                // Don't delete fragments owned by the version we're replacing — still needed by its index
+                // Don't delete fragments owned by the version we're replacing - still needed by its index
                 if (entry.SourceFingerprint == prevFingerprint) continue;
                 entry.RefCount--;
                 if (entry.RefCount <= 0)
@@ -556,4 +538,7 @@ private static async Task<string> IncrementalBackupAsync(
         storage.WriteIndex(fingerprint, saltedIndex);
     }
 }
+
+
+
 

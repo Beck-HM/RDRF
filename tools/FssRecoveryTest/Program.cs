@@ -60,7 +60,12 @@ if (repairRatio.HasValue)
 }
 
 if (testFile == "")
-    testFile = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "tests", "2.mp4"));
+{
+    string inputDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "tests", "RDRF_TestInput"));
+    if (!Directory.Exists(inputDir)) { Console.Error.WriteLine($"Test input dir not found: {inputDir}"); return 1; }
+    var files = Directory.GetFiles(inputDir);
+    testFile = files.Length > 0 ? files[0] : "";
+}
 
 if (!File.Exists(testFile))
 {
@@ -107,11 +112,11 @@ bool hasNewTests = flgs.Any(f => f.Item1);
 if (hasNewTests)
 {
     Console.ForegroundColor = ConsoleColor.Yellow;
-    Console.WriteLine("── [EXTRA TESTS] ──");
+    Console.WriteLine("-- [EXTRA TESTS] --");
     Console.ResetColor();
 }
 
-// ── parity: streaming vs dictionary pipeline consistency ──
+// -- parity: streaming vs dictionary pipeline consistency --
 if (flagParity)
 {
     var d = Path.Combine(resultDir, "parity"); Directory.CreateDirectory(d);
@@ -141,7 +146,7 @@ if (flagParity)
     Console.WriteLine($"  Parity: {(ok ? "PASS" : "FAIL")} (stream={st}ms dict={dt}ms)");
 }
 
-// ── boundary: FSS1/2 fragment 0 recovery ──
+// -- boundary: FSS1/2 fragment 0 recovery --
 if (flagBoundary)
 {
     foreach (string strat in new[] { "FSS1", "FSS2" })
@@ -163,7 +168,7 @@ if (flagBoundary)
     }
 }
 
-// ── versioning: incremental cleanup ──
+// -- versioning: incremental cleanup --
 if (flagVersioning)
 {
     var d = Path.Combine(resultDir, "versioning"); Directory.CreateDirectory(d);
@@ -186,12 +191,12 @@ if (flagCacheIsolation)
     var d = Path.Combine(resultDir, "cache_iso"); Directory.CreateDirectory(d);
     var s = new LocalDssaAdapter(d); var pwA = EncryptionLayer.GenerateRcCode(32); var pwB = EncryptionLayer.GenerateRcCode(32);
     byte[] rA() => (byte[])pwA.Clone();
-    // Use different files to avoid fingerprint collision (same file → same fingerprint → overwrite)
+    // Use different files to avoid fingerprint collision (same file -> same fingerprint -> overwrite)
     string fa = Path.Combine(d, "aaa.bin"); File.WriteAllBytes(fa, new byte[] { 0x41 });
     string fb = Path.Combine(d, "bbb.bin"); File.WriteAllBytes(fb, new byte[] { 0x42 });
     string fpA; using (var e = new RDRFEngine(pwA, s)) fpA = e.BackupFile(fa, "FSS3", fragmentSize: 8192);
     string fpB; using (var e = new RDRFEngine(pwB, s)) fpB = e.BackupFile(fb, "FSS3", fragmentSize: 8192);
-    // Cross-decrypt: A key on B's index → must fail
+    // Cross-decrypt: A key on B's index -> must fail
     byte[] encB = s.ReadIndex(fpB); bool crossFails = false;
     try { EncryptionLayer.DecryptIndexWithAutoDetect(encB, rA()); } catch { crossFails = true; }
     // Own decrypt must succeed
@@ -202,7 +207,7 @@ if (flagCacheIsolation)
     Console.WriteLine($"  Cache isolation: {(ok ? "PASS" : "FAIL")} (cross={(crossFails ? "blocked" : "leaked")} own={(ownOk ? "ok" : "fail")})");
 }
 
-// ── incompressible: random data, LZ4 anti-expansion ──
+// -- incompressible: random data, LZ4 anti-expansion --
 if (flagIncompressible)
 {
     var d = Path.Combine(resultDir, "incompressible"); Directory.CreateDirectory(d);
@@ -217,7 +222,7 @@ if (flagIncompressible)
     Console.WriteLine($"  Incompressible: {(rec && sha ? "PASS" : "FAIL")} ({t}ms)");
 }
 
-// ── stress: parallel restore concurrency ──
+// -- stress: parallel restore concurrency --
 if (flagStress)
 {
     var d = Path.Combine(resultDir, "stress"); Directory.CreateDirectory(d);
@@ -242,7 +247,7 @@ if (flagStress)
     Console.WriteLine($"  Stress: {(failed == 0 ? "PASS" : "FAIL")} ({passed}/{passed + failed} passed)");
 }
 
-// ── tiny: 0B, 1B, 1KB files ──
+// -- tiny: 0B, 1B, 1KB files --
 if (flagTiny)
 {
     foreach (var (name, data) in new[] { ("empty", Array.Empty<byte>()), ("1b", new byte[] { 0x42 }), ("1kb", new byte[1024]) })
@@ -260,19 +265,19 @@ if (flagTiny)
     }
 }
 
-// ── unicode: Chinese filename ──
+// -- unicode: Chinese filename --
 if (flagUnicode)
 {
     var d = Path.Combine(resultDir, "unicode"); Directory.CreateDirectory(d);
-    string uf = Path.Combine(d, "测试文件_😊_fîlë.mp4");
+    string uf = Path.Combine(d, "test_file_unicode_support.mp4");
     // Copy original test file to unicode path
     byte[] srcData = File.ReadAllBytes(testFile);
     File.WriteAllBytes(uf, srcData);
     var s = new LocalDssaAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
-    string fp; using (var e = new RDRFEngine(pw, s)) fp = e.BackupFile(uf, "FSS1", originalFilename: "测试文件_😊_fîlë.mp4", fragmentSize: fragSize);
+    string fp; using (var e = new RDRFEngine(pw, s)) fp = e.BackupFile(uf, "FSS1", originalFilename: "test_file_unicode_support.mp4", fragmentSize: fragSize);
     // Check index has original name
     byte[] ei = s.ReadIndex(fp); var (_, cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(ei, r()); var idx = IndexManager.DeserializeIndex(cbor);
-    bool nameOk = idx.OriginalName == "测试文件_😊_fîlë.mp4";
+    bool nameOk = idx.OriginalName == "test_file_unicode_support.mp4";
     string op = Path.Combine(d, "restored.bin"); extraSw.Restart();
     bool rec; using (var ro = new RestoreOrchestrator(r(), s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
     long t = extraSw.ElapsedMilliseconds; bool sha = rec && File.Exists(op) && VerifySha(op, originalHash);
@@ -280,7 +285,7 @@ if (flagUnicode)
     Console.WriteLine($"  Unicode filename: {(rec && sha && nameOk ? "PASS" : "FAIL")} ({t}ms)");
 }
 
-// ── corrupt-idx: malformed index handling ──
+// -- corrupt-idx: malformed index handling --
 if (flagCorruptIdx)
 {
     var d = Path.Combine(resultDir, "corrupt_idx"); Directory.CreateDirectory(d);
@@ -298,7 +303,7 @@ if (flagCorruptIdx)
     Console.WriteLine($"  Corrupt index: {(graceful ? "PASS (graceful)" : "FAIL")}");
 }
 
-// ── many: high fragment count ──
+// -- many: high fragment count --
 if (flagMany)
 {
     var d = Path.Combine(resultDir, "many"); Directory.CreateDirectory(d);
@@ -328,7 +333,7 @@ if (flagMetadata)
     Console.WriteLine($"  Metadata: {(created && hasEntries ? "PASS" : "FAIL")} (at {mp})");
 }
 
-// ── kdf-bench: PBKDF2 timing ──
+// -- kdf-bench: PBKDF2 timing --
 if (flagKdfBench)
 {
     var pw = EncryptionLayer.GenerateRcCode(32);
@@ -369,7 +374,7 @@ if (flagCustomName)
     Console.WriteLine($"  Custom name: {(cnExist && sha && nameOk ? "PASS" : "FAIL")} ({t}ms)");
 }
 
-// ── zeromem: key zeroing after dispose ──
+// -- zeromem: key zeroing after dispose --
 if (flagZeroMem)
 {
     // We can't easily reflect into private fields from here without InternalsVisibleTo.
@@ -397,11 +402,11 @@ if (flagZeroMem)
     Console.WriteLine($"  ZeroMem: {(pwIntact && rec && sha ? "PASS" : "FAIL")} (pw_intact={pwIntact} recoverable={rec})");
 }
 
-// ── Strategy loop (original behavior) ──
+// -- Strategy loop (original behavior) --
 foreach (string strategy in strategies)
 {
     Console.ForegroundColor = ConsoleColor.Yellow;
-    Console.WriteLine($"── [{strategy}] ──");
+    Console.WriteLine($"-- [{strategy}] --");
     Console.ResetColor();
 
     var testRoot = Path.Combine(resultDir, strategy);
@@ -429,7 +434,7 @@ foreach (string strategy in strategies)
     Console.WriteLine($"  Backup: {totalFrags} total frags ({origCount} original, sizes={index.OriginalFragmentSizes.Count})");
     Console.WriteLine($"  Time: {backupTime:F0}ms");
 
-    // ── Baseline ──
+    // -- Baseline --
     bool baselineOk = false;
     extraSw.Restart();
     string baseOut = Path.Combine(testRoot, "baseline_restored.bin");
@@ -451,7 +456,7 @@ foreach (string strategy in strategies)
         continue;
     }
 
-    // ── Incremental loss ──
+    // -- Incremental loss --
     var incResults = new List<(double lossPct, int trial, bool ok)>();
     int[] lossPcts = strategy is "FSS3" or "FSS6" or "FSS6.1" or "FSS6.2"
         ? [5, 10, 15, 20, 30]
@@ -479,8 +484,8 @@ foreach (string strategy in strategies)
 
     if (strategy is "FSS6.1" or "FSS6.2")
     {
-        // ── Block corruption incremental (FSS6.1/6.2 only) ──
-        // ── Block corruption incremental (FSS6.1/6.2 only) ──
+        // -- Block corruption incremental (FSS6.1/6.2 only) --
+        // -- Block corruption incremental (FSS6.1/6.2 only) --
         const int blockSize = 256;
         var decodedFrags = new (byte[] fragData, byte[] embeddedIdx, byte[]? salt)[totalFrags];
         var cleanFrags = new byte[totalFrags][];
@@ -604,7 +609,7 @@ foreach (string strategy in strategies)
             for (int i = 0; i < totalFrags; i++)
                 if (!toDelete.Contains(i))
                     File.WriteAllBytes(Path.Combine(trialDir, $"{prefix}_{i}.rdrf"), allFragBytes[i]);
-            // NOTE: deleted fragments are NOT written at all �?file doesn't exist
+            // NOTE: deleted fragments are NOT written at all - file doesn't exist
 
             // Also copy the .rdrc file if present (needed for ETN cross-validation)
             string rcSrcP = Path.Combine(testRoot, $"{prefix}.rdrc");
@@ -631,7 +636,7 @@ foreach (string strategy in strategies)
     }
     }
 
-    // ── Greedy test (phase 1): from i=0..N-1, delete each, recover, keep if ok, skip if fail ──
+    // -- Greedy test (phase 1): from i=0..N-1, delete each, recover, keep if ok, skip if fail --
     var greedyDir = Path.Combine(testRoot, "greedy");
     Directory.CreateDirectory(greedyDir);
     var greedyKept = new HashSet<int>();
@@ -666,7 +671,7 @@ foreach (string strategy in strategies)
     double greedyStrength = (double)greedyKept.Count / totalFrags * 100;
     Console.WriteLine($"  Greedy: max deleted {greedyKept.Count}/{totalFrags} = {greedyStrength:F1}%");
 
-    // ── Custom tests (phase 2�?: strategy-specific targeted patterns ──
+    // --- Custom tests (phase 2): strategy-specific targeted patterns ---
     var customResults = new List<(string name, double lossPct, bool ok)>();
 
     if (strategy is "FSS1" or "FSS2" or "FSS2R")
@@ -721,7 +726,7 @@ foreach (string strategy in strategies)
         customResults.Add(("keep_one", (double)sDel / totalFrags * 100, sR && sSha));
     }
 
-    // FSS6.1: block corruption test �?corrupt encrypted bytes directly
+    // FSS6.1: block corruption test - corrupt encrypted bytes directly
     if (strategy is "FSS6.1" or "FSS6.2")
     {
         var bcDir = Path.Combine(testRoot, "custom_block_corrupt");
@@ -766,7 +771,7 @@ foreach (string strategy in strategies)
         customResults.Add(("block_corrupt", 0, bcR && bcSha));
     }
 
-    // ── Targeted tests ──
+    // -- Targeted tests --
     var targetResults = new List<(string testName, double lossPct, bool ok)>();
 
     // FSS3: exact boundary tests
@@ -888,7 +893,7 @@ foreach (string strategy in strategies)
         targetResults.Add(("no_redundancy", 1.0/totalFrags*100, !ro));
     }
 
-    // ── Compute max loss from incremental data ──
+    // -- Compute max loss from incremental data --
     double maxSurvivedPct = 0;
     double maxFailedPct = 0;
     foreach (var inc in incResults)
@@ -899,7 +904,7 @@ foreach (string strategy in strategies)
             maxFailedPct = inc.lossPct;
     }
 
-    // FSS3 starts failing at 2 lost, which is 2/21 �?9.5%
+    // FSS3 starts failing at 2 lost, which is 2/21 ~9.5%
     double theoreticalMax = strategy switch
     {
         "FSS1" => 50.0,
@@ -925,7 +930,7 @@ foreach (string strategy in strategies)
     });
 
     Console.WriteLine($"  Fragments: {totalFrags} total ({origCount} orig)");
-    Console.WriteLine($"  Incremental: {incResults.Count} levels × 3 trials");
+    Console.WriteLine($"  Incremental: {incResults.Count} levels x 3 trials");
     Console.WriteLine($"  Greedy: {greedyKept.Count}/{totalFrags} = {greedyStrength:F1}%");
     Console.WriteLine($"  Custom: {customResults.Count} tests");
     Console.WriteLine($"  Targeted tests: {targetResults.Count}");
@@ -936,7 +941,7 @@ foreach (string strategy in strategies)
     catch { /* best effort */ }
 }
 
-// ── Summary Table ──
+// -- Summary Table --
 Console.ForegroundColor = ConsoleColor.White;
 Console.WriteLine("+----------+------+----------+--------------+--------------+------------+----------+----------------------+");
 Console.WriteLine("| Strategy |Frags | Baseline | Theoretical  | Max Survived | Min Failed | Greedy   | Notes                |");
@@ -976,13 +981,13 @@ Console.ForegroundColor = ConsoleColor.White;
 Console.WriteLine("+----------+------+----------+--------------+--------------+------------+----------+----------------------+");
 Console.ResetColor();
 
-// ── Write CSV ──
+// -- Write CSV --
 string csvPath = Path.Combine(resultDir, "fss_recovery_results.csv");
 File.WriteAllLines(csvPath, csv);
 Console.WriteLine($"\n  CSV: {csvPath}");
 
-// ── Print CSV to console ──
-Console.WriteLine("\n── Raw CSV Data ──");
+// -- Print CSV to console --
+Console.WriteLine("\n-- Raw CSV Data --");
     foreach (string line in csv)
         Console.WriteLine($"  {line}");
 
@@ -997,8 +1002,8 @@ finally
 
 return 0;
 
-// ══════════════════════════════════════════════�?//  Helpers
-// ══════════════════════════════════════════════�?
+// ================================================================//  Helpers
+// ================================================================
 static bool VerifySha(string filePath, byte[] expectedHash)
 {
     try

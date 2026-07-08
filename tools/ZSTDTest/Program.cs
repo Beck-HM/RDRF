@@ -74,7 +74,7 @@ finally
 }
 return 0;
 
-// ── Generate ──
+// -- Generate --
 
 static List<(string, long, byte[])> GenerateTextData(string dir, int sizeMb)
 {
@@ -191,7 +191,7 @@ static byte[] GenerateRandomChunk(Random rng, int size)
     return buf;
 }
 
-// ── Run single test ──
+// -- Run single test --
 
 static (double ratio, double compMbps, double decompGbps, long compBytes, bool shaOk) RunSingleTest(
     byte[] original, byte[] shaOriginal, int level)
@@ -225,7 +225,7 @@ static (double ratio, double compMbps, double decompGbps, long compBytes, bool s
     bool shaOk = CryptographicOperations.FixedTimeEquals(shaOriginal, SHA256.HashData(check));
 
     double pct = (double)best.compressed.Length / original.Length * 100;
-    Console.Write($" | L{level} {ratio,5:F2}x {compMbps,6:F0}MB/s {decompGbps,4:F2}GB/s {best.compressed.Length,8:N0}B({pct,4:F1}%) {(shaOk ? "✓" : "✗")}");
+    Console.Write($" | L{level} {ratio,5:F2}x {compMbps,6:F0}MB/s {decompGbps,4:F2}GB/s {best.compressed.Length,8:N0}B({pct,4:F1}%) {(shaOk ? "[OK]" : "[FAIL]")}");
     return (ratio, compMbps, decompGbps, best.compressed.Length, shaOk);
 }
 
@@ -239,7 +239,7 @@ static byte[] Decompress(byte[] compressed, int originalSize)
     return Zstd.Decompress(compressed, originalSize);
 }
 
-// ── Output ──
+// -- Output --
 
 static void PrintTable(List<TestResult> results, int[] levels)
 {
@@ -250,17 +250,17 @@ static void PrintTable(List<TestResult> results, int[] levels)
     foreach (var grp in results.GroupBy(r => r.Name))
     {
         Console.WriteLine($"  {grp.Key,-30} {grp.First().Size,10:N0} bytes");
-        Console.WriteLine($"  {'─',30} {'─',10} {'─',8} {'─',12} {'─',8} {'─',8} {'─',8}");
+        Console.WriteLine($"  {'-',30} {'-',10} {'-',8} {'-',12} {'-',8} {'-',8} {'-',8}");
         Console.WriteLine($"  {"Level",30} {"Ratio",10} {"Stored",8} {"Overhead",12} {"Comp",8} {"Decomp",8} {"SHA",8}");
         Console.WriteLine($"  {"",30} {"",10} {"Bytes",8} {"%",12} {"MB/s",8} {"GB/s",8} {"",8}");
-        Console.WriteLine($"  {'─',30} {'─',10} {'─',8} {'─',12} {'─',8} {'─',8} {'─',8}");
+        Console.WriteLine($"  {'-',30} {'-',10} {'-',8} {'-',12} {'-',8} {'-',8} {'-',8}");
         foreach (var r in grp.OrderBy(r => r.Level))
         {
             double pct = (double)r.CompressedBytes / r.Size * 100;
             string overhead = r.CompressedBytes < r.Size
                 ? $"-{(1 - (double)r.CompressedBytes / r.Size) * 100,5:F1}%"
                 : $"+{pct - 100,5:F1}%";
-            Console.WriteLine($"  {r.Level,30} {r.Ratio,10:F2}x {r.CompressedBytes,8:N0} {overhead,12} {r.CompMbps,8:F0} {r.DecompGbps,8:F2} {(r.ShaOk ? "✓" : "✗"),8}");
+            Console.WriteLine($"  {r.Level,30} {r.Ratio,10:F2}x {r.CompressedBytes,8:N0} {overhead,12} {r.CompMbps,8:F0} {r.DecompGbps,8:F2} {(r.ShaOk ? "[OK]" : "[FAIL]"),8}");
         }
         Console.WriteLine();
     }
@@ -286,14 +286,14 @@ static void PrintSummary(List<TestResult> results)
     var bestOverhead = results.Where(r => r.CompressedBytes < r.Size)
         .MaxBy(r => (double)r.Size / r.CompressedBytes)!;
 
-    Console.WriteLine("═══════════════════════════════════════════════════════════════");
+    Console.WriteLine("================================================================");
     Console.WriteLine("Summary:");
-    Console.WriteLine($"  Best ratio:           {bestRatio.Name} @ L{bestRatio.Level} = {bestRatio.Ratio:F2}x  ({bestRatio.CompressedBytes:N0} → {bestRatio.Size:N0} bytes)");
+    Console.WriteLine($"  Best ratio:           {bestRatio.Name} @ L{bestRatio.Level} = {bestRatio.Ratio:F2}x  ({bestRatio.CompressedBytes:N0} -> {bestRatio.Size:N0} bytes)");
     Console.WriteLine($"  Best compress speed:   {bestComp.Name} @ L{bestComp.Level} = {bestComp.CompMbps:F0} MB/s");
     Console.WriteLine($"  Best decompress speed:  {bestDecomp.Name} @ L{bestDecomp.Level} = {bestDecomp.DecompGbps:F2} GB/s");
     if (bestOverhead != null)
         Console.WriteLine($"  Best space saving:     {bestOverhead.Name} @ L{bestOverhead.Level} = {(1 - (double)bestOverhead.CompressedBytes / bestOverhead.Size) * 100:F1}%");
-    Console.WriteLine("═══════════════════════════════════════════════════════════════");
+    Console.WriteLine("================================================================");
 }
 
 static void CleanupDataDir(string dir)
@@ -302,7 +302,7 @@ static void CleanupDataDir(string dir)
     catch { }
 }
 
-// ── AES Benchmark ──
+// -- AES Benchmark --
 
 static void RunAesBenchmark()
 {
@@ -348,7 +348,7 @@ static void RunAesBenchmark()
     Console.WriteLine($"  AES-NI path: {(RDRF.Core.Encryption.AesNiCtr.IsSupported ? "AES-NI intrinsics (~5 GB/s)" : "Batch TransformBlock (~2 GB/s)")}");
 }
 
-// ── LZ4 Benchmark ──
+// -- LZ4 Benchmark --
 
 static void RunLz4Benchmark(string[] args)
 {
@@ -411,7 +411,7 @@ static void RunLz4Benchmark(string[] args)
             bool shaOk = CryptographicOperations.FixedTimeEquals(shaOriginal, SHA256.HashData(check));
 
             double pct = (double)best.compressed.Length / original.Length * 100;
-            Console.Write($" | L{level} {ratio,5:F2}x {compMbps,6:F0}MB/s {decompGbps,4:F2}GB/s {best.compressed.Length,8:N0}B({pct,4:F1}%) {(shaOk ? "✓" : "✗")}");
+            Console.Write($" | L{level} {ratio,5:F2}x {compMbps,6:F0}MB/s {decompGbps,4:F2}GB/s {best.compressed.Length,8:N0}B({pct,4:F1}%) {(shaOk ? "[OK]" : "[FAIL]")}");
             results.Add(new TestResult(name, size, level, ratio, compMbps, decompGbps, best.compressed.Length, shaOk));
         }
         Console.WriteLine();
@@ -424,6 +424,6 @@ static void RunLz4Benchmark(string[] args)
     CleanupDataDir(dataDir);
 }
 
-// ── Models ──
+// -- Models --
 
 record TestResult(string Name, long Size, int Level, double Ratio, double CompMbps, double DecompGbps, long CompressedBytes, bool ShaOk);
