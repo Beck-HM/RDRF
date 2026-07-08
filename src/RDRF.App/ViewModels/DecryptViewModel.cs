@@ -281,7 +281,7 @@ public class DecryptViewModel : ViewModelBase, IDisposable
             }
             else
             {
-                FileHint = "Index mode — select .rdrf fragment to use embedded index";
+                FileHint = "Index mode - select .rdrf fragment to use embedded index";
             }
         }
     }

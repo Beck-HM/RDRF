@@ -1,3 +1,4 @@
+using RDRF.Core.Abstractions;
 using System.Security.Cryptography;
 
 namespace RDRF.Core.Dssa;
@@ -44,7 +45,7 @@ public class StorageOrchestrator
         var backend = SelectBackend(options);
         var path = BuildPath(options.Fingerprint, options.VersionNumber, options.FragmentIndex);
         var hash = SHA256.HashData(data);
-        var hashHex = Convert.ToHexString(hash).ToLowerInvariant();
+        var hashHex = Hex.EncodeLower(hash);
 
         await using var stream = await backend.OpenWriteAsync(path, data.Length, progress)
             .ConfigureAwait(false);
@@ -61,7 +62,7 @@ public class StorageOrchestrator
         var backend = SelectBackendForRc(options);
         var path = BuildRcPath(options.Fingerprint, options.VersionNumber);
         var hash = SHA256.HashData(data);
-        var hashHex = Convert.ToHexString(hash).ToLowerInvariant();
+        var hashHex = Hex.EncodeLower(hash);
 
         await using var stream = await backend.OpenWriteAsync(path, data.Length, progress)
             .ConfigureAwait(false);
@@ -232,4 +233,6 @@ public class StorageOrchestrator
     private static string BuildRcPath(string fingerprint, int version)
         => $"{fingerprint}_v{version}.rdrc";
 }
+
+
 

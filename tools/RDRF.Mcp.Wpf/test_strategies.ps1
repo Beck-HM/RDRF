@@ -1,9 +1,9 @@
 # RDRF WPF MCP - Full Strategy Verification
 $ErrorActionPreference = "Continue"
-$root = "F:\RDRF\RDRF.NET"
-$testOut = "$root\tests\RDRF_TestOutput"
-$mcpWpf = "$root\tools\RDRF.Mcp.Wpf"
-$mcpCore = "$root\tools\RDRF.Mcp.Core"
+$root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$testOut = Join-Path $root "tests\RDRF_TestOutput"
+$mcpWpf = Join-Path $root "tools\RDRF.Mcp.Wpf"
+$mcpCore = Join-Path $root "tools\RDRF.Mcp.Core"
 $testFile = "$testOut\verify_10mb.dat"
 $storageDir = "$testOut\verify_backups"
 $restoreDir = "$testOut\verify_restored"

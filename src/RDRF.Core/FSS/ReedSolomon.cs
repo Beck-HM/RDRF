@@ -88,9 +88,11 @@ public class ReedSolomon
         int presentCount = _totalShards - erasures.Count;
         if (presentCount < _dataShards) return false;
 
+        var erased = new bool[_totalShards];
+        foreach (var e in erasures) erased[e] = true;
         var presentIndices = new List<int>();
         for (int i = 0; i < _totalShards; i++)
-            if (!erasures.Contains(i)) presentIndices.Add(i);
+            if (!erased[i]) presentIndices.Add(i);
 
         var decodeIndices = presentIndices.Take(_dataShards).ToList();
 

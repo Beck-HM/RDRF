@@ -12,7 +12,7 @@ public class MediaDiffTests
     private readonly ITestOutputHelper _output;
     public MediaDiffTests(ITestOutputHelper output) => _output = output;
 
-    // ── ImageDiffStrategy ──
+    // -- ImageDiffStrategy --
 
     [Fact]
     public void Image_MatchScore_Extensions()
@@ -78,7 +78,7 @@ public class MediaDiffTests
         Assert.Contains("bmp", result.HumanDiff.ToLowerInvariant());
     }
 
-    // ── MediaDiffStrategy ──
+    // -- MediaDiffStrategy --
 
     [Fact]
     public void Media_MatchScore_AudioExtensions()

@@ -45,7 +45,7 @@ public static class AesNiCtr
         {
             var rk = ExpandKey256(aesKey);
             var counter = BuildCounter(nonce);
-            const int KeyBlockLen = 4096; // 256 AES blocks × 16 bytes
+            const int KeyBlockLen = 4096; // 256 AES blocks x 16 bytes
             byte[] buffer = new byte[bufferSize];
 
             while (true)
@@ -124,7 +124,7 @@ public static class AesNiCtr
         }
     }
 
-    // ── Key Expansion (AES-256, 15 round keys) ──
+    // -- Key Expansion (AES-256, 15 round keys) --
 
     private static readonly byte[] Rcon = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36];
 
@@ -157,7 +157,7 @@ public static class AesNiCtr
             13, 14, 15, 12, 13, 14, 15, 12));
     }
 
-    // ── Counter ──
+    // -- Counter --
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector128<byte> BuildCounter(byte[] nonce)
@@ -178,7 +178,7 @@ public static class AesNiCtr
             BinaryPrimitives.ReverseEndianness(lo)).AsByte();
     }
 
-    // ── AES-256 Encrypt Single Block (14 rounds) ──
+    // -- AES-256 Encrypt Single Block (14 rounds) --
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector128<byte> AesEncryptBlock(Vector128<byte> block, Vector128<byte>[] rk)
@@ -201,7 +201,7 @@ public static class AesNiCtr
         return state;
     }
 
-    // ── Core AES-NI CTR Loop (8-block batched, round-by-round interleaving) ──
+    // -- Core AES-NI CTR Loop (8-block batched, round-by-round interleaving) --
 
     private static void CtrCryptCoreAesNi(ReadOnlySpan<byte> src, Span<byte> dst,
         Vector128<byte>[] rk, ref Vector128<byte> counter)
@@ -296,7 +296,7 @@ public static class AesNiCtr
         }
     }
 
-    // ── XorSpan: SIMD XOR with AVX2/SSE2 fallback ──
+    // -- XorSpan: SIMD XOR with AVX2/SSE2 fallback --
 
     private static void XorSpan(Span<byte> buffer, ReadOnlySpan<byte> keystream)
     {
@@ -318,10 +318,11 @@ public static class AesNiCtr
             buffer[xorIdx] ^= keystream[xorIdx];
     }
 
-    // ── Fallback (batch TransformBlock) ──
+    // -- Fallback (batch TransformBlock) --
 
     private static void CtrCryptCoreFallback(ReadOnlySpan<byte> src, Span<byte> dst, byte[] aesKey, byte[] nonce)
     {
+        if (src.Length == 0) return;
         int blockCount = (src.Length + 15) / 16;
         int bufSize = blockCount * 16;
         byte[] counters = ArrayPool<byte>.Shared.Rent(bufSize);

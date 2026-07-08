@@ -9,17 +9,17 @@ namespace RDRF.Core;
 /// Top-level public facade for backup and restore operations.
 ///
 /// Call chain:
-///   External caller → RDRFEngine.BackupFile/BackupFileAsync
-///     → BackupOrchestrator.BackupFile/BackupFileAsync
-///       → stream read → fragment → LZ4 → FSS encode → AES-CTR encrypt → write
+///   External caller -> RDRFEngine.BackupFile/BackupFileAsync
+///     -> BackupOrchestrator.BackupFile/BackupFileAsync
+///       -> stream read -> fragment -> LZ4 -> FSS encode -> AES-CTR encrypt -> write
 ///
-///   External caller → RDRFEngine.RestoreFile/RestoreFileAsync
-///     → RestoreOrchestrator.RestoreFile/RestoreFileAsync
-///       → read → AES-CTR decrypt → FSS decode → LZ4 decompress → merge
+///   External caller -> RDRFEngine.RestoreFile/RestoreFileAsync
+///     -> RestoreOrchestrator.RestoreFile/RestoreFileAsync
+///       -> read -> AES-CTR decrypt -> FSS decode -> LZ4 decompress -> merge
 ///
 /// Two constructors provide flexibility:
-///   (byte[] rcCode, ...) — derives the AES key from rcCode via DeriveKeyLegacy.
-///   (byte[] aesKey, byte[] rcCode, ...) — accepts a pre-derived AES key
+///   (byte[] rcCode, ...) - derives the AES key from rcCode via DeriveKeyLegacy.
+///   (byte[] aesKey, byte[] rcCode, ...) - accepts a pre-derived AES key
 ///     for callers that already have it.
 ///
 /// Dispose zeroes the rcCode from memory and disposes the orchestrators.
@@ -56,7 +56,7 @@ public class RDRFEngine : IDisposable
         _restore = new RestoreOrchestrator(aesKey, _rcCode, storage, fssEngine);
     }
 
-    // ── Backup ──
+    // -- Backup --
 
     /// <summary>
     /// Synchronous backup. Reads the file, splits into fragments, compresses
@@ -92,7 +92,7 @@ public class RDRFEngine : IDisposable
         IProgress<RdrfProgressReport>? progress = null)
         => BackupFile(filePath.FullName, fssStrategy, auxiliary, fragmentSize: fragmentSize, customName: customName, progress: progress);
 
-    // ── Restore ──
+    // -- Restore --
 
     /// <summary>
     /// Synchronous restore. Reads encrypted fragments, AES-CTR decrypts,
@@ -135,7 +135,7 @@ public class RDRFEngine : IDisposable
         CancellationToken cancellationToken = default)
         => _restore.RestoreFileAsync(fileFingerprint, outputPath, allowFssRecovery, filePrefix, progress, cancellationToken);
 
-    // ── Backup Async ──
+    // -- Backup Async --
 
     /// <summary>
     /// Asynchronous backup. Streams the file, hashes incrementally,
@@ -153,7 +153,7 @@ public class RDRFEngine : IDisposable
         CancellationToken cancellationToken = default)
         => _backup.BackupFileAsync(filePath, fssStrategy, auxiliaryStrategies, originalFilename, fragmentSize, customName, progress, cancellationToken);
 
-    // ── Fragment-Based Restore ──
+    // -- Fragment-Based Restore --
 
     /// <summary>
     /// Restore from fragment files without an index file. Uses the first
@@ -190,12 +190,12 @@ public class RDRFEngine : IDisposable
         CancellationToken cancellationToken = default)
         => _restore.RestoreFileFromFragmentsAsync(filePrefix, outputPath, allowFssRecovery, progress, cancellationToken);
 
-    // ── Utility Methods ──
+    // -- Utility Methods --
 
     /// <summary>Returns true if an index file exists for the given fingerprint.</summary>
     public bool FileExists(string fileFingerprint) => _storage.IndexExists(fileFingerprint);
 
-    // ── Dispose ──
+    // -- Dispose --
 
     /// <summary>
     /// Zeroes the rcCode from memory and disposes the orchestrators.

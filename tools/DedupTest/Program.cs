@@ -83,7 +83,7 @@ swTotal.Stop();
 Console.WriteLine($"\n===== Results: {passed}/{total} passed, {failed} failed ({swTotal.Elapsed.TotalSeconds:F1}s) =====");
 return failed > 0 ? 1 : 0;
 
-// ─── Helpers ───
+// --- Helpers ---
 
 static async Task<string> BackupAsync(string filePath, DssaAdapter storage, byte[] password,
     string message, string fssStrategy, int fragmentSize)
@@ -111,7 +111,7 @@ static bool VerifyRestore(string indexFile, byte[] expected, byte[] password)
     finally { try { File.Delete(outFile); } catch { } }
 }
 
-// ─── Scenario 1: Full dedup ───
+// --- Scenario 1: Full dedup ---
 static async Task<(bool Ok, string? Message)> Scenario1_FullDedup(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
@@ -123,7 +123,7 @@ static async Task<(bool Ok, string? Message)> Scenario1_FullDedup(string dir, st
     string fp2 = await BackupAsync(file, storage, pwd, "V2", strategy, fragSize);
     string fp3 = await BackupAsync(file, storage, pwd, "V3", strategy, fragSize);
 
-    // All three return SAME fingerprint (identical content → no new backup)
+    // All three return SAME fingerprint (identical content -> no new backup)
     if (fp1 != fp2 || fp2 != fp3) return Fail($"Fingerprints differ: {fp1} {fp2} {fp3}");
 
     var idx1 = LoadIndex(storage, fp1, pwd);
@@ -139,8 +139,8 @@ static async Task<(bool Ok, string? Message)> Scenario1_FullDedup(string dir, st
     return Pass($"1fp {idx1.Versions.Count} versions restore ok");
 }
 
-// ─── Scenario 2: Partial dedup ───
-// V1(4KB) → V2(last 512B changed, incremental) → V3(first 512B changed, incremental)
+// --- Scenario 2: Partial dedup ---
+// V1(4KB) -> V2(last 512B changed, incremental) -> V3(first 512B changed, incremental)
 // V3 should reference V2's unchanged fragments.
 static async Task<(bool Ok, string? Message)> Scenario2_PartialDedup(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
@@ -160,7 +160,7 @@ static async Task<(bool Ok, string? Message)> Scenario2_PartialDedup(string dir,
     string fp2 = await BackupAsync(file, storage, pwd, "V2", strategy, fragSize);
     // V2 populates DedupMap: 14 unchanged + 2 changed = 16 entries, all mapped to fp2
 
-    // V3: change first 512 bytes — 14 fragments unchanged from V2, 2 new
+    // V3: change first 512 bytes - 14 fragments unchanged from V2, 2 new
     rng = new Random(123);
     rng.NextBytes(new Span<byte>(data, 0, 512));
     File.WriteAllBytes(file, data);
@@ -191,7 +191,7 @@ static async Task<(bool Ok, string? Message)> Scenario2_PartialDedup(string dir,
     return Pass($"V3svFromV2={svFromV2} dedupMap={idx3.DedupMap.Count}");
 }
 
-// ─── Scenario 3: Cross-position reference ───
+// --- Scenario 3: Cross-position reference ---
 static async Task<(bool Ok, string? Message)> Scenario3_CrossPosition(string dir, string file, byte[] pwd)
 {
     var storage = new LocalDssaAdapter(dir);
@@ -227,7 +227,7 @@ static async Task<(bool Ok, string? Message)> Scenario3_CrossPosition(string dir
     return Pass($"{cross.Count} cross-refs (e.g. frag {cross[0].Index}->V2:{cross[0].SourceIndex})");
 }
 
-// ─── Scenario 4: Fragment count decreases ───
+// --- Scenario 4: Fragment count decreases ---
 static async Task<(bool Ok, string? Message)> Scenario4_FragmentCountDown(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
@@ -245,7 +245,7 @@ static async Task<(bool Ok, string? Message)> Scenario4_FragmentCountDown(string
     return Pass("V2 restored ok");
 }
 
-// ─── Scenario 5: Fragment count increases ───
+// --- Scenario 5: Fragment count increases ---
 static async Task<(bool Ok, string? Message)> Scenario5_FragmentCountUp(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
@@ -267,7 +267,7 @@ static async Task<(bool Ok, string? Message)> Scenario5_FragmentCountUp(string d
     return Pass("V2 restored ok");
 }
 
-// ─── Scenario 6: RefCount cleanup ───
+// --- Scenario 6: RefCount cleanup ---
 static async Task<(bool Ok, string? Message)> Scenario6_RefCountCleanup(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
@@ -294,7 +294,7 @@ static async Task<(bool Ok, string? Message)> Scenario6_RefCountCleanup(string d
     return Pass("V3 restore ok, V4 restore ok");
 }
 
-// ─── Scenario 7: Old versions restorable ───
+// --- Scenario 7: Old versions restorable ---
 static async Task<(bool Ok, string? Message)> Scenario7_OldVersionsRestorable(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
@@ -321,7 +321,7 @@ static async Task<(bool Ok, string? Message)> Scenario7_OldVersionsRestorable(st
     return Pass("V1+V2+V3 all ok");
 }
 
-// ─── Scenario 8: FSS6.2 + dedup + corruption ───
+// --- Scenario 8: FSS6.2 + dedup + corruption ---
 static async Task<(bool Ok, string? Message)> Scenario8_Fss62DedupWithCorruption(string dir, string file, byte[] pwd)
 {
     var storage = new LocalDssaAdapter(dir);
@@ -338,7 +338,7 @@ static async Task<(bool Ok, string? Message)> Scenario8_Fss62DedupWithCorruption
 
     // V3: same as V2 (unchanged fragments should reference V2's dedup entries)
     string fp3 = await BackupAsync(file, storage, pwd, "V3", "FSS6.2", 256);
-    // If fp3 == fp2 (no change), V3 didn't create new backup — can't test corruption this way.
+    // If fp3 == fp2 (no change), V3 didn't create new backup - can't test corruption this way.
     // Alternative: V3 changes different part, so V3 HAS its own index with refs to V2.
     if (fp3 == fp2)
     {
@@ -378,7 +378,7 @@ static async Task<(bool Ok, string? Message)> Scenario8_Fss62DedupWithCorruption
     return Pass($"Corrupted dedup-referenced V2 frag {si}, V3+FSS62 recovered");
 }
 
-// ─── Scenario 9: FSS3 + dedup ───
+// --- Scenario 9: FSS3 + dedup ---
 static async Task<(bool Ok, string? Message)> Scenario9_Fss3Dedup(string dir, string file,
     byte[] pwd, int fragSize)
 {
@@ -400,7 +400,7 @@ static async Task<(bool Ok, string? Message)> Scenario9_Fss3Dedup(string dir, st
     return Pass($"svCount={sv} dedupMap={idx2.DedupMap?.Count ?? 0}");
 }
 
-// ─── Scenario 10: LZ4 roundtrip ───
+// --- Scenario 10: LZ4 roundtrip ---
 static Task<(bool Ok, string? Message)> Scenario10_Lz4Roundtrip()
 {
     byte[] data = RandomNumberGenerator.GetBytes(65536);
@@ -414,10 +414,10 @@ static Task<(bool Ok, string? Message)> Scenario10_Lz4Roundtrip()
         return Task.FromResult(Fail("LZ4 roundtrip data mismatch"));
 
     int delta = compressed.Length - data.Length;
-    return Task.FromResult(Pass($"LZ4 frame: {data.Length}→{compressed.Length}→{decompressed.Length} ({delta:+0;-0})"));
+    return Task.FromResult(Pass($"LZ4 frame: {data.Length}->{compressed.Length}->{decompressed.Length} ({delta:+0;-0})"));
 }
 
-// ─── Scenario 11: Chain ref count ───
+// --- Scenario 11: Chain ref count ---
 static async Task<(bool Ok, string? Message)> Scenario11_ChainRefCount(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
@@ -442,7 +442,7 @@ static async Task<(bool Ok, string? Message)> Scenario11_ChainRefCount(string di
     return Pass($"refSources={srcVersions?.Count ?? 0} dedupMap={idx4.DedupMap?.Count ?? 0}");
 }
 
-// ─── Scenario 12: Corrupted index ───
+// --- Scenario 12: Corrupted index ---
 static async Task<(bool Ok, string? Message)> Scenario12_CorruptedIndex(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
@@ -471,6 +471,6 @@ static async Task<(bool Ok, string? Message)> Scenario12_CorruptedIndex(string d
     }
 }
 
-// ─── Helpers for results ───
+// --- Helpers for results ---
 static (bool Ok, string? Message) Pass(string? msg = null) => (true, msg);
 static (bool Ok, string? Message) Fail(string? msg = null) => (false, msg);

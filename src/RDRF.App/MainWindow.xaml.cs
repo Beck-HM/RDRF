@@ -109,7 +109,7 @@ public partial class MainWindow : Window
             bitmap.EndInit();
             AppIconImage.Source = bitmap;
         }
-        catch { }
+        catch (Exception ex) { Debug.WriteLine($"[RDRF] Failed to set window icon: {ex.Message}"); }
 
         // NotifyIcon for system tray
         var showItem = new System.Windows.Controls.MenuItem { Header = "Show" };
@@ -162,7 +162,7 @@ public partial class MainWindow : Window
             var src = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
             src?.AddHook(WndProc);
         }
-        catch { }
+        catch (Exception ex) { Debug.WriteLine($"[RDRF] Failed to register WndProc: {ex.Message}"); }
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -194,7 +194,7 @@ public partial class MainWindow : Window
                     string action = root.GetProperty("action").GetString() ?? "";
                     string value = root.TryGetProperty("value", out var valueEl) ? valueEl.GetString() ?? "" : "";
 
-                    // WndProc runs on UI thread — dispatch directly
+                    // WndProc runs on UI thread - dispatch directly
                     switch (action)
                     {
                             case "set_encrypt_path":
@@ -227,12 +227,12 @@ public partial class MainWindow : Window
                                     _encryptVM.SetPassword(EncryptKeyBox.Password);
                                     _encryptVM.FragmentSizeMB = int.TryParse(FragmentSizeMB.Text, out int mb) && mb >= 1 ? mb : 1;
                                     _encryptVM.CustomName = CustomNameBox.Text;
-                                    // OutputPath was set by set_output_path IPC — keep ViewModel value
+                                    // OutputPath was set by set_output_path IPC - keep ViewModel value
                                     _encryptVM.StartEncrypt();
                                 }
                                 catch (Exception ex_start)
                                 {
-                                    try { System.IO.File.AppendAllText(@"F:\RDRF\RDRF.NET\tests\RDRF_TestOutput\rdrf_error.txt",
+                                    try { System.IO.File.AppendAllText("rdrf_TestOutput\\rdrf_error.txt",
                                         $"[{DateTime.Now:HH:mm:ss}] start_encrypt failed: {ex_start}{Environment.NewLine}"); }
                                     catch { }
                                 }
@@ -260,7 +260,7 @@ public partial class MainWindow : Window
                                 }
                                 catch (Exception ex_start)
                                 {
-                                    try { System.IO.File.AppendAllText(@"F:\RDRF\RDRF.NET\tests\RDRF_TestOutput\rdrf_error.txt",
+                                    try { System.IO.File.AppendAllText("rdrf_TestOutput\\rdrf_error.txt",
                                         $"[{DateTime.Now:HH:mm:ss}] start_decrypt failed: {ex_start}{Environment.NewLine}"); }
                                     catch { }
                                 }
@@ -279,14 +279,14 @@ public partial class MainWindow : Window
                                 {
                                     string infoJson = System.Text.Json.JsonSerializer.Serialize(info);
                                     System.IO.File.WriteAllText(
-                                        @"F:\RDRF\RDRF.NET\tests\RDRF_TestOutput\rdrf_info.json", infoJson);
+                                        "rdrf_TestOutput\\rdrf_info.json", infoJson);
                                 }
-                                catch { }
+                                catch (Exception ex_json) { Debug.WriteLine($"[RDRF] Failed to write backup info: {ex_json.Message}"); }
                                 break;
                         }
                     }
                 }
-                catch { /* ignore malformed IPC messages */ }
+                catch (Exception ex_ipc) { Debug.WriteLine($"[RDRF] Malformed IPC message ignored: {ex_ipc.Message}"); }
             handled = true;
         }
         return IntPtr.Zero;
@@ -317,7 +317,7 @@ public partial class MainWindow : Window
         _strategyBorders["FSS6.2"] = StrategyFSS62;
     }
 
-    // ── Window Controls ──
+    // -- Window Controls --
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -359,7 +359,7 @@ public partial class MainWindow : Window
         DecryptKeyBox.Focus();
     }
 
-    // ── Tab Switching ──
+    // -- Tab Switching --
 
     private void TabEncrypt_Click(object sender, RoutedEventArgs e)
     {
@@ -424,7 +424,7 @@ public partial class MainWindow : Window
         SaveConfig();
     }
 
-    // ── Strategy Selection ──
+    // -- Strategy Selection --
 
     private bool _fsaEnabled;
     private string? _fsaPrimary;
@@ -518,7 +518,7 @@ public partial class MainWindow : Window
     private void StrategyFSS61_Click(object sender, RoutedEventArgs e) => SelectStrategy("FSS6.1");
     private void StrategyFSS62_Click(object sender, RoutedEventArgs e) => SelectStrategy("FSS6.2");
 
-    // ── Encrypt Page (thin coordination) ──
+    // -- Encrypt Page (thin coordination) --
 
     private void EncryptBrowse_Click(object sender, RoutedEventArgs e) => _encryptVM.BrowseFileCommand.Execute(null);
     private void EncryptOutputBrowse_Click(object sender, RoutedEventArgs e) => _encryptVM.BrowseOutputCommand.Execute(null);
@@ -558,7 +558,7 @@ public partial class MainWindow : Window
         _encryptVM.StartEncryptCommand.Execute(null);
     }
 
-    // ── Drag and Drop ──
+    // -- Drag and Drop --
 
     private void EncryptPage_DragEnter(object sender, DragEventArgs e)
     {
@@ -582,7 +582,7 @@ public partial class MainWindow : Window
             _encryptVM.SetDroppedFiles(files);
     }
 
-    // ── Decrypt Page (thin coordination) ──
+    // -- Decrypt Page (thin coordination) --
 
     private void DecryptBrowse_Click(object sender, RoutedEventArgs e) => _decryptVM.BrowseBackupCommand.Execute(null);
 
@@ -597,7 +597,7 @@ public partial class MainWindow : Window
         _decryptVM.StartDecryptCommand.Execute(null);
     }
 
-    // ── History Page ──
+    // -- History Page --
 
     private void HistoryBrowseBackup_Click(object sender, RoutedEventArgs e) => _historyVM.BrowseBackupCommand.Execute(null);
 
@@ -609,7 +609,7 @@ public partial class MainWindow : Window
     private void HistoryApply_Click(object sender, RoutedEventArgs e)
         => _historyVM.ApplyIncrementalCommand.Execute(null);
 
-    // ── Config ──
+    // -- Config --
 
     private void LoadConfig()
     {

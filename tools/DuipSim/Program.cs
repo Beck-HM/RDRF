@@ -1,6 +1,9 @@
-﻿using System.IO.Hashing;
+using System.IO.Hashing;
 
-string testFile = @"F:\RDRF\RDRF.NET\tests\2.mp4";
+string testFile = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "tests", "RDRF_TestInput"));
+if (!Directory.Exists(testFile)) { Console.Error.WriteLine($"Test input dir not found: {testFile}"); return; }
+var tfs = Directory.GetFiles(testFile);
+testFile = tfs.Length > 0 ? tfs[0] : (Console.Error.WriteLine("No test files in RDRF_TestInput"), "");
 int blockSize = 1024;
 int regionSize = 32;
 int sampleBits = 4;
@@ -257,7 +260,7 @@ int RevDeg(int d) => Math.Max(2, Math.Min(8, 10 - d));
     return (recovered, lost, rounds, lost - recovered);
 }
 
-// ── Run ──
+// -- Run --
 var ratios = new[] { 0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50, 0.60, 0.75, 1.0 };
 var lossRates = new[] { 0.05, 0.10, 0.15, 0.20, 0.30, 0.50, 0.70, 0.80, 0.85, 0.90, 0.95, 0.97, 0.99 };
 var csv = new List<string> { "ratio,loss_pct,trial,recovered,lost,pct,rounds,n_after_bp" };

@@ -23,7 +23,7 @@ public class Fss3ReedSolomon : IFssStrategy
         var rsRow = new ReedSolomon(K, 1);
         var rsCol = new ReedSolomon(B, P);
 
-        // Build data matrix: K columns × B rows, each subBlock is 16 bytes
+        // Build data matrix: K columns x B rows, each subBlock is 16 bytes
         byte[][][] matrix = new byte[K][][];
         for (int f = 0; f < K; f++)
         {
@@ -179,7 +179,7 @@ public class Fss3ReedSolomon : IFssStrategy
             }
         }
 
-        // Step 1: Row RS → recover whole missing fragments
+        // Step 1: Row RS -> recover whole missing fragments
         var dataMissing = missingIndices.Where(m => m < K).ToList();
         if (dataMissing.Count > 0 && rowFrag != null)
         {
@@ -228,7 +228,7 @@ public class Fss3ReedSolomon : IFssStrategy
             });
         }
 
-        // Step 2: Column RS → repair sub-block level corruption within fragments
+        // Step 2: Column RS -> repair sub-block level corruption within fragments
         var rsCol = new ReedSolomon(B, P);
         Parallel.ForEach(dataMissing, f =>
         {

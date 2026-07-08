@@ -75,7 +75,7 @@ public class ReedSolomonTests
         var shards = MakeShards(k, p, 32);
         rs.Encode(shards);
 
-        // 2 erasures but only 1 parity → should fail
+        // 2 erasures but only 1 parity -> should fail
         var erasures = new List<int> { 0, 1 };
         bool ok = rs.Decode(shards, erasures);
         Assert.False(ok);
@@ -92,7 +92,7 @@ public class ReedSolomonTests
         rs.Encode(shards);
         var encoded = CloneShards(shards); // snapshot after encode
 
-        // Only parity shards lost → identity decode path
+        // Only parity shards lost -> identity decode path
         var erasures = new List<int> { k, k + 1 };
         for (int i = k; i < k + p; i++)
             RandomNumberGenerator.Fill(shards[i]);

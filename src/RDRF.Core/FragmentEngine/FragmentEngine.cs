@@ -1,3 +1,4 @@
+using RDRF.Core.Abstractions;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -100,7 +101,9 @@ public static class Frags
     public static string ComputeFingerprint(byte[] data)
     {
         byte[] hash = SHA256.HashData(data);
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        return Hex.EncodeLower(hash);
     }
 }
+
+
 

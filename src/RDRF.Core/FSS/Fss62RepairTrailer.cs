@@ -1,3 +1,4 @@
+using RDRF.Core.Abstractions;
 namespace RDRF.Core.FSS;
 
 /// <summary>
@@ -116,6 +117,8 @@ public static class Fss62RepairTrailer
     }
 
     private static string BytesToHex(byte[] bytes)
-        => Convert.ToHexString(bytes).ToLowerInvariant();
+        => Hex.EncodeLower(bytes);
 }
+
+
 

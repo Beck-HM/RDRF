@@ -31,19 +31,24 @@ public class FssEndToEndTests
     {
         get
         {
-            // Assembly is at: tests/RDRF.Core.Tests/bin/Debug/net8.0/RDRF.Core.Tests.dll
+            // Assembly is at: tests/RDRF.Core.Tests/bin/Release/net8.0/RDRF.Core.Tests.dll
             var dir = AppContext.BaseDirectory;
-            // Go up to tests/ directory
+            // Go up to repo root (tests/ dir)
             dir = Path.GetDirectoryName(dir)!; // net8.0
-            dir = Path.GetDirectoryName(dir)!; // Debug
+            dir = Path.GetDirectoryName(dir)!; // Release
             dir = Path.GetDirectoryName(dir)!; // bin
             dir = Path.GetDirectoryName(dir)!; // RDRF.Core.Tests
             dir = Path.GetDirectoryName(dir)!; // tests
-            return Path.Combine(dir, "2.mp4");
+            dir = Path.GetDirectoryName(dir)!; // repo root
+            string inputDir = Path.Combine(dir, "tests", "RDRF_TestInput");
+            var files = Directory.GetFiles(inputDir);
+            if (files.Length == 0)
+                throw new FileNotFoundException($"No test file found in {inputDir}");
+            return files[0];
         }
     }
 
-    private static string TestOutputDir => Path.Combine(Path.GetDirectoryName(TestFile)!, "RDRF_TestOutput");
+    private static string TestOutputDir => Path.Combine(Path.GetDirectoryName(TestFile)!, "..", "RDRF_TestOutput");
 
     public static IEnumerable<object[]> AllStrategies => new[]
     {

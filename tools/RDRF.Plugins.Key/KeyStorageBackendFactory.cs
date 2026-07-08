@@ -1,4 +1,4 @@
-using RDRF.Dssa;
+using RDRF.Core.Dssa;
 
 namespace RDRF.Plugins.Key;
 

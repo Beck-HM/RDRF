@@ -126,7 +126,7 @@ public class RemoveBackendCommand : Command
                 var records = mgmt.Lookup(fingerprint, version);
                 if (records.Count == 0)
                 {
-                    AnsiConsole.MarkupLine($"[yellow]No records found for version {version}.[/]");
+                    AnsiConsole.MarkupLine($"[yellow]No remote records found for version {version}. It may be local-only. Use -clean to delete local fragments.[/]");
                     return 0;
                 }
                 var pluginsDir = Path.Combine(AppContext.BaseDirectory, "plugins");

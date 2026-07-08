@@ -12,6 +12,9 @@ namespace RDRF.Core.Index;
 
 public static class IndexManager
 {
+    private const int MaxIndexSize = 100 * 1024 * 1024;     // 100 MB safety limit
+    private const int MaxFragmentCount = 10_000;             // ~10 TB at 1 MB/fragment
+
     public static RdrfIndex BuildIndex(
         string fileFingerprint,
         string originalFilename,
@@ -99,6 +102,11 @@ public static class IndexManager
 
     public static RdrfIndex DeserializeIndex(byte[] cborBytes)
     {
+        if (cborBytes == null)
+            throw new ArgumentNullException(nameof(cborBytes));
+        if (cborBytes.Length > MaxIndexSize)
+            throw new InvalidDataException($"Index too large: {cborBytes.Length} > {MaxIndexSize}");
+
         var reader = new CborReader(cborBytes);
         var index = new RdrfIndex();
 
@@ -111,7 +119,12 @@ public static class IndexManager
                 case "custom_name":                 index.CustomName = reader.ReadTextString(); break;
                 case "original_name":               index.OriginalName = reader.ReadTextString(); break;
                 case "file_size":                   index.FileSize = reader.ReadInt64(); break;
-                case "fragment_count":              index.FragmentCount = reader.ReadInt32(); break;
+                case "fragment_count":
+                    int fc = reader.ReadInt32();
+                    if (fc > MaxFragmentCount)
+                        throw new InvalidDataException($"Fragment count {fc} exceeds maximum {MaxFragmentCount}");
+                    index.FragmentCount = fc;
+                    break;
                 case "original_fragment_count":     index.OriginalFragmentCount = reader.ReadInt32(); break;
                 case "original_fragment_sizes":     index.OriginalFragmentSizes = ReadInt32List(reader); break;
                 case "fragment_hashes":             index.FragmentHashes = ReadStringList(reader); break;
@@ -165,7 +178,7 @@ public static class IndexManager
     public static FragmentInfo? GetFragmentInfo(RdrfIndex index, int fragmentIndex)
         => index.Fragments?.FirstOrDefault(f => f.Index == fragmentIndex);
 
-    // ── CBOR serialization helpers ──
+    // -- CBOR serialization helpers --
 
     private static void WriteField(CborWriter w, string key, string? value)
     {

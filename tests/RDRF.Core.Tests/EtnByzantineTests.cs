@@ -174,7 +174,7 @@ public class EtnByzantineTests
             var (indexBytes, fragments, rcBytes, _, _) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             // Corrupt the trailer's Index BM section in fragment[0]
-            // Trailer format: [rawSize(4)][fragBmCount(4)][fragFlat(2×N)][indexBmCount(4)][indexFlat(2×N)][...]
+            // Trailer format: [rawSize(4)][fragBmCount(4)][fragFlat(2xN)][indexBmCount(4)][indexFlat(2xN)][...]
             byte[] corrupted = (byte[])fragments[0].Clone();
             int trailerSize = BitConverter.ToInt32(corrupted, corrupted.Length - 4);
             int trailerStart = corrupted.Length - trailerSize;

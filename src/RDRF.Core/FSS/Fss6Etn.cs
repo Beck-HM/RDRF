@@ -23,7 +23,11 @@ public class Fss6Etn : IFssStrategy
         List<int> missingIndices,
         int totalFragments,
         List<int>? originalSizes = null)
-        => new();
+    {
+        if (missingIndices.Count > 0)
+            System.Diagnostics.Debug.WriteLine($"[ETN] FSS6 cannot decode - ETN is validation-only (missing: {missingIndices.Count}/{totalFragments})");
+        return new();
+    }
 
     public byte[] Strip(byte[] fragmentData)
     {

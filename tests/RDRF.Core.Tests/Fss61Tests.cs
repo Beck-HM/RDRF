@@ -14,7 +14,7 @@ public class Fss61Tests
 
     public Fss61Tests(ITestOutputHelper output) => _output = output;
 
-    // ── LtCode Unit Tests ──
+    // -- LtCode Unit Tests --
 
     [Fact]
     public void LtCode_RoundTrip_RandomCorruption()
@@ -189,7 +189,7 @@ public class Fss61Tests
         Assert.False(recovered);
     }
 
-    // ── Fss61Etn Unit Tests ──
+    // -- Fss61Etn Unit Tests --
 
     [Fact]
     public void Fss61Etn_Level_ReturnsFss61()
@@ -240,7 +240,7 @@ public class Fss61Tests
         Assert.Empty(result);
     }
 
-    // ── RcFile Repair Fields Tests ──
+    // -- RcFile Repair Fields Tests --
 
     [Fact]
     public void RcFile_RepairFields_RoundTrip()
@@ -283,7 +283,7 @@ public class Fss61Tests
         Assert.Null(rc2.RepairB);
     }
 
-    // ── FSS6.1 Integration Tests ──
+    // -- FSS6.1 Integration Tests --
 
     [Theory]
     [InlineData("FSS6.1")]
@@ -378,7 +378,7 @@ public class Fss61Tests
             Assert.False(string.IsNullOrEmpty(fingerprint));
             Assert.True(storage.RcExists(fingerprint), "RC file should exist after FSS6.1 backup");
 
-            // Derive legacy AES key (no salt — RDRFEngine(rcCode, storage) constructor)
+            // Derive legacy AES key (no salt - RDRFEngine(rcCode, storage) constructor)
             byte[] aesKey = EncryptionLayer.DeriveKeyLegacy(rcCode);
 
             // Check RC file repair data

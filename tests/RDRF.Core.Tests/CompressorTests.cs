@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using RDRF.Core.Compression;
 using Xunit;
@@ -92,5 +93,38 @@ public class CompressorTests
         byte[] data = [10, 20, 30, 40, 50];
         byte[] result = Compressor.Decompress(data, null);
         Assert.Equal(data, result);
+    }
+
+    // -- AlwaysCompress + IsLz4Frame tests --
+
+    [Fact]
+    public void AlwaysCompress_Compressible_ReturnsLz4Frame()
+    {
+        var data = new byte[2000];
+        for (int i = 0; i < data.Length; i++)
+            data[i] = (byte)(i % 256);
+        byte[] compressed = Compressor.AlwaysCompress(data);
+        Assert.True(compressed.Length < data.Length);
+        Assert.True(Compressor.IsLz4Frame(compressed));
+    }
+
+    [Fact]
+    public void AlwaysCompress_Incompressible_StillProducesLz4Frame()
+    {
+        // AlwaysCompress always runs LZ4, even if the output is larger than the input.
+        // Use Compress() with the magic-byte check for anti-expansion.
+        var data = new byte[2000];
+        RandomNumberGenerator.Fill(data);
+        byte[] result = Compressor.AlwaysCompress(data);
+        Assert.True(Compressor.IsLz4Frame(result));
+    }
+
+    [Fact]
+    public void IsLz4Frame_DetectsLz4Magic()
+    {
+        // LZ4 frame magic bytes: 0x04 0x22 0x4D 0x18
+        var lz4Frame = new byte[] { 0x04, 0x22, 0x4D, 0x18, 0x60, 0x00, 0x00, 0x00 };
+        Assert.True(Compressor.IsLz4Frame(lz4Frame));
+        Assert.False(Compressor.IsLz4Frame(new byte[] { 0x00, 0x00, 0x00, 0x00 }));
     }
 }

@@ -7,6 +7,7 @@ public static class Constants
 {
     // Fragment Configuration
     public const int DefaultFragmentSize = 1024 * 1024; // 1MB
+    public const int MaxSingleEncryptSize = 1024 * 1024 * 1024; // 1 GB per call (AES-CTR single-call safety)
 
     // AES Encryption Parameters
     public const int NonceLength = 12;

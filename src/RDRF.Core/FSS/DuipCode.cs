@@ -25,9 +25,9 @@ public static class DuipCode
     private static double _repairRatio = 0.6;
     private static volatile bool _enableMultiPass = false;
 
-    // Symbol index cache �?degree and lowEntropyOnly are PRNG-driven (not entropy-driven),
+    // Symbol index cache: degree and lowEntropyOnly are PRNG-driven (not entropy-driven),
     // so the key (K, faceSize, entropyBits, seed) is fully data-independent.
-    // A/B/C/Decode all share the same symbol indices �?K-scan runs once total.
+    // A/B/C/Decode all share the same symbol indices: K-scan runs once total.
     private static readonly ConcurrentDictionary<(int R, int K, int faceSize, int entropyBits, int seed),
         (int[] deg, int[][] idx)> _symCache = new();
 
@@ -302,7 +302,7 @@ public static class DuipCode
                 if (unk.Count == 0) continue;
                 int Nf = unk.Count;
 
-                // Build colMap: block index �?column in matrix
+                // Build colMap: block index -> column in matrix
                 var colMap = new Dictionary<int, int>();
                 for (int i = 0; i < Nf; i++)
                     colMap[unk[i]] = i;
@@ -313,7 +313,7 @@ public static class DuipCode
                 int Mf = rows.Count;
                 if (Mf < Nf) continue;
 
-                // Build Mf × Nf matrix (int[][] jagged, faster than int[,])
+                // Build Mf x Nf matrix (int[][] jagged, faster than int[,])
                 int[][] mat = new int[Mf][];
                 for (int r = 0; r < Mf; r++)
                     mat[r] = new int[Nf];
@@ -383,7 +383,7 @@ public static class DuipCode
         return recovered;
     }
 
-    // ── Entropy ──
+    // -- Entropy --
 
     private static byte[] ComputeEntropy(byte[][] sourceBlocks, int faceSize, int entropyBits, int blockSize)
     {
@@ -396,19 +396,32 @@ public static class DuipCode
             int start = f * faceSize;
             int end = Math.Min(start + faceSize, K);
 
-            // XOR first 64 bytes of all blocks in this face (SIMD)
+            // XOR first 64 bytes of all blocks in this face (SIMD where available)
             Vector256<byte> acc = Vector256<byte>.Zero;
-            for (int i = start; i < end; i++)
+            if (Avx2.IsSupported)
             {
-                int copyLen = Math.Min(64, sourceBlocks[i].Length);
-                ref byte sRef = ref MemoryMarshal.GetReference(sourceBlocks[i].AsSpan());
-                acc = Avx2.Xor(acc, Vector256.LoadUnsafe(ref sRef));
-                // Also XOR the next 32 bytes for the remaining 32-63 range
-                if (copyLen > 32)
+                for (int i = start; i < end; i++)
                 {
-                    ref byte sRef2 = ref MemoryMarshal.GetReference(sourceBlocks[i].AsSpan(32));
-                    acc = Avx2.Xor(acc, Vector256.LoadUnsafe(ref sRef2));
+                    ref byte sRef = ref MemoryMarshal.GetReference(sourceBlocks[i].AsSpan());
+                    acc = Avx2.Xor(acc, Vector256.LoadUnsafe(ref sRef));
+                    if (sourceBlocks[i].Length > 32)
+                    {
+                        ref byte sRef2 = ref MemoryMarshal.GetReference(sourceBlocks[i].AsSpan(32));
+                        acc = Avx2.Xor(acc, Vector256.LoadUnsafe(ref sRef2));
+                    }
                 }
+            }
+            else
+            {
+                // Scalar fallback: XOR all 64 byte positions across blocks
+                Span<byte> xorBuf = stackalloc byte[64];
+                for (int i = start; i < end; i++)
+                {
+                    int copyLen = Math.Min(64, sourceBlocks[i].Length);
+                    for (int b = 0; b < copyLen; b++)
+                        xorBuf[b] ^= sourceBlocks[i][b];
+                }
+                acc = System.Runtime.InteropServices.MemoryMarshal.Read<Vector256<byte>>(xorBuf);
             }
 
             ulong hash = System.IO.Hashing.XxHash64.HashToUInt64(MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref acc, 1)));
@@ -449,7 +462,7 @@ public static class DuipCode
         return rank;
     }
 
-    // ── Symbol Generation ──
+    // -- Symbol Generation --
 
     private static void BuildOneSymbol(int K, int faceSize,
         ref ulong prng, int[] colCoverage, int[] faceCoverage,
