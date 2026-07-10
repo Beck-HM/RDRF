@@ -22,7 +22,8 @@ $csprojFiles = @(
   "$root\src\RDRF.Cli\RDRF.Cli.csproj",
   "$root\src\RDRF.App\RDRF.App.csproj",
   "$root\tools\RDRF.Plugins.Path\RDRF.Plugins.Path.csproj",
-  "$root\tools\RDRF.Plugins.Rest\RDRF.Plugins.Rest.csproj"
+  "$root\tools\RDRF.Plugins.Rest\RDRF.Plugins.Rest.csproj",
+  "$root\tools\RDRF.Plugins.Key\RDRF.Plugins.Key.csproj"
 )
 foreach ($f in $csprojFiles) {
   $content = Get-Content $f -Raw
@@ -49,17 +50,10 @@ if (-not $SkipTests) {
 }
 Write-Host "       Build OK." -ForegroundColor Green
 
-# === Step 3: Fix plugin namespace + build ===
+# === Step 3: Build plugins ===
 Write-Host "[3/6] Building plugins..." -ForegroundColor Yellow
-$pluginDirs = @("$root\tools\RDRF.Plugins.Path", "$root\tools\RDRF.Plugins.Rest")
+$pluginDirs = @("$root\tools\RDRF.Plugins.Path", "$root\tools\RDRF.Plugins.Rest", "$root\tools\RDRF.Plugins.Key")
 foreach ($dir in $pluginDirs) {
-  Get-ChildItem "$dir\*.cs" -Recurse | Where-Object { $_.FullName -notmatch '\\obj\\' } | ForEach-Object {
-    $c = Get-Content $_.FullName -Raw
-    if ($c -match 'using RDRF\.Dssa;') {
-      $c = $c -replace 'using RDRF\.Dssa;', 'using RDRF.Core.Dssa;'
-      Set-Content $_.FullName $c
-    }
-  }
   dotnet build $dir -c Release --nologo
   if ($LASTEXITCODE -ne 0) { throw "Plugin build failed: $dir" }
 }
@@ -85,6 +79,7 @@ foreach ($entry in $cliTargets.GetEnumerator()) {
   if ($LASTEXITCODE -ne 0) { throw "Publish failed for $rid" }
   Copy-Item "$root\tools\RDRF.Plugins.Path\bin\Release\net8.0\RDRF.Plugins.Path.dll" "$out\plugins\" -Force
   Copy-Item "$root\tools\RDRF.Plugins.Rest\bin\Release\net8.0\RDRF.Plugins.Rest.dll" "$out\plugins\" -Force
+  Copy-Item "$root\tools\RDRF.Plugins.Key\bin\Release\net8.0\RDRF.Plugins.Key.dll" "$out\plugins\" -Force
   Copy-Item "$root\rdrf.ico" "$out\" -Force
 }
 

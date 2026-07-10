@@ -48,23 +48,24 @@ public class RestoreOrchestrator : IDisposable
     private readonly byte[] _rcCode;
     private byte[] _aesKey;
     private readonly DssaAdapter _storage;
-    private readonly FSSEngine _fss;
-    private readonly MetadataManager _metadata;
-    private readonly RecoveryExecutor _recoveryExecutor;
+    private readonly IFSSEngine _fss;
+    private readonly IMetadataManager _metadata;
+    private readonly IRecoveryExecutor _recoveryExecutor;
 
     public RestoreOrchestrator(
         byte[] aesKey,
         byte[] rcCode,
         DssaAdapter storage,
-        FSSEngine? fssEngine = null,
-        MetadataManager? metadata = null)
+        IFSSEngine? fssEngine = null,
+        IMetadataManager? metadata = null,
+        IRecoveryExecutor? recoveryExecutor = null)
     {
         _aesKey = aesKey?.Clone() as byte[] ?? throw new ArgumentNullException("AES key required");
         _rcCode = rcCode?.Clone() as byte[] ?? [];
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
-        _fss = fssEngine ?? new FSSEngine();
-        _metadata = metadata ?? new MetadataManager(null, skipLoad: true);
-        _recoveryExecutor = new RecoveryExecutor(_fss);
+        _fss = fssEngine ?? new FSSEngineWrapper();
+        _metadata = metadata ?? new MetadataManagerWrapper();
+        _recoveryExecutor = recoveryExecutor ?? new RecoveryExecutor(_fss);
     }
 
     // --- Public Restore Methods ---
@@ -289,7 +290,7 @@ public class RestoreOrchestrator : IDisposable
                 if (allowFssRecovery)
                 {
                     var recoveryResult = await _recoveryExecutor.ExecuteRecoveryAsync(
-                        index, decryptedFragments, _metadata, skipVerification: etnActual).ConfigureAwait(false);
+                        index, decryptedFragments, _metadata).ConfigureAwait(false);
                     foreach (var kvp in recoveryResult.RecoveredFragments)
                         decryptedFragments[kvp.Key] = kvp.Value;
                     var stillMissing = new List<int>();

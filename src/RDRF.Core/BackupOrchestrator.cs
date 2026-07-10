@@ -40,9 +40,9 @@ public class BackupOrchestrator : IDisposable
     private readonly byte[] _aesKey;
     private readonly byte[] _salt;
     private readonly DssaAdapter _storage;
-    private readonly FSSEngine _fss;
-    private readonly FsaEngine _fsa;
-    private readonly MetadataManager _metadata;
+    private readonly IFSSEngine _fss;
+    private readonly IFsaEngine _fsa;
+    private readonly IMetadataManager _metadata;
 
     /// <summary>
     /// Initializes with a pre-derived AES key. Used by callers that have
@@ -52,16 +52,17 @@ public class BackupOrchestrator : IDisposable
         byte[] aesKey,
         byte[] rcCode,
         DssaAdapter storage,
-        FSSEngine? fssEngine = null,
-        MetadataManager? metadata = null)
+        IFSSEngine? fssEngine = null,
+        IFsaEngine? fsaEngine = null,
+        IMetadataManager? metadata = null)
     {
         _aesKey = aesKey?.Clone() as byte[] ?? throw new ArgumentNullException("AES key required");
         _rcCode = rcCode?.Clone() as byte[] ?? [];
         _salt = [];
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
-        _fss = fssEngine ?? new FSSEngine();
-        _fsa = new FsaEngine();
-        _metadata = metadata ?? new MetadataManager(null, skipLoad: true);
+        _fss = fssEngine ?? new FSSEngineWrapper();
+        _fsa = fsaEngine ?? new FsaEngineWrapper();
+        _metadata = metadata ?? new MetadataManagerWrapper();
     }
 
     /// <summary>
@@ -72,8 +73,9 @@ public class BackupOrchestrator : IDisposable
         byte[] rcCode,
         DssaAdapter storage,
         byte[] salt,
-        FSSEngine? fssEngine = null,
-        MetadataManager? metadata = null)
+        IFSSEngine? fssEngine = null,
+        IFsaEngine? fsaEngine = null,
+        IMetadataManager? metadata = null)
     {
         if (rcCode == null || rcCode.Length == 0)
             throw new ArgumentException("RC code cannot be null or empty", nameof(rcCode));
@@ -81,9 +83,9 @@ public class BackupOrchestrator : IDisposable
         _salt = salt ?? throw new ArgumentNullException(nameof(salt));
         _aesKey = EncryptionLayer.DeriveKey(rcCode, salt);
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
-        _fss = fssEngine ?? new FSSEngine();
-        _fsa = new FsaEngine();
-        _metadata = metadata ?? new MetadataManager(null, skipLoad: true);
+        _fss = fssEngine ?? new FSSEngineWrapper();
+        _fsa = fsaEngine ?? new FsaEngineWrapper();
+        _metadata = metadata ?? new MetadataManagerWrapper();
     }
 
     /// <summary>
@@ -606,6 +608,22 @@ public class BackupOrchestrator : IDisposable
             serializedIndex = IndexManager.SerializeIndex(indexObj);
 
         byte[] embeddedIndexBytes = Fss6Etn.StripEtnFieldsFromIndexJson(serializedIndex);
+
+        // Use working index object for final index, add FssParams, serialize once
+        var finalIndex = indexModified
+            ? IndexManager.DeserializeIndex(serializedIndex)
+            : indexObj;
+        finalIndex.FssParams = new Dictionary<string, object>
+        {
+            ["plan"] = JsonSerializer.SerializeToElement(plan)
+        };
+        if (finalIndex.Fragments != null && index.Fragments != null)
+        {
+            for (int i = 0; i < Math.Min(finalIndex.Fragments.Count, index.Fragments.Count); i++)
+                finalIndex.Fragments[i].SourceVersion = index.Fragments[i].SourceVersion;
+        }
+
+        byte[] indexBytes = IndexManager.SerializeIndex(finalIndex);
         long totalBytes = fragments.Sum(f => f.Length);
         long processedBytes = 0;
 
@@ -648,19 +666,6 @@ public class BackupOrchestrator : IDisposable
             });
         }
 
-        var standaloneIndex = IndexManager.DeserializeIndex(serializedIndex);
-        standaloneIndex.FssParams = new Dictionary<string, object>
-        {
-            ["plan"] = JsonSerializer.SerializeToElement(plan)
-        };
-        // Apply SourceVersion to the standalone index too
-        if (standaloneIndex.Fragments != null && index.Fragments != null)
-        {
-            for (int i = 0; i < Math.Min(standaloneIndex.Fragments.Count, index.Fragments.Count); i++)
-                standaloneIndex.Fragments[i].SourceVersion = index.Fragments[i].SourceVersion;
-        }
-
-        byte[] indexBytes = IndexManager.SerializeIndex(standaloneIndex);
         if (_salt.Length > 0)
         {
             byte[] salted = EncryptionLayer.EncryptIndexWithSaltPrefix(indexBytes, _rcCode, _salt);

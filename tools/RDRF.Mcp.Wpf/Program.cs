@@ -1,4 +1,5 @@
 using System.IO;
+using System.Security.Cryptography;
 using System.Text.Json;
 using RDRF.Mcp.Wpf;
 using RDRF.Mcp.Wpf.Tools;
@@ -6,8 +7,16 @@ using RDRF.Mcp.Wpf.Tools;
 Console.Error.WriteLine("[rdrf-mcp-wpf] starting...");
 
 string? apiKey = Environment.GetEnvironmentVariable("RDRF_MCP_KEY");
-if (!string.IsNullOrEmpty(apiKey))
-    Console.Error.WriteLine($"[rdrf-mcp-wpf] api-key auth enabled");
+if (string.IsNullOrEmpty(apiKey))
+{
+    apiKey = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+    Console.Error.WriteLine($"[rdrf-mcp-wpf] WARNING: RDRF_MCP_KEY not set, using ephemeral key: {apiKey}");
+    Console.Error.WriteLine("[rdrf-mcp-wpf] Set RDRF_MCP_KEY environment variable for persistent auth.");
+}
+else
+{
+    Console.Error.WriteLine("[rdrf-mcp-wpf] api-key auth enabled");
+}
 
 // Determine path to RDRF.App.exe (same directory as this project's parent)
 string appDir = AppContext.BaseDirectory;

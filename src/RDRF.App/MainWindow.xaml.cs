@@ -11,19 +11,19 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Microsoft.Extensions.DependencyInjection;
 using RDRF.App.ViewModels;
 
 namespace RDRF.App;
 
 public partial class MainWindow : Window
 {
-    private readonly EncryptViewModel _encryptVM = new();
-    private readonly DecryptViewModel _decryptVM = new();
-    private readonly HistoryViewModel _historyVM = new();
+    private readonly EncryptViewModel _encryptVM;
+    private readonly DecryptViewModel _decryptVM;
+    private readonly HistoryViewModel _historyVM;
+    internal readonly SettingsViewModel _settingsVM;
 
     private string _configDir = string.Empty;
-    private string _configPath = string.Empty;
-    private AppConfig _config = new();
 
     private readonly Dictionary<string, Button> _strategyBorders = new();
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _notifyIcon;
@@ -42,8 +42,13 @@ public partial class MainWindow : Window
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
-    public MainWindow()
+    public MainWindow(IServiceProvider serviceProvider)
     {
+        _encryptVM = serviceProvider.GetRequiredService<EncryptViewModel>();
+        _decryptVM = serviceProvider.GetRequiredService<DecryptViewModel>();
+        _historyVM = serviceProvider.GetRequiredService<HistoryViewModel>();
+        _settingsVM = serviceProvider.GetRequiredService<SettingsViewModel>();
+
         InitializeComponent();
         InitializeConfig();
 
@@ -61,6 +66,7 @@ public partial class MainWindow : Window
         _encryptVM.RequestShowSuccess += (title, fingerprint) =>
             Dispatcher.Invoke(() => RdrfMessageBox.Show(title, "RDRF", RdrfMessageBox.DialogIcon.Success, fingerprint));
         _encryptVM.RequestSaveConfig += () => Dispatcher.Invoke(SaveConfig);
+        _settingsVM.Initialize(_configDir);
 
         _decryptVM.RequestShowError += (title, msg, info) =>
             Dispatcher.Invoke(() => RdrfMessageBox.Show(msg, title, RdrfMessageBox.DialogIcon.Error, info));
@@ -145,7 +151,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
-        if (_config.CloseBehavior == "tray")
+        if (_settingsVM.CloseTray)
         {
             Hide();
             e.Cancel = true;
@@ -167,129 +173,138 @@ public partial class MainWindow : Window
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (msg == WM_COPYDATA)
+        if (msg != WM_COPYDATA) return IntPtr.Zero;
+
+        GetWindowThreadProcessId(wParam, out uint senderPid);
+        if (_allowedIpcPid == 0)
+            _allowedIpcPid = (int)senderPid;
+        else if (_allowedIpcPid != (int)senderPid)
         {
-            // Validate sender process
-            GetWindowThreadProcessId(wParam, out uint senderPid);
-            if (_allowedIpcPid == 0)
-                _allowedIpcPid = (int)senderPid;
-            else if (_allowedIpcPid != (int)senderPid)
-            {
-                handled = true;
-                return IntPtr.Zero;
-            }
-
-            try
-            {
-                var cds = Marshal.PtrToStructure<COPYDATASTRUCT>(lParam);
-
-                if (cds.cbData > 0 && cds.lpData != IntPtr.Zero)
-                {
-                    byte[] bytes = new byte[cds.cbData];
-                    Marshal.Copy(cds.lpData, bytes, 0, cds.cbData);
-                    string json = Encoding.UTF8.GetString(bytes);
-
-                    using var doc = JsonDocument.Parse(json);
-                    var root = doc.RootElement;
-                    string action = root.GetProperty("action").GetString() ?? "";
-                    string value = root.TryGetProperty("value", out var valueEl) ? valueEl.GetString() ?? "" : "";
-
-                    // WndProc runs on UI thread - dispatch directly
-                    switch (action)
-                    {
-                            case "set_encrypt_path":
-                                if (!string.IsNullOrEmpty(value) && File.Exists(value))
-                                {
-                                    _encryptVM.EncryptFilePath = value;
-                                    _encryptVM.FilePathDisplay = Path.GetFileName(value);
-                                }
-                                break;
-
-                            case "set_decrypt_path":
-                                if (!string.IsNullOrEmpty(value) && File.Exists(value))
-                                    _decryptVM.SetIndexPath(value);
-                                break;
-
-                            case "set_password":
-                                EncryptKeyBox.Password = value;
-                                break;
-
-                            case "set_decrypt_password":
-                                DecryptKeyBox.Password = value;
-                                break;
-
-                            case "start_encrypt":
-                                try
-                                {
-                                    // IPC: set strategy is handled by set_strategy action before this.
-                                    // IPC: set_output_path is handled and stays in ViewModel.
-                                    // Read values from ViewModel, not from UI controls (binding may not have updated yet).
-                                    _encryptVM.SetPassword(EncryptKeyBox.Password);
-                                    _encryptVM.FragmentSizeMB = int.TryParse(FragmentSizeMB.Text, out int mb) && mb >= 1 ? mb : 1;
-                                    _encryptVM.CustomName = CustomNameBox.Text;
-                                    // OutputPath was set by set_output_path IPC - keep ViewModel value
-                                    _encryptVM.StartEncrypt();
-                                }
-                                catch (Exception ex_start)
-                                {
-                                    try { System.IO.File.AppendAllText("rdrf_TestOutput\\rdrf_error.txt",
-                                        $"[{DateTime.Now:HH:mm:ss}] start_encrypt failed: {ex_start}{Environment.NewLine}"); }
-                                    catch { }
-                                }
-                                break;
-
-                            case "set_strategy":
-                                SelectStrategy(value);
-                                break;
-
-                            case "set_output_path":
-                                if (!string.IsNullOrEmpty(value))
-                                    _encryptVM.OutputPath = value;
-                                break;
-
-                            case "set_decrypt_output_path":
-                                if (!string.IsNullOrEmpty(value))
-                                    _decryptVM.OutputPath = value;
-                                break;
-
-                            case "start_decrypt":
-                                try
-                                {
-                                    _decryptVM.SetPassword(DecryptKeyBox.Password);
-                                    _decryptVM.StartDecrypt();
-                                }
-                                catch (Exception ex_start)
-                                {
-                                    try { System.IO.File.AppendAllText("rdrf_TestOutput\\rdrf_error.txt",
-                                        $"[{DateTime.Now:HH:mm:ss}] start_decrypt failed: {ex_start}{Environment.NewLine}"); }
-                                    catch { }
-                                }
-                                break;
-
-                            case "read_backup_info":
-                                var info = new
-                                {
-                                    file = _decryptVM.InfoFileName ?? "",
-                                    size = _decryptVM.InfoFileSize ?? "",
-                                    strategy = _decryptVM.InfoStrategy ?? "",
-                                    fragments = _decryptVM.InfoFragmentCount ?? "",
-                                    created = _decryptVM.InfoCreated ?? "",
-                                };
-                                try
-                                {
-                                    string infoJson = System.Text.Json.JsonSerializer.Serialize(info);
-                                    System.IO.File.WriteAllText(
-                                        "rdrf_TestOutput\\rdrf_info.json", infoJson);
-                                }
-                                catch (Exception ex_json) { Debug.WriteLine($"[RDRF] Failed to write backup info: {ex_json.Message}"); }
-                                break;
-                        }
-                    }
-                }
-                catch (Exception ex_ipc) { Debug.WriteLine($"[RDRF] Malformed IPC message ignored: {ex_ipc.Message}"); }
             handled = true;
+            return IntPtr.Zero;
         }
+
+        handled = true;
+        try
+        {
+            var cds = Marshal.PtrToStructure<COPYDATASTRUCT>(lParam);
+            if (cds.cbData <= 0 || cds.lpData == IntPtr.Zero)
+                return IntPtr.Zero;
+
+            byte[] bytes = new byte[cds.cbData];
+            Marshal.Copy(cds.lpData, bytes, 0, cds.cbData);
+            var (action, value) = ParseIpcMessage(bytes);
+            DispatchIpcAction(action, value);
+        }
+        catch (Exception ex_ipc) { Debug.WriteLine($"[RDRF] Malformed IPC message ignored: {ex_ipc.Message}"); }
         return IntPtr.Zero;
+    }
+
+    private static (string action, string value) ParseIpcMessage(byte[] bytes)
+    {
+        string json = Encoding.UTF8.GetString(bytes);
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        string action = root.GetProperty("action").GetString() ?? "";
+        string value = root.TryGetProperty("value", out var valueEl) ? valueEl.GetString() ?? "" : "";
+        return (action, value);
+    }
+
+    private void DispatchIpcAction(string action, string value)
+    {
+        switch (action)
+        {
+            case "set_encrypt_path":        HandleSetEncryptPath(value); break;
+            case "set_decrypt_path":        HandleSetDecryptPath(value); break;
+            case "set_password":            HandleSetPassword(value); break;
+            case "set_decrypt_password":    HandleSetDecryptPassword(value); break;
+            case "start_encrypt":           HandleStartEncryptIpc(); break;
+            case "set_strategy":            SelectStrategy(value); break;
+            case "set_output_path":         HandleSetOutputPath(value); break;
+            case "set_decrypt_output_path": HandleSetDecryptOutputPath(value); break;
+            case "start_decrypt":           HandleStartDecryptIpc(); break;
+            case "read_backup_info":        HandleReadBackupInfo(); break;
+        }
+    }
+
+    private void HandleSetEncryptPath(string value)
+    {
+        if (!string.IsNullOrEmpty(value) && File.Exists(value))
+        {
+            _encryptVM.EncryptFilePath = value;
+            _encryptVM.FilePathDisplay = Path.GetFileName(value);
+        }
+    }
+
+    private void HandleSetDecryptPath(string value)
+    {
+        if (!string.IsNullOrEmpty(value) && File.Exists(value))
+            _decryptVM.SetIndexPath(value);
+    }
+
+    private void HandleSetPassword(string value) => EncryptKeyBox.Password = value;
+    private void HandleSetDecryptPassword(string value) => DecryptKeyBox.Password = value;
+
+    private void HandleStartEncryptIpc()
+    {
+        try
+        {
+            _encryptVM.SetPassword(EncryptKeyBox.Password);
+            _encryptVM.FragmentSizeMB = int.TryParse(FragmentSizeMB.Text, out int mb) && mb >= 1 ? mb : 1;
+            _encryptVM.CustomName = CustomNameBox.Text;
+            _encryptVM.StartEncrypt();
+        }
+        catch (Exception ex)
+        {
+            try { System.IO.File.AppendAllText(Path.Combine(_configDir, "ipc_error.log"),
+                $"[{DateTime.Now:HH:mm:ss}] start_encrypt failed: {ex}{Environment.NewLine}"); }
+            catch { Debug.WriteLine($"[RDRF] Failed to write IPC error log: {ex.Message}"); }
+        }
+    }
+
+    private void HandleStartDecryptIpc()
+    {
+        try
+        {
+            _decryptVM.SetPassword(DecryptKeyBox.Password);
+            _decryptVM.StartDecrypt();
+        }
+        catch (Exception ex)
+        {
+            try { System.IO.File.AppendAllText(Path.Combine(_configDir, "ipc_error.log"),
+                $"[{DateTime.Now:HH:mm:ss}] start_decrypt failed: {ex}{Environment.NewLine}"); }
+            catch { Debug.WriteLine($"[RDRF] Failed to write IPC error log: {ex.Message}"); }
+        }
+    }
+
+    private void HandleSetOutputPath(string value)
+    {
+        if (!string.IsNullOrEmpty(value))
+            _encryptVM.OutputPath = value;
+    }
+
+    private void HandleSetDecryptOutputPath(string value)
+    {
+        if (!string.IsNullOrEmpty(value))
+            _decryptVM.OutputPath = value;
+    }
+
+    private void HandleReadBackupInfo()
+    {
+        var info = new
+        {
+            file = _decryptVM.InfoFileName ?? "",
+            size = _decryptVM.InfoFileSize ?? "",
+            strategy = _decryptVM.InfoStrategy ?? "",
+            fragments = _decryptVM.InfoFragmentCount ?? "",
+            created = _decryptVM.InfoCreated ?? "",
+        };
+        try
+        {
+            string infoJson = System.Text.Json.JsonSerializer.Serialize(info);
+            System.IO.File.WriteAllText(Path.Combine(_configDir, "ipc_backup_info.json"), infoJson);
+        }
+        catch (Exception ex) { Debug.WriteLine($"[RDRF] Failed to write backup info: {ex.Message}"); }
     }
 
     private void QueuePreviewUpdate()
@@ -301,7 +316,6 @@ public partial class MainWindow : Window
     {
         string baseDir = AppDomain.CurrentDomain.BaseDirectory;
         _configDir = Path.Combine(baseDir, ".rdrf");
-        _configPath = Path.Combine(_configDir, "config.json");
     }
 
     private void InitializeStrategyCards()
@@ -403,25 +417,12 @@ public partial class MainWindow : Window
         SettingsPage.Visibility = isOpen ? Visibility.Collapsed : Visibility.Visible;
         if (SettingsPage.Visibility == Visibility.Visible)
         {
+            SettingsPage.DataContext = _settingsVM;
             EncryptPage.Visibility = Visibility.Collapsed;
             DecryptPage.Visibility = Visibility.Collapsed;
             HistoryPage.Visibility = Visibility.Collapsed;
             _decryptVM.StopFragmentWatcher();
         }
-    }
-
-    private void SettingsBrowseOutput_Click(object sender, RoutedEventArgs e)
-    {
-        using var dialog = new System.Windows.Forms.FolderBrowserDialog();
-        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-            SettingsOutputPath.Text = dialog.SelectedPath;
-    }
-
-    private void SettingsSave_Click(object sender, RoutedEventArgs e)
-    {
-        _config.DefaultOutputPath = SettingsOutputPath.Text;
-        _config.CloseBehavior = CloseExit.IsChecked == true ? "exit" : "tray";
-        SaveConfig();
     }
 
     // -- Strategy Selection --
@@ -615,21 +616,25 @@ public partial class MainWindow : Window
     {
         try
         {
-            if (File.Exists(_configPath))
+            string configPath = Path.Combine(_configDir, "config.json");
+            if (File.Exists(configPath))
             {
-                string json = File.ReadAllText(_configPath);
+                string json = File.ReadAllText(configPath);
                 var config = JsonSerializer.Deserialize<AppConfig>(json);
                 if (config != null)
                 {
-                    _config = config;
-                    ApplyConfigToUI();
+                    if (config.FragmentSizeMB >= 1)
+                        FragmentSizeMB.Text = config.FragmentSizeMB.ToString();
+                    if (!string.IsNullOrEmpty(config.OutputPath))
+                        EncryptOutputPath.Text = config.OutputPath;
+                    if (!string.IsNullOrEmpty(config.DecryptOutputPath))
+                        DecryptOutputPath.Text = config.DecryptOutputPath;
                 }
             }
         }
         catch (Exception ex) when (ex is IOException or JsonException)
         {
             Debug.WriteLine($"[RDRF] Config load failed: {ex.Message}");
-            _config = new AppConfig();
         }
     }
 
@@ -637,43 +642,22 @@ public partial class MainWindow : Window
     {
         try
         {
-            if (int.TryParse(FragmentSizeMB.Text, out int fragSizeMB))
-                _config.FragmentSizeMB = fragSizeMB;
-            _config.OutputPath = EncryptOutputPath.Text;
-            _config.DecryptOutputPath = DecryptOutputPath.Text;
-            _config.DefaultOutputPath = SettingsOutputPath.Text;
-            _config.CloseBehavior = CloseExit.IsChecked == true ? "exit" : "tray";
+            string configPath = Path.Combine(_configDir, "config.json");
+            var config = File.Exists(configPath)
+                ? JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(configPath)) ?? new AppConfig()
+                : new AppConfig();
+
+            config.FragmentSizeMB = int.TryParse(FragmentSizeMB.Text, out int fmb) ? fmb : 1;
+            config.OutputPath = EncryptOutputPath.Text;
+            config.DecryptOutputPath = DecryptOutputPath.Text;
 
             Directory.CreateDirectory(_configDir);
-            string json = JsonSerializer.Serialize(_config, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_configPath, json);
+            string json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(configPath, json);
         }
         catch (Exception ex) when (ex is IOException)
         {
             Debug.WriteLine($"[RDRF] Config save failed: {ex.Message}");
         }
     }
-
-    private void ApplyConfigToUI()
-    {
-        if (_config.FragmentSizeMB >= 1)
-            FragmentSizeMB.Text = _config.FragmentSizeMB.ToString();
-        if (!string.IsNullOrEmpty(_config.OutputPath))
-            EncryptOutputPath.Text = _config.OutputPath;
-        if (!string.IsNullOrEmpty(_config.DecryptOutputPath))
-            DecryptOutputPath.Text = _config.DecryptOutputPath;
-
-        SettingsOutputPath.Text = _config.DefaultOutputPath;
-        CloseExit.IsChecked = _config.CloseBehavior == "exit";
-        CloseTray.IsChecked = _config.CloseBehavior == "tray";
-    }
-}
-
-public class AppConfig
-{
-    public string OutputPath { get; set; } = "./backup";
-    public string DecryptOutputPath { get; set; } = "./restored";
-    public int FragmentSizeMB { get; set; } = 1;
-    public string DefaultOutputPath { get; set; } = "./backup";
-    public string CloseBehavior { get; set; } = "exit";
 }

@@ -1,8 +1,8 @@
 using System.Diagnostics;
+using RDRF.Core.Abstractions;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using RDRF.Core.Integrity;
-using RDRF.Core.Metadata;
 
 namespace RDRF.Core;
 
@@ -37,11 +37,11 @@ public class RecoveryResult
 /// Fragment recovery via missing detection, hash verification, and FSS decode.
 /// </summary>
 
-public class RecoveryExecutor
+public class RecoveryExecutor : IRecoveryExecutor
 {
-    private readonly FSSEngine _fssEngine;
+    private readonly IFSSEngine _fssEngine;
 
-    public RecoveryExecutor(FSSEngine fssEngine)
+    public RecoveryExecutor(IFSSEngine fssEngine)
     {
         _fssEngine = fssEngine ?? throw new ArgumentNullException(nameof(fssEngine));
     }
@@ -49,8 +49,7 @@ public class RecoveryExecutor
     public RecoveryResult ExecuteRecovery(
         RdrfIndex index,
         Dictionary<int, byte[]> availableFragments,
-        MetadataManager? metadata = null,
-        bool skipVerification = false)
+        IMetadataManager? metadata = null)
     {
         var result = new RecoveryResult();
         result.TotalFragments = index.FragmentCount;
@@ -68,22 +67,12 @@ public class RecoveryExecutor
         }
         result.MissingFragments = missingIndices.Count;
 
-        // Step 2: Verify available fragments integrity
-        // Still verify fragments with index hashes even when skipVerification=true
-        // to prevent RS decode from selecting corrupted shards.
+        // Step 2: Verify available fragments integrity via index hashes
         var verified = new Dictionary<int, byte[]>();
         var corrupted = new List<int>();
-        bool hasIndexHashes = index.Fragments != null && index.Fragments.Count > 0
-            && index.Fragments.Any(f => !string.IsNullOrEmpty(f.Hash));
 
         foreach (var kvp in availableFragments)
         {
-            if (skipVerification && !hasIndexHashes)
-            {
-                verified[kvp.Key] = kvp.Value;
-                continue;
-            }
-
             var fragInfo = IndexManager.GetFragmentInfo(index, kvp.Key);
             if (fragInfo != null && !string.IsNullOrEmpty(fragInfo.Hash))
             {
@@ -165,10 +154,9 @@ public class RecoveryExecutor
     public Task<RecoveryResult> ExecuteRecoveryAsync(
         RdrfIndex index,
         Dictionary<int, byte[]> availableFragments,
-        MetadataManager? metadata = null,
-        bool skipVerification = false)
+        IMetadataManager? metadata = null)
     {
-        return Task.Run(() => ExecuteRecovery(index, availableFragments, metadata, skipVerification));
+        return Task.Run(() => ExecuteRecovery(index, availableFragments, metadata));
     }
 }
 

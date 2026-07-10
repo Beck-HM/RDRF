@@ -1,51 +1,21 @@
-using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Dssa;
 
 namespace RDRF.App.Services;
 
-/// <summary>
-/// Backup service wrapper for the WPF application layer.
-/// </summary>
-public class EncryptService : IDisposable
+public class EncryptService : IEncryptService
 {
-    private readonly byte[] _rcCode;
-    private readonly DssaAdapter _storage;
-    private bool _disposed;
-
-    public EncryptService(byte[] password, DssaAdapter storage)
-    {
-        _rcCode = (byte[])password.Clone();
-        _storage = storage;
-    }
-
-    public string BackupFile(
-        string filePath,
-        string primaryStrategy,
-        List<string>? auxiliary = null,
-        int fragmentSize = 0,
-        string? customName = null,
+    public string BackupFile(byte[] password, DssaAdapter storage, string filePath,
+        string primaryStrategy, List<string>? auxiliary = null,
+        int fragmentSize = 0, string? customName = null,
         IProgress<RdrfProgressReport>? progress = null)
     {
-        using var engine = new RDRFEngine(_rcCode, _storage);
+        using var engine = new RDRFEngine(password, storage);
         return engine.BackupFile(
-            filePath,
-            primaryStrategy,
+            filePath, primaryStrategy,
             auxiliaryStrategies: auxiliary,
             fragmentSize: fragmentSize,
             customName: customName,
             progress: progress);
     }
-
-    public void Dispose()
-    {
-        if (!_disposed)
-        {
-            if (_rcCode is { Length: > 0 })
-                CryptographicOperations.ZeroMemory(_rcCode);
-            _disposed = true;
-        }
-    }
 }
-
-

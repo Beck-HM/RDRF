@@ -30,6 +30,29 @@ public static class WpfElementFinder
         return sb.ToString();
     }
 
+    private static string EscapeSendKeysString(string s)
+    {
+        var sb = new System.Text.StringBuilder(s.Length + 8);
+        foreach (char c in s)
+        {
+            switch (c)
+            {
+                case '+': sb.Append("{+}"); break;
+                case '^': sb.Append("{^}"); break;
+                case '%': sb.Append("{%}"); break;
+                case '~': sb.Append("{~}"); break;
+                case '(': sb.Append("{(}"); break;
+                case ')': sb.Append("{)}"); break;
+                case '{': sb.Append("{{}"); break;
+                case '}': sb.Append("{}}"); break;
+                case '[': sb.Append("{[}"); break;
+                case ']': sb.Append("{]}"); break;
+                default:  sb.Append(c); break;
+            }
+        }
+        return sb.ToString();
+    }
+
     public static async Task<string> ExecutePowershellAsync(string script, int timeoutMs = 30000)
     {
         var psi = new ProcessStartInfo
@@ -236,13 +259,14 @@ return 'false'
     {
         string aid = EscapePsString(automationId);
         string val = EscapePsString(text);
+        string sendVal = EscapeSendKeysString(val);
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("Add-Type -AssemblyName UIAutomationClient");
         sb.AppendLine("Add-Type -AssemblyName System.Windows.Forms");
         sb.AppendLine("$sw = [Diagnostics.Stopwatch]::StartNew()");
         sb.AppendLine("$timeoutMs = " + timeoutMs);
         sb.AppendLine("$aid = '" + aid + "'");
-        sb.AppendLine("$val = '" + val + "'");
+        sb.AppendLine("$val = '" + sendVal + "'");
         sb.AppendLine("while ($sw.ElapsedMilliseconds -lt $timeoutMs) {");
         sb.AppendLine("  $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, $aid)");
         sb.AppendLine("  $el = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)");
