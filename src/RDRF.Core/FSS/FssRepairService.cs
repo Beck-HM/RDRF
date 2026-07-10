@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics;
+using RDRF.Core.Abstractions;
 using RDRF.Core.Dssa;
 using RDRF.Core.ETN;
 using RDRF.Core.Index;
@@ -55,14 +56,16 @@ public static class FssRepairService
     // -- FSS6.1 Repair (restore) --
 
     public static bool TryRepair61(RdrfIndex index, ref byte[] rcBytes,
-        Dictionary<int, byte[]> fragments, CrossValidationResult cv)
-        => RepairRunner.TryFss61(index, ref rcBytes, fragments, cv);
+        Dictionary<int, byte[]> fragments, CrossValidationResult cv,
+        IIndexManager? indexManager = null)
+        => RepairRunner.TryFss61(index, ref rcBytes, fragments, cv, indexManager);
 
     // -- FSS6.2 Repair (restore) --
 
     public static bool TryRepair62(RdrfIndex index, ref byte[] rcBytes,
-        Dictionary<int, byte[]> fragments, CrossValidationResult cv)
-        => RepairRunner.TryFss62(index, ref rcBytes, fragments, cv);
+        Dictionary<int, byte[]> fragments, CrossValidationResult cv,
+        IIndexManager? indexManager = null)
+        => RepairRunner.TryFss62(index, ref rcBytes, fragments, cv, indexManager);
 
     // -- Primitives --
 
@@ -181,7 +184,8 @@ public static class FssRepairService
 internal static class RepairRunner
 {
     internal static bool TryFss61(RdrfIndex index, ref byte[] rcBytes,
-        Dictionary<int, byte[]> fragments, CrossValidationResult cvResult)
+        Dictionary<int, byte[]> fragments, CrossValidationResult cvResult,
+        IIndexManager? idxMgr = null)
     {
         try
         {
@@ -200,10 +204,11 @@ internal static class RepairRunner
             if (cvResult.IndexCorrupted)
             {
                 var ra = rcFile.RepairA ?? fragA;
-                if (ra != null && LtDecode(ra, IndexManager.SerializeIndex(index),
+                byte[] indexBytes = idxMgr?.SerializeIndex(index) ?? IndexManager.SerializeIndex(index);
+                if (ra != null && LtDecode(ra, indexBytes,
                         cvResult.IndexCorruptedBlocks, out var fixedBytes))
                 {
-                    var fi = IndexManager.DeserializeIndex(fixedBytes);
+                    var fi = idxMgr?.DeserializeIndex(fixedBytes) ?? IndexManager.DeserializeIndex(fixedBytes);
                     if (fi != null)
                     {
                         index.FileFingerprint = fi.FileFingerprint;
@@ -234,7 +239,8 @@ internal static class RepairRunner
     }
 
     internal static bool TryFss62(RdrfIndex index, ref byte[] rcBytes,
-        Dictionary<int, byte[]> fragments, CrossValidationResult cvResult)
+        Dictionary<int, byte[]> fragments, CrossValidationResult cvResult,
+        IIndexManager? idxMgr = null)
     {
         try
         {
@@ -256,7 +262,8 @@ internal static class RepairRunner
                 if (ra != null)
                 {
                     int bs = ra.BlockSize;
-                    var blocks = FssRepairService.SplitToBlocks(IndexManager.SerializeIndex(index), bs);
+                    byte[] idxBytes = idxMgr?.SerializeIndex(index) ?? IndexManager.SerializeIndex(index);
+                    var blocks = FssRepairService.SplitToBlocks(idxBytes, bs);
                     var isBad = new bool[blocks.Length];
                     for (int i = 0; i < cvResult.IndexCorruptedBlocks.Count && i < blocks.Length; i++)
                         isBad[cvResult.IndexCorruptedBlocks[i]] = true;
@@ -265,8 +272,8 @@ internal static class RepairRunner
                     if (recovered >= cvResult.IndexCorruptedBlocks.Count)
                     {
                         var fixedBytes = FssRepairService.MergeBlocks(blocks,
-                            IndexManager.SerializeIndex(index).Length, bs);
-                        var fi = IndexManager.DeserializeIndex(fixedBytes);
+                            idxBytes.Length, bs);
+                        var fi = idxMgr?.DeserializeIndex(fixedBytes) ?? IndexManager.DeserializeIndex(fixedBytes);
                         if (fi != null)
                         {
                             index.FileFingerprint = fi.FileFingerprint;

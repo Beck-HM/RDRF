@@ -28,7 +28,7 @@ public class FragmentStatusInfo
     public bool Available { get; init; }
 }
 
-public class DecryptService : IDisposable
+public class DecryptService : IDecryptService
 {
     private readonly byte[] _rcCode;
     private byte[] _aesKey;
@@ -154,7 +154,7 @@ public class DecryptService : IDisposable
             throw new InvalidOperationException("Storage path not set.");
 
         var storage = new LocalDssaAdapter(_storagePath);
-        var engine = new RDRFEngine(_aesKey, _rcCode, storage);
+        using var engine = new RDRFEngine(_aesKey, _rcCode, storage);
 
         if (IsFragmentMode)
         {

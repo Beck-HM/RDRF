@@ -1,5 +1,9 @@
-var store = Path.Combine(Path.GetTempPath(), "rdrf_test_server");
+var store = args.Length > 0
+    ? args[0]
+    : Path.Combine(Path.GetTempPath(), "rdrf_test_server");
 Directory.CreateDirectory(store);
+
+Console.Error.WriteLine($"TestServer: store={store}");
 
 var app = WebApplication.Create(args);
 

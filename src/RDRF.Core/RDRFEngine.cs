@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using RDRF.Core.Encryption;
+using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using RDRF.Core.Dssa;
 
@@ -40,8 +41,9 @@ public class RDRFEngine : IDisposable
         _rcCode = (byte[])rcCode.Clone();
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         byte[] aesKey = EncryptionLayer.DeriveKeyLegacy(rcCode);
-        _backup = new BackupOrchestrator(aesKey, _rcCode, storage, fssEngine);
-        _restore = new RestoreOrchestrator(aesKey, _rcCode, storage, fssEngine);
+        var fssWrapped = fssEngine is not null ? new FSSEngineWrapper(fssEngine) : null;
+        _backup = new BackupOrchestrator(aesKey, _rcCode, storage, fssWrapped);
+        _restore = new RestoreOrchestrator(aesKey, _rcCode, storage, fssWrapped);
     }
 
     /// <summary>
@@ -52,8 +54,9 @@ public class RDRFEngine : IDisposable
     {
         _rcCode = (byte[])rcCode.Clone();
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
-        _backup = new BackupOrchestrator(aesKey, _rcCode, storage, fssEngine);
-        _restore = new RestoreOrchestrator(aesKey, _rcCode, storage, fssEngine);
+        var fssWrapped2 = fssEngine is not null ? new FSSEngineWrapper(fssEngine) : null;
+        _backup = new BackupOrchestrator(aesKey, _rcCode, storage, fssWrapped2);
+        _restore = new RestoreOrchestrator(aesKey, _rcCode, storage, fssWrapped2);
     }
 
     // -- Backup --

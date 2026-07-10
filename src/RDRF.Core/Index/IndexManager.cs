@@ -629,7 +629,8 @@ public static class IndexManager
 }
 
 /// <summary>
-/// CBOR serialization/deserialization for RdrfIndex.\n/// Also provides BuildIndex factory. Format is CBOR map with snake_case keys.
+/// Index data model for backup metadata, fragments, and dedup entries.
+/// Serialized as CBOR map with snake_case keys.
 /// </summary>
 
 public class RdrfIndex
@@ -667,7 +668,7 @@ public class RdrfIndex
 }
 
 /// <summary>
-/// CBOR serialization/deserialization for RdrfIndex.\n/// Also provides BuildIndex factory. Format is CBOR map with snake_case keys.
+/// Fragment metadata within an index.
 /// </summary>
 
 public class FragmentInfo
@@ -681,7 +682,7 @@ public class FragmentInfo
 }
 
 /// <summary>
-/// CBOR serialization/deserialization for RdrfIndex.\n/// Also provides BuildIndex factory. Format is CBOR map with snake_case keys.
+/// Dedup entry tracking cross-version fragment references.
 /// </summary>
 
 public class DedupEntry

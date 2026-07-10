@@ -16,7 +16,7 @@ public class DecryptViewModel : ViewModelBase, IDisposable
     private string? _decryptIndexPath;
     private string? _decryptStoragePath;
     private string? _decryptFragmentPrefix;
-    private DecryptService? _decryptService;
+    private IDecryptService? _decryptService;
     private DateTime _decryptStartTime;
     private bool _disposed;
 
@@ -169,7 +169,7 @@ public class DecryptViewModel : ViewModelBase, IDisposable
     public ObservableCollection<FragmentStatusItem> FragmentItems { get; }
         = new ObservableCollection<FragmentStatusItem>();
 
-    public DecryptService? CurrentService => _decryptService;
+    public IDecryptService? CurrentService => _decryptService;
     public string? StoragePath => _decryptStoragePath;
     public string? FragmentPrefix => _decryptFragmentPrefix;
 

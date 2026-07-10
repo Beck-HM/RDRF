@@ -1,3 +1,8 @@
+using RDRF.Core;
+using RDRF.Core.Diff;
+using RDRF.Core.Dssa;
+using RDRF.Core.Encryption;
+using RDRF.Core.Index;
 using RDRF.Core.Versioning;
 using RDRF.Cli.Services;
 using Spectre.Console;
@@ -99,9 +104,54 @@ public class DiffCommand : Command
                     }
                 }
 
-                // Full reconstruct mode
-                AnsiConsole.MarkupLine("[yellow]Only adjacent version diffs are supported (e.g. v1 vs v2). Use check to browse versions.[/]");
-                return 1;
+                // Full reconstruct mode: restore both versions to temp files in the .rdrf directory.
+                // Each version's fragments have the embedded index, so use RestoreFileFromFragments.
+                string storageDir = Path.GetDirectoryName(indexFile.FullName) ?? ".";
+                byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
+                (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
+                var index = IndexManager.DeserializeIndex(cbor);
+
+                var v1Record = records.FirstOrDefault(r => r.Version == v1);
+                var v2Record = records.FirstOrDefault(r => r.Version == v2);
+                if (v1Record == null || v2Record == null)
+                {
+                    AnsiConsole.MarkupLine("[red]Error: version records not found.[/]");
+                    return 1;
+                }
+
+                string v1Fp = v1Record.FileFingerprint;
+                string v2Fp = v2Record.FileFingerprint;
+                string tmpV1 = Path.Combine(storageDir, $".diff_v{v1}_{Guid.NewGuid():N}.tmp");
+                string tmpV2 = Path.Combine(storageDir, $".diff_v{v2}_{Guid.NewGuid():N}.tmp");
+                var storage = new LocalDssaAdapter(storageDir);
+
+                try
+                {
+                    using var ro = new RestoreOrchestrator(aesKey, password, storage);
+                    bool ok1 = ro.RestoreFileFromFragments(v1Fp, tmpV1);
+                    if (!ok1)
+                    {
+                        AnsiConsole.MarkupLine($"[red]Error: failed to restore version {v1} (fragments missing for {v1Fp.Substring(0, 16)}...).[/]");
+                        return 1;
+                    }
+                    bool ok2 = ro.RestoreFileFromFragments(v2Fp, tmpV2);
+                    if (!ok2)
+                    {
+                        AnsiConsole.MarkupLine($"[red]Error: failed to restore version {v2} (fragments missing for {v2Fp.Substring(0, 16)}...).[/]");
+                        return 1;
+                    }
+
+                    byte[] oldBytes = File.ReadAllBytes(tmpV1);
+                    byte[] newBytes = File.ReadAllBytes(tmpV2);
+                    var diffResult = new DiffEngine().ComputeDiff(oldBytes, newBytes, index.OriginalName);
+                    OutputDiff(diffResult.HumanDiff, outputFile, format);
+                    return 0;
+                }
+                finally
+                {
+                    try { if (File.Exists(tmpV1)) File.Delete(tmpV1); } catch { }
+                    try { if (File.Exists(tmpV2)) File.Delete(tmpV2); } catch { }
+                }
             }
             finally
             {

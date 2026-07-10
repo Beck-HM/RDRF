@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using RDRF.Mcp.Core;
 using RDRF.Mcp.Core.Tools;
@@ -5,8 +6,16 @@ using RDRF.Mcp.Core.Tools;
 Console.Error.WriteLine("[rdrf-mcp-core] starting...");
 
 string? apiKey = Environment.GetEnvironmentVariable("RDRF_MCP_KEY");
-if (!string.IsNullOrEmpty(apiKey))
-    Console.Error.WriteLine($"[rdrf-mcp-core] api-key auth enabled");
+if (string.IsNullOrEmpty(apiKey))
+{
+    apiKey = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+    Console.Error.WriteLine($"[rdrf-mcp-core] WARNING: RDRF_MCP_KEY not set, using ephemeral key: {apiKey}");
+    Console.Error.WriteLine("[rdrf-mcp-core] Set RDRF_MCP_KEY environment variable for persistent auth.");
+}
+else
+{
+    Console.Error.WriteLine("[rdrf-mcp-core] api-key auth enabled");
+}
 
 var server = new McpServer();
 server.RegisterTool(new BackupTool());

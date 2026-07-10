@@ -40,7 +40,7 @@ public class BackupTool : IMcpTool
         string strategyId = "Strategy" + strategy.Replace(".", "");
         bool cardClicked = await WpfElementFinder.ClickButton(strategyId, 3000);
         if (!cardClicked)
-            _sendIpc($@"{{""action"":""set_strategy"",""value"":""{strategy}""}}");
+            _sendIpc($@"{{""action"":""set_strategy"",""value"":""{strategy.Replace("\"", "\\\"")}""}}");
 
         // IPC: set file path
         _sendIpc($@"{{""action"":""set_encrypt_path"",""value"":""{filePath.Replace("\"", "\\\"")}""}}");

@@ -1,6 +1,9 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
 using RDRF.Core;
+using RDRF.Core.Abstractions;
+using RDRF.Core.Composition;
 using RDRF.Core.Encryption;
 using RDRF.Core.Dssa;
 using RDRF.Core.FSS;
@@ -377,12 +380,12 @@ public class RegressionTests
                 }
             }
 
-            var fss = new FSSEngine();
+            var fss = new FSSEngineWrapper();
             var executor = new RecoveryExecutor(fss);
 
-            var syncResult = executor.ExecuteRecovery(index, decryptedFragments, skipVerification: false);
+            var syncResult = executor.ExecuteRecovery(index, decryptedFragments);
 
-            var asyncResult = await executor.ExecuteRecoveryAsync(index, decryptedFragments, skipVerification: false);
+            var asyncResult = await executor.ExecuteRecoveryAsync(index, decryptedFragments);
 
                         Assert.Equal(
                 syncResult.RecoveredFragments.Count,
@@ -589,6 +592,134 @@ public class RegressionTests
         // FssParams round-trip
         Assert.NotNull(restored.FssParams);
         Assert.True(restored.FssParams.ContainsKey("plan"));
+    }
+
+    [Fact]
+    public void RecoveryExecutor_AlwaysVerifiesFragments_NoSkipVerification()
+    {
+        var engine = new FSSEngineWrapper();
+        var executor = new RecoveryExecutor(engine);
+        var index = new RdrfIndex
+        {
+            FragmentCount = 3,
+            FileFingerprint = "test",
+            Fragments = new List<FragmentInfo>
+            {
+                new FragmentInfo { Index = 0, Size = 4, Hash = "abc" },
+                new FragmentInfo { Index = 1, Size = 4, Hash = "def" },
+                new FragmentInfo { Index = 2, Size = 4, Hash = "ghi" },
+            }
+        };
+        var available = new Dictionary<int, byte[]>
+        {
+            { 0, new byte[] { 1, 2, 3, 4 } },
+            { 1, new byte[] { 5, 6, 7, 8 } },
+        };
+
+        // Should complete without exception (skipVerification param removed)
+        var result = executor.ExecuteRecovery(index, available);
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public void FssRepairService_AcceptsIIndexManager()
+    {
+        var idxMgr = new IndexManagerWrapper();
+        var index = new RdrfIndex
+        {
+            FileFingerprint = "test",
+            OriginalName = "test.bin",
+            OriginalHash = "abc",
+        };
+        byte[] rcBytes = [];
+        var fragments = new Dictionary<int, byte[]>();
+        var cv = new CrossValidationResult();
+
+        // Should not throw when passing IIndexManager
+        bool result61 = FssRepairService.TryRepair61(index, ref rcBytes, fragments, cv, idxMgr);
+        bool result62 = FssRepairService.TryRepair62(index, ref rcBytes, fragments, cv, idxMgr);
+
+        Assert.False(result61);
+        Assert.False(result62);
+    }
+
+    [Fact]
+    public void IndexSerialization_SingleRoundTrip_ProducesValidIndex()
+    {
+        var index = new RdrfIndex
+        {
+            FileFingerprint = "test_fp",
+            OriginalName = "test.bin",
+            FileSize = 1024,
+            FssStrategy = "FSS1",
+            FragmentCount = 4,
+            Fragments = new List<FragmentInfo>
+            {
+                new FragmentInfo { Index = 0, Size = 256, Hash = "hash0" },
+                new FragmentInfo { Index = 1, Size = 256, Hash = "hash1" },
+                new FragmentInfo { Index = 2, Size = 256, Hash = "hash2" },
+                new FragmentInfo { Index = 3, Size = 256, Hash = "hash3" },
+            }
+        };
+
+        byte[] cbor = IndexManager.SerializeIndex(index);
+        var restored = IndexManager.DeserializeIndex(cbor);
+
+        Assert.Equal(index.FileFingerprint, restored.FileFingerprint);
+        Assert.Equal(index.OriginalName, restored.OriginalName);
+        Assert.Equal(index.FragmentCount, restored.FragmentCount);
+        Assert.Equal(index.Fragments.Count, restored.Fragments.Count);
+    }
+
+    [Fact]
+    public void EncryptionLayerWrapper_DelegatesCorrectly()
+    {
+        var wrapper = new EncryptionLayerWrapper();
+        byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
+        byte[] salt = RandomNumberGenerator.GetBytes(16);
+
+        byte[] key = wrapper.DeriveKey(rcCode, salt);
+        Assert.NotNull(key);
+        Assert.True(key.Length > 0);
+    }
+
+    [Fact]
+    public void IntegrityCheckerWrapper_DelegatesCorrectly()
+    {
+        var wrapper = new IntegrityCheckerWrapper();
+        byte[] data = "hello"u8.ToArray();
+
+        string hash = wrapper.HashBytes(data);
+        Assert.NotNull(hash);
+        Assert.True(hash.Length > 0);
+        Assert.True(wrapper.VerifyHash(hash, hash));
+    }
+
+    [Fact]
+    public void FragmentEngineWrapper_DelegatesCorrectly()
+    {
+        var wrapper = new FragmentEngineWrapper();
+        string fname = wrapper.FragmentFilename("test_fp", 3);
+        Assert.Equal("test_fp_3.rdrf", fname);
+    }
+
+    [Fact]
+    public void DiContainer_ResolvesAllCoreServices()
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddRdrfCore();
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.NotNull(provider.GetService<IFSSEngine>());
+        Assert.NotNull(provider.GetService<IFsaEngine>());
+        Assert.NotNull(provider.GetService<IEncryptionLayer>());
+        Assert.NotNull(provider.GetService<IIntegrityChecker>());
+        Assert.NotNull(provider.GetService<IFragmentEngine>());
+        Assert.NotNull(provider.GetService<IIndexManager>());
+        Assert.NotNull(provider.GetService<IMetadataManager>());
+        Assert.NotNull(provider.GetService<ICompressor>());
+        Assert.NotNull(provider.GetService<IRecoveryExecutor>());
     }
 }
 

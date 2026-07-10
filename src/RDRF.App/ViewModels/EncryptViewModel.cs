@@ -294,45 +294,17 @@ public class EncryptViewModel : ViewModelBase
             string log = $"[{DateTime.Now:HH:mm:ss.fff}] StartEncrypt called. " +
                 $"File='{EncryptFilePath}' pw={_pendingPassword?.Length ?? -1} sz={FragmentSizeMB} out='{OutputPath}'" +
                 Environment.NewLine;
-            System.IO.File.AppendAllText("rdrf_TestOutput\\rdrf_start.txt", log);
+            System.IO.File.AppendAllText(Path.Combine(_configDir, "encrypt_start.log"), log);
         }
-        catch { }
+        catch (Exception ex) { Debug.WriteLine($"[RDRF] Failed to write start log: {ex.Message}"); }
 
-        if (string.IsNullOrEmpty(EncryptFilePath))
+        if (!TryValidateInputs(out var errorMsg))
         {
-            RequestShowError?.Invoke("Validation", "Please select a file to encrypt.", null);
+            RequestShowError?.Invoke("Validation", errorMsg, null);
             return;
         }
 
-        if (_pendingPassword == null || _pendingPassword.Length == 0)
-        {
-            RequestShowError?.Invoke("Validation", "Please enter an encryption key.", null);
-            return;
-        }
-
-        if (FragmentSizeMB < 1)
-        {
-            RequestShowError?.Invoke("Validation", "Please enter a valid fragment size (minimum 1 MB).", null);
-            return;
-        }
-
-        string? customName = null;
-        string customNameInput = CustomName.Trim();
-        if (!string.IsNullOrEmpty(customNameInput))
-        {
-            foreach (char c in customNameInput)
-            {
-                if (!char.IsLetterOrDigit(c) && c != '_' && c != '-')
-                {
-                    RequestShowError?.Invoke("Validation",
-                        "Custom name can only contain letters, numbers, underscores and hyphens.", null);
-                    return;
-                }
-            }
-            customName = customNameInput;
-        }
-
-        int fragmentSizeBytes = FragmentSizeMB * 1024 * 1024;
+        var (password, outputPath, filePath, strategy, fragSize, custName) = CaptureParams();
 
         IsEncrypting = true;
         StageText = "Preparing...";
@@ -341,64 +313,17 @@ public class EncryptViewModel : ViewModelBase
         EtaText = "ETA: --:--";
         _encryptStartTime = DateTime.Now;
 
-        byte[] password = _pendingPassword!;
-        string outputPath = OutputPath;
-        string filePath = EncryptFilePath!;
-        string strategy = SelectedStrategy;
-        int fragSize = fragmentSizeBytes;
-        string? custName = customName;
-        string configDir = _configDir;
-
         var progress = new Progress<RdrfProgressReport>(UpdateEncryptProgress);
 
         System.Threading.Tasks.Task.Run(() =>
         {
             try
             {
-                var adapter = new RDRF.Core.Dssa.LocalDssaAdapter(outputPath);
-                using var service = new EncryptService(password, adapter);
-
-                string primaryStrategy = strategy;
-                List<string>? auxiliary = null;
-
-                if (IsFsaEnabled && !string.IsNullOrEmpty(FsaPrimaryStrategy))
-                {
-                    primaryStrategy = FsaPrimaryStrategy;
-                    auxiliary = new List<string> { "FSS6" };
-                }
-
-                string fingerprint = service.BackupFile(
-                    filePath,
-                    primaryStrategy,
-                    auxiliary,
-                    fragmentSize: fragSize,
-                    customName: custName,
-                    progress: progress
-                );
-
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                {
-                    RequestSaveConfig?.Invoke();
-                    RequestShowSuccess?.Invoke("Encryption completed successfully!", fingerprint);
-                });
+                ExecuteBackupAsync(password, outputPath, filePath, strategy, fragSize, custName, progress);
             }
             catch (Exception ex)
             {
-                try
-                {
-                    System.IO.File.AppendAllText(
-                        "rdrf_TestOutput\\rdrf_error.txt",
-                        $"[{DateTime.Now:HH:mm:ss}] Backup failed: {ex}{Environment.NewLine}");
-                }
-                catch { }
-                try
-                {
-                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        RequestShowError?.Invoke("Encryption failed", ex.Message, ex.ToString());
-                    });
-                }
-                catch { }
+                LogAndShowError(ex);
             }
             finally
             {
@@ -409,6 +334,98 @@ public class EncryptViewModel : ViewModelBase
                 });
             }
         });
+    }
+
+    private bool TryValidateInputs(out string errorMsg)
+    {
+        if (string.IsNullOrEmpty(EncryptFilePath))
+        {
+            errorMsg = "Please select a file to encrypt.";
+            return false;
+        }
+
+        if (_pendingPassword == null || _pendingPassword.Length == 0)
+        {
+            errorMsg = "Please enter an encryption key.";
+            return false;
+        }
+
+        if (FragmentSizeMB < 1)
+        {
+            errorMsg = "Please enter a valid fragment size (minimum 1 MB).";
+            return false;
+        }
+
+        string customNameInput = CustomName.Trim();
+        if (!string.IsNullOrEmpty(customNameInput))
+        {
+            foreach (char c in customNameInput)
+            {
+                if (!char.IsLetterOrDigit(c) && c != '_' && c != '-')
+                {
+                    errorMsg = "Custom name can only contain letters, numbers, underscores and hyphens.";
+                    return false;
+                }
+            }
+        }
+
+        errorMsg = string.Empty;
+        return true;
+    }
+
+    private (byte[] password, string outputPath, string filePath, string strategy, int fragSize, string? custName) CaptureParams()
+    {
+        string? customName = null;
+        string customNameInput = CustomName.Trim();
+        if (!string.IsNullOrEmpty(customNameInput))
+            customName = customNameInput;
+
+        return (_pendingPassword!, OutputPath, EncryptFilePath!, SelectedStrategy, FragmentSizeMB * 1024 * 1024, customName);
+    }
+
+    private void ExecuteBackupAsync(byte[] password, string outputPath, string filePath,
+        string strategy, int fragSize, string? custName, IProgress<RdrfProgressReport> progress)
+    {
+        var adapter = new RDRF.Core.Dssa.LocalDssaAdapter(outputPath);
+        var service = new EncryptService();
+
+        string primaryStrategy = strategy;
+        List<string>? auxiliary = null;
+
+        if (IsFsaEnabled && !string.IsNullOrEmpty(FsaPrimaryStrategy))
+        {
+            primaryStrategy = FsaPrimaryStrategy;
+            auxiliary = new List<string> { "FSS6" };
+        }
+
+        string fingerprint = service.BackupFile(
+            password, adapter, filePath, primaryStrategy, auxiliary,
+            fragmentSize: fragSize, customName: custName, progress: progress);
+
+        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            RequestSaveConfig?.Invoke();
+            RequestShowSuccess?.Invoke("Encryption completed successfully!", fingerprint);
+        });
+    }
+
+    private void LogAndShowError(Exception ex)
+    {
+        try
+        {
+            System.IO.File.AppendAllText(Path.Combine(_configDir, "encrypt_error.log"),
+                $"[{DateTime.Now:HH:mm:ss}] Backup failed: {ex}{Environment.NewLine}");
+        }
+        catch (Exception logEx) { Debug.WriteLine($"[RDRF] Failed to write error log: {logEx.Message}"); }
+
+        try
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                RequestShowError?.Invoke("Encryption failed", ex.Message, ex.ToString());
+            });
+        }
+        catch (Exception uiEx) { Debug.WriteLine($"[RDRF] Failed to show error dialog: {uiEx.Message}"); }
     }
 
     private byte[]? _pendingPassword;
