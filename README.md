@@ -3,7 +3,7 @@
   RDRF &mdash; Redundant Distributed Recovery File
 </h1>
 
-**Version 1.0.0** &nbsp;|&nbsp; [Build](#build) &nbsp;|&nbsp; [CLI Reference](#cli-reference) &nbsp;|&nbsp; [WPF App](#desktop-application-wpf) &nbsp;|&nbsp; [Testing](#testing)
+**Version 1.4.5** &nbsp;|&nbsp; [Build](#build) &nbsp;|&nbsp; [CLI Reference](#cli-reference) &nbsp;|&nbsp; [WPF App](#desktop-application-wpf) &nbsp;|&nbsp; [Testing](#testing)
 
 A versioned, content-addressed backup system with block-level deduplication, fountain-code-based repair, and a three-node integrity architecture. Provides both a cross-platform CLI and a Windows desktop (WPF) application.
 
@@ -351,6 +351,7 @@ Although the MCP tool has been prepared, it is still under development. Please s
 | `-fss1` &hellip; `--fss6.2` | *(required)* | Strategy (exactly one) |
 | `-next` | | Enable versioning |
 | `-node` | | Node mode to `.rdrf/` |
+| `-real` | | Real incremental mode: keep all version files permanently |
 | `-m <msg>` | | Commit message |
 
 Use `--fss6.1` / `--fss6.2` on POSIX shells (single-dash with dot causes parsing issues).
@@ -370,6 +371,7 @@ Use `--fss6.1` / `--fss6.2` on POSIX shells (single-dash with dot causes parsing
 | `-m <msg>` | *(required)* Commit message |
 | `-o <dir>` | Storage directory |
 | `-password <pw>` | Password |
+| `-real` | Real incremental mode: keep all version files permanently |
 
 ### `rdrf push <indexFile>` &mdash; Push to backends
 
@@ -530,3 +532,57 @@ Yes. The index contains a version number. Future RDRF versions will support read
 ### What happens on crash mid-backup?
 
 Incomplete fragments have an invalid magic header. FSS6.x detects and repairs them on restore. Run `rdrf status` to check.
+
+---
+
+## v1.4.5 Changelog
+
+**WPF Desktop App**
+- Passwords tab: AES-GCM encrypted key-value store with GridView UI and clipboard integration
+- Key select overlay: visual dialog for picking encryption keys by fingerprint
+- Theme refactor: consistent styling across all controls, WaterRipple animation
+- Settings button: fixed latch behavior (not toggle), added AutomationId for UI testing
+- DecryptViewModel / EncryptViewModel / PasswordViewModel / HistoryViewModel
+
+**CLI**
+- `rdrf reach`: interactive backup scanner with Spectre.Console progress bar — scan, report, verify backups
+- `rdrf fp`: fingerprint command — compute and display file/content fingerprints
+- `rdrf list -fp`: display fingerprints alongside backup listing
+- `rdrf info --json`: machine-readable JSON output for backup metadata
+- `rdrf backup` stats display + `-c` compression method/options support
+- `rdrf config`: global configuration command
+- 14 CLI UX improvements: restore hint, progress reporting, Spectre.Console exclusivity, cross-platform fixes
+
+**Core Engine**
+- Structured logging: `RdrfLogger` with 3 pluggable sinks (ConsoleLogSink, DebugLogSink, FileLogSink), `ILogSink` plugin architecture
+- FastPassword manager: AES-GCM encrypted key-value store (`MachineKey`, `PasswordEntry`, `PasswordStore`)
+- DSAA ABI native plugin system: C header bridge (`dsaa_reader.h`, `dsaa_storage.h`), `NativePluginLoader`, `NativeStorageBackend` — cross-language native plugin support
+- DI container: `ServiceCollectionExtensions`, `IEncryptionLayer`, `IIndexManager` injection
+- Configuration: `RdrfConfig` + `GlobalConfig` — centralized config management
+- BackupPhases pipeline: `BackupReadPhase`, `RestoreFragmentReader`
+
+**Security** (12 fixes)
+- Timing attack mitigation, key leak prevention, silent error swallow elimination, log duplicate fix, CBOR deserialization size/fragment-count limits
+
+**Performance**
+- Reed-Solomon multiplication table caching
+- Parallel LZ4 compression
+- CBOR serialization round-trip reduction
+- Sync-over-async wrappers with timeout (2h backup, 30m restore)
+
+**Versioning**
+- Git-style incremental backup: `RealVersionedBackup` / `RealVersionedRestore` — delta-only fragments based on content hash comparison
+- `DssaAdapter.FindLatestIndex()` — remove `FindExistingIndex` downcast
+
+**Testing**
+- 64+ new unit tests: `LoggerTests`, `PasswordManagerTests`, `KeyStorageBackendTests` (S3 in-memory mock), `NativePluginE2ETests`, `NativePluginTests`, `RdrfConfigTests`, `FpCommandTests`, `ReachCommandTests`
+- MCP WPF test protocol suite (`test_protocol.ps1`) with deterministic UI element discovery
+- 15/15 UIA coverage via `test_full.ps1`
+- AutomationId added to 12 WPF controls for testability
+
+**Cleanup**
+- Removed 7 large test input files (bench_doc.bin 441KB, PDFs, RFC text)
+- Removed `tools/RDRF.CompressBench` (obsolete)
+- 10 bug fixes: AVX2 guard, namespace consistency, UX polish, progress bar, verify command, AES limits
+
+---
