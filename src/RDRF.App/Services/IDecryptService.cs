@@ -1,5 +1,5 @@
 using RDRF.Core;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 
 namespace RDRF.App.Services;
 

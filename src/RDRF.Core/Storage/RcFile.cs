@@ -1,7 +1,7 @@
 using System.Formats.Cbor;
 using RDRF.Core.FSS;
 
-namespace RDRF.Core.Dssa;
+namespace RDRF.Core.DSAA;
 
 /// <summary>
 /// CBOR-serialized RC (Recovery Container) with ETN block maps and fountain repair data.

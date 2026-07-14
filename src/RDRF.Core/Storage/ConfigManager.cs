@@ -1,7 +1,7 @@
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace RDRF.Core.Dssa;
+namespace RDRF.Core.DSAA;
 
 /// <summary>
 /// CRUD operations for YAML backend configuration file (rdrf_config.yaml).

@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using RDRF.Core;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Core.Versioning;
@@ -85,14 +85,14 @@ return failed > 0 ? 1 : 0;
 
 // --- Helpers ---
 
-static async Task<string> BackupAsync(string filePath, DssaAdapter storage, byte[] password,
+static async Task<string> BackupAsync(string filePath, DSAAAdapter storage, byte[] password,
     string message, string fssStrategy, int fragmentSize)
 {
     return await VersionedBackup.BackupAsync(
         filePath, storage, password, message, fssStrategy, fragmentSize);
 }
 
-static RdrfIndex LoadIndex(DssaAdapter storage, string fingerprint, byte[] password)
+static RdrfIndex LoadIndex(DSAAAdapter storage, string fingerprint, byte[] password)
 {
     byte[] enc = storage.ReadIndex(fingerprint);
     var (_, cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(enc, password);
@@ -115,7 +115,7 @@ static bool VerifyRestore(string indexFile, byte[] expected, byte[] password)
 static async Task<(bool Ok, string? Message)> Scenario1_FullDedup(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
-    var storage = new LocalDssaAdapter(dir);
+    var storage = new LocalDSAAAdapter(dir);
     byte[] data = RandomNumberGenerator.GetBytes(4096);
     File.WriteAllBytes(file, data);
 
@@ -145,7 +145,7 @@ static async Task<(bool Ok, string? Message)> Scenario1_FullDedup(string dir, st
 static async Task<(bool Ok, string? Message)> Scenario2_PartialDedup(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
-    var storage = new LocalDssaAdapter(dir);
+    var storage = new LocalDSAAAdapter(dir);
     var rng = new Random(42);
     byte[] data = new byte[4096];
     rng.NextBytes(data);
@@ -194,7 +194,7 @@ static async Task<(bool Ok, string? Message)> Scenario2_PartialDedup(string dir,
 // --- Scenario 3: Cross-position reference ---
 static async Task<(bool Ok, string? Message)> Scenario3_CrossPosition(string dir, string file, byte[] pwd)
 {
-    var storage = new LocalDssaAdapter(dir);
+    var storage = new LocalDSAAAdapter(dir);
     var rng = new Random(42);
     int fs = 256;
 
@@ -231,7 +231,7 @@ static async Task<(bool Ok, string? Message)> Scenario3_CrossPosition(string dir
 static async Task<(bool Ok, string? Message)> Scenario4_FragmentCountDown(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
-    var storage = new LocalDssaAdapter(dir);
+    var storage = new LocalDSAAAdapter(dir);
     byte[] data = RandomNumberGenerator.GetBytes(4096);
     File.WriteAllBytes(file, data);
     await BackupAsync(file, storage, pwd, "V1", strategy, fragSize);
@@ -249,7 +249,7 @@ static async Task<(bool Ok, string? Message)> Scenario4_FragmentCountDown(string
 static async Task<(bool Ok, string? Message)> Scenario5_FragmentCountUp(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
-    var storage = new LocalDssaAdapter(dir);
+    var storage = new LocalDSAAAdapter(dir);
     var rng = new Random(42);
 
     byte[] v1 = new byte[2048]; rng.NextBytes(v1);
@@ -271,7 +271,7 @@ static async Task<(bool Ok, string? Message)> Scenario5_FragmentCountUp(string d
 static async Task<(bool Ok, string? Message)> Scenario6_RefCountCleanup(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
-    var storage = new LocalDssaAdapter(dir);
+    var storage = new LocalDSAAAdapter(dir);
     byte[] orig = RandomNumberGenerator.GetBytes(4096);
     byte[] alt = RandomNumberGenerator.GetBytes(4096);
 
@@ -298,7 +298,7 @@ static async Task<(bool Ok, string? Message)> Scenario6_RefCountCleanup(string d
 static async Task<(bool Ok, string? Message)> Scenario7_OldVersionsRestorable(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
-    var storage = new LocalDssaAdapter(dir);
+    var storage = new LocalDSAAAdapter(dir);
     var rng = new Random(42);
     byte[] buf = new byte[4096]; rng.NextBytes(buf);
 
@@ -324,7 +324,7 @@ static async Task<(bool Ok, string? Message)> Scenario7_OldVersionsRestorable(st
 // --- Scenario 8: FSS6.2 + dedup + corruption ---
 static async Task<(bool Ok, string? Message)> Scenario8_Fss62DedupWithCorruption(string dir, string file, byte[] pwd)
 {
-    var storage = new LocalDssaAdapter(dir);
+    var storage = new LocalDSAAAdapter(dir);
     var rng = new Random(42);
     byte[] data = new byte[2048]; rng.NextBytes(data);
     File.WriteAllBytes(file, data);
@@ -382,7 +382,7 @@ static async Task<(bool Ok, string? Message)> Scenario8_Fss62DedupWithCorruption
 static async Task<(bool Ok, string? Message)> Scenario9_Fss3Dedup(string dir, string file,
     byte[] pwd, int fragSize)
 {
-    var storage = new LocalDssaAdapter(dir);
+    var storage = new LocalDSAAAdapter(dir);
     var rng = new Random(42);
     byte[] data = new byte[3072]; rng.NextBytes(data);
     File.WriteAllBytes(file, data);
@@ -421,7 +421,7 @@ static Task<(bool Ok, string? Message)> Scenario10_Lz4Roundtrip()
 static async Task<(bool Ok, string? Message)> Scenario11_ChainRefCount(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
-    var storage = new LocalDssaAdapter(dir);
+    var storage = new LocalDSAAAdapter(dir);
     var rng = new Random(42);
     byte[] data = new byte[4096]; rng.NextBytes(data);
 
@@ -446,7 +446,7 @@ static async Task<(bool Ok, string? Message)> Scenario11_ChainRefCount(string di
 static async Task<(bool Ok, string? Message)> Scenario12_CorruptedIndex(string dir, string file,
     byte[] pwd, string strategy, int fragSize)
 {
-    var storage = new LocalDssaAdapter(dir);
+    var storage = new LocalDSAAAdapter(dir);
     byte[] data = RandomNumberGenerator.GetBytes(2048);
     File.WriteAllBytes(file, data);
     string fp = await BackupAsync(file, storage, pwd, "V1", strategy, fragSize);

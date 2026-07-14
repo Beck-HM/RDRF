@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using RDRF.Core.Logging;using System.Diagnostics;
 using System.Text.Json;
 
 namespace RDRF.Core.Metadata;
@@ -40,7 +40,7 @@ public class MetadataManager
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to load metadata file '{_filePath}': {ex.Message}");
+            RdrfLogger.Default.Debug("",$"Failed to load metadata file '{_filePath}': {ex.Message}");
             loaded = null;
         }
 

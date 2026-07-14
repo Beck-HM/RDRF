@@ -2,7 +2,7 @@ using RDRF.Core;
 using RDRF.Core.Diff;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.Versioning;
 using RDRF.Cli.Services;
 using Spectre.Console;
@@ -60,7 +60,7 @@ public class NextCommand : Command
             try
             {
             string storagePath = storageDir?.FullName ?? Path.Combine(AppContext.BaseDirectory, "backup");
-            var storage = new LocalDssaAdapter(storagePath);
+            var storage = new LocalDSAAAdapter(storagePath);
 
             var dir = new DirectoryInfo(storagePath);
             if (!dir.Exists)
@@ -104,10 +104,10 @@ public class NextCommand : Command
             {
                 newFp = realMode
                     ? await RealVersionedBackup.BackupAsync(
-                        source.FullName, new LocalDssaAdapter(storagePath), password, msg,
+                        source.FullName, new LocalDSAAAdapter(storagePath), password, msg,
                         oldIndex.FssStrategy, progress: progress)
                     : await VersionedBackup.BackupAsync(
-                        source.FullName, new LocalDssaAdapter(storagePath), password, msg,
+                        source.FullName, new LocalDSAAAdapter(storagePath), password, msg,
                         oldIndex.FssStrategy, progress: progress);
             });
 
@@ -135,7 +135,7 @@ public class NextCommand : Command
         });
     }
 
-    private static byte[] ReadDecryptedOriginal(DssaAdapter storage, RdrfIndex index, byte[] aesKey)
+    private static byte[] ReadDecryptedOriginal(DSAAAdapter storage, RdrfIndex index, byte[] aesKey)
     {
         string prefix = index.CustomName ?? index.FileFingerprint;
         var rawFragments = new List<byte[]>();

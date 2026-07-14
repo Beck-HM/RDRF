@@ -1,4 +1,4 @@
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using Xunit;

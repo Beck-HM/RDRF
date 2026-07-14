@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using RDRF.Core;
 using RDRF.Core.Abstractions;
 using RDRF.Core.Composition;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
@@ -14,7 +14,7 @@ namespace RDRF.Core.Tests;
 public class OrchestratorTests : IDisposable
 {
     private readonly string _dir;
-    private readonly LocalDssaAdapter _storage;
+    private readonly LocalDSAAAdapter _storage;
     private readonly byte[] _rcCode;
     private readonly byte[] _aesKey;
     private readonly ServiceProvider _provider;
@@ -23,7 +23,7 @@ public class OrchestratorTests : IDisposable
     {
         _dir = Path.Combine(Path.GetTempPath(), $"rdrf_orch_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_dir);
-        _storage = new LocalDssaAdapter(_dir);
+        _storage = new LocalDSAAAdapter(_dir);
         _rcCode = EncryptionLayer.GenerateRcCode(32);
         _aesKey = EncryptionLayer.DeriveKeyLegacy(_rcCode);
 
@@ -153,7 +153,7 @@ public class OrchestratorTests : IDisposable
         File.WriteAllBytes(testFile, new byte[] { 10, 20, 30, 40, 50 });
 
         using var bo = new BackupOrchestrator(_aesKey, _rcCode, _storage);
-        string fp = bo.BackupFile(testFile, "FSS1");
+        string fp = bo.BackupFileAsync(testFile, "FSS1").GetAwaiter().GetResult();
         Assert.False(string.IsNullOrEmpty(fp));
         Assert.True(_storage.IndexExists(fp));
     }

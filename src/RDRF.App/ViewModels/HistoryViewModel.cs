@@ -9,7 +9,7 @@ using RDRF.Core;
 using RDRF.Core.Versioning;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 
 namespace RDRF.App.ViewModels;
 
@@ -216,7 +216,7 @@ public class HistoryViewModel : ViewModelBase
             {
                 try
                 {
-                    var adapter = new RDRF.Core.Dssa.LocalDssaAdapter(_storagePath!);
+                    var adapter = new RDRF.Core.DSAA.LocalDSAAAdapter(_storagePath!);
                     string fp = VersionedBackup.BackupAsync(
                         _incrementalFilePath!,
                         adapter,
@@ -224,7 +224,7 @@ public class HistoryViewModel : ViewModelBase
                         _commitMessage
                     ).GetAwaiter().GetResult();
 
-                    Application.Current.Dispatcher.Invoke(() =>
+                    Dispatch(() =>
                     {
                         _fingerprint = fp;
                         _backupFilePath = Path.Combine(_storagePath!, fp + ".indrdrf");
@@ -236,14 +236,14 @@ public class HistoryViewModel : ViewModelBase
                 }
                 catch (Exception ex)
                 {
-                    Application.Current.Dispatcher.Invoke(() =>
+                    Dispatch(() =>
                     {
                         RequestShowError?.Invoke("Incremental backup failed", ex.Message, ex.ToString());
                     });
                 }
                 finally
                 {
-                    Application.Current.Dispatcher.Invoke(() => IsLoading = false);
+                    Dispatch(() => IsLoading = false);
                 }
             });
         }

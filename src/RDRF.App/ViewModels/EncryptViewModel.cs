@@ -292,7 +292,7 @@ public class EncryptViewModel : ViewModelBase
         try
         {
             string log = $"[{DateTime.Now:HH:mm:ss.fff}] StartEncrypt called. " +
-                $"File='{EncryptFilePath}' pw={_pendingPassword?.Length ?? -1} sz={FragmentSizeMB} out='{OutputPath}'" +
+                $"File='{EncryptFilePath}' sz={FragmentSizeMB} out='{OutputPath}'" +
                 Environment.NewLine;
             System.IO.File.AppendAllText(Path.Combine(_configDir, "encrypt_start.log"), log);
         }
@@ -327,7 +327,7 @@ public class EncryptViewModel : ViewModelBase
             }
             finally
             {
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                Dispatch(() =>
                 {
                     IsEncrypting = false;
                     CleanupTempZip();
@@ -386,7 +386,7 @@ public class EncryptViewModel : ViewModelBase
     private void ExecuteBackupAsync(byte[] password, string outputPath, string filePath,
         string strategy, int fragSize, string? custName, IProgress<RdrfProgressReport> progress)
     {
-        var adapter = new RDRF.Core.Dssa.LocalDssaAdapter(outputPath);
+        var adapter = new RDRF.Core.DSAA.LocalDSAAAdapter(outputPath);
         var service = new EncryptService();
 
         string primaryStrategy = strategy;
@@ -402,7 +402,7 @@ public class EncryptViewModel : ViewModelBase
             password, adapter, filePath, primaryStrategy, auxiliary,
             fragmentSize: fragSize, customName: custName, progress: progress);
 
-        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        Dispatch(() =>
         {
             RequestSaveConfig?.Invoke();
             RequestShowSuccess?.Invoke("Encryption completed successfully!", fingerprint);
@@ -420,7 +420,7 @@ public class EncryptViewModel : ViewModelBase
 
         try
         {
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            Dispatch(() =>
             {
                 RequestShowError?.Invoke("Encryption failed", ex.Message, ex.ToString());
             });

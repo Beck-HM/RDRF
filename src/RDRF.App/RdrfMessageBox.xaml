@@ -13,6 +13,30 @@
         MinWidth="380"
         MaxWidth="520">
     <Window.Resources>
+        <!-- Fade-in animation for the entire dialog -->
+        <Style x:Key="DialogFadeInStyle" TargetType="Window">
+            <Style.Triggers>
+                <EventTrigger RoutedEvent="Window.Loaded">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                              From="0" To="1" Duration="0:0:0.2">
+                                <DoubleAnimation.EasingFunction>
+                                    <CubicEase EasingMode="EaseOut" />
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                              From="10" To="0" Duration="0:0:0.25">
+                                <DoubleAnimation.EasingFunction>
+                                    <CubicEase EasingMode="EaseOut" />
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="DialogButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="#FF7C6BF2" />
             <Setter Property="Foreground" Value="White" />
@@ -79,7 +103,11 @@
             CornerRadius="12"
             BorderBrush="#FF3D3D56"
             BorderThickness="1"
-            Padding="0">
+            Padding="0"
+            RenderTransformOrigin="0.5,0.5">
+        <Border.RenderTransform>
+            <TranslateTransform Y="0" />
+        </Border.RenderTransform>
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />

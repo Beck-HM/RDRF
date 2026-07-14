@@ -8,6 +8,7 @@ using RDRF.Core.FSA;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using RDRF.Core.Integrity;
+using RDRF.Core.Logging;
 using RDRF.Core.Metadata;
 
 namespace RDRF.Core.Composition;
@@ -29,6 +30,17 @@ public static class ServiceCollectionExtensions
         {
             var fss = sp.GetRequiredService<IFSSEngine>();
             return new RecoveryExecutor(fss);
+        });
+
+        // Logger — register sinks then central logger
+        services.TryAddSingleton<FileLogSink>();
+        services.TryAddSingleton<DebugLogSink>();
+        services.TryAddSingleton<RdrfLogger>(sp =>
+        {
+            var logger = new RdrfLogger();
+            logger.AddSink(sp.GetRequiredService<FileLogSink>());
+            logger.AddSink(sp.GetRequiredService<DebugLogSink>());
+            return logger;
         });
 
         return services;

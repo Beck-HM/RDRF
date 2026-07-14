@@ -1,8 +1,10 @@
 using System.Security.Cryptography;
+using RDRF.Core.Abstractions;
 using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.Logging;
+using RDRF.Core.DSAA;
 
 namespace RDRF.Core;
 
@@ -29,34 +31,40 @@ public class RDRFEngine : IDisposable
 {
     private readonly BackupOrchestrator _backup;
     private readonly RestoreOrchestrator _restore;
-    private readonly DssaAdapter _storage;
+    private readonly DSAAAdapter _storage;
     private readonly byte[] _rcCode;
 
     /// <summary>
     /// Initializes the engine with a raw rcCode. The AES key is derived
     /// from rcCode via EncryptionLayer.DeriveKeyLegacy.
     /// </summary>
-    public RDRFEngine(byte[] rcCode, DssaAdapter storage, FSS.FSSEngine? fssEngine = null)
+    public RDRFEngine(byte[] rcCode, DSAAAdapter storage, FSS.FSSEngine? fssEngine = null,
+        RdrfLogger? logger = null, IEncryptionLayer? encryption = null, IIndexManager? indexManager = null)
     {
         _rcCode = (byte[])rcCode.Clone();
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
-        byte[] aesKey = EncryptionLayer.DeriveKeyLegacy(rcCode);
+        var enc = encryption ?? new EncryptionLayerWrapper();
+        byte[] aesKey = enc.DeriveKeyLegacy(rcCode);
+        var idxMgr = indexManager ?? new IndexManagerWrapper();
         var fssWrapped = fssEngine is not null ? new FSSEngineWrapper(fssEngine) : null;
-        _backup = new BackupOrchestrator(aesKey, _rcCode, storage, fssWrapped);
-        _restore = new RestoreOrchestrator(aesKey, _rcCode, storage, fssWrapped);
+        _backup = new BackupOrchestrator(aesKey, _rcCode, storage, fssWrapped, encryption: enc, indexManager: idxMgr, logger: logger);
+        _restore = new RestoreOrchestrator(aesKey, _rcCode, storage, fssWrapped, encryption: enc, indexManager: idxMgr, logger: logger);
     }
 
     /// <summary>
     /// Initializes the engine with a pre-derived AES key and the
     /// original rcCode (for memory zeroing on dispose).
     /// </summary>
-    public RDRFEngine(byte[] aesKey, byte[] rcCode, DssaAdapter storage, FSS.FSSEngine? fssEngine = null)
+    public RDRFEngine(byte[] aesKey, byte[] rcCode, DSAAAdapter storage, FSS.FSSEngine? fssEngine = null,
+        RdrfLogger? logger = null, IEncryptionLayer? encryption = null, IIndexManager? indexManager = null)
     {
         _rcCode = (byte[])rcCode.Clone();
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
+        var idxMgr = indexManager ?? new IndexManagerWrapper();
+        var enc = encryption ?? new EncryptionLayerWrapper();
         var fssWrapped2 = fssEngine is not null ? new FSSEngineWrapper(fssEngine) : null;
-        _backup = new BackupOrchestrator(aesKey, _rcCode, storage, fssWrapped2);
-        _restore = new RestoreOrchestrator(aesKey, _rcCode, storage, fssWrapped2);
+        _backup = new BackupOrchestrator(aesKey, _rcCode, storage, fssWrapped2, encryption: enc, indexManager: idxMgr, logger: logger);
+        _restore = new RestoreOrchestrator(aesKey, _rcCode, storage, fssWrapped2, encryption: enc, indexManager: idxMgr, logger: logger);
     }
 
     // -- Backup --
@@ -81,7 +89,7 @@ public class RDRFEngine : IDisposable
         int fragmentSize = 0,
         string? customName = null,
         IProgress<RdrfProgressReport>? progress = null)
-        => _backup.BackupFile(filePath, fssStrategy, auxiliaryStrategies, originalFilename, fragmentSize, customName, progress);
+        => _backup.BackupFileAsync(filePath, fssStrategy, auxiliaryStrategies, originalFilename, fragmentSize, customName, progress).GetAwaiter().GetResult();
 
     /// <summary>
     /// Synchronous backup accepting a FileInfo instead of a path string.

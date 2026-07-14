@@ -1,11 +1,17 @@
+using RDRF.Core.DSAA.NativePlugin;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace RDRF.Core.Dssa;
+namespace RDRF.Core.DSAA;
 
 public static class StorageConfig
 {
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, IStorageBackendFactory> _factories = new();
+
+    public static void RegisterBuiltinFactories()
+    {
+        _factories.TryAdd("native", new NativeBackendConfigFactory());
+    }
 
     private sealed class YamlRoot
     {

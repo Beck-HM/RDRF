@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -47,7 +47,7 @@ public class EtnCrossStrategyTests
         {
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
             byte[] rcCodeClone = (byte[])rcCode.Clone();
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
 
             string fingerprint;
             using (var engine = new RDRFEngine(rcCode, storage))
@@ -90,7 +90,7 @@ public class EtnCrossStrategyTests
         {
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
             byte[] rcCodeClone = (byte[])rcCode.Clone();
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
 
             string fingerprint;
             using (var engine = new RDRFEngine(rcCode, storage))
@@ -130,7 +130,7 @@ public class EtnCrossStrategyTests
         {
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
             byte[] rcCodeClone = (byte[])rcCode.Clone();
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
 
             string fingerprint;
             using (var engine = new RDRFEngine((byte[])rcCode.Clone(), storage))

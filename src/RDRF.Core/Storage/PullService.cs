@@ -6,7 +6,7 @@ using RDRF.Core.FragmentEngine;
 using RDRF.Core.Index;
 using RDRF.Core.Versioning;
 
-namespace RDRF.Core.Dssa;
+namespace RDRF.Core.DSAA;
 
 /// <summary>
 /// Pull fragments/RC from remote backends. Supports version-specific pulls via VersionRecord lookup.

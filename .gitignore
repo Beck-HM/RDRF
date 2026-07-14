@@ -42,3 +42,6 @@ rdrf_config.yaml
 # Tools build output (allow source files)
 tools/*/bin/
 tools/*/obj/
+
+# Build/release script (local modifications excluded)
+build-release.ps1

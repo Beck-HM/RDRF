@@ -1,7 +1,7 @@
 using System.Buffers;
-using System.Diagnostics;
+using RDRF.Core.Logging;using System.Diagnostics;
 using RDRF.Core.Abstractions;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.ETN;
 using RDRF.Core.Index;
 
@@ -235,7 +235,7 @@ internal static class RepairRunner
 
             return any;
         }
-        catch (Exception ex_fs) { Debug.WriteLine($"TryFss61 failed: {ex_fs.Message}"); return false; }
+        catch (Exception ex_fs) { RdrfLogger.Default.Error("FssRepairService",$"TryFss61 failed", ex_fs); return false; }
     }
 
     internal static bool TryFss62(RdrfIndex index, ref byte[] rcBytes,
@@ -313,7 +313,7 @@ internal static class RepairRunner
             }
             return any;
         }
-        catch (Exception ex_fs2) { Debug.WriteLine($"TryFss62 failed: {ex_fs2.Message}"); return false; }
+        catch (Exception ex_fs2) { RdrfLogger.Default.Error("FssRepairService",$"TryFss62 failed", ex_fs2); return false; }
     }
 
     private static bool LtDecode(Fss61RepairData rd, byte[] target,

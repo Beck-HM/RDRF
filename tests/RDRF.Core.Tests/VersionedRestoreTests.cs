@@ -1,4 +1,4 @@
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.Encryption;
 using RDRF.Core.Versioning;
 using Xunit;
@@ -8,7 +8,7 @@ namespace RDRF.Core.Tests;
 public class VersionedRestoreTests : IDisposable
 {
     private readonly string _dir;
-    private readonly LocalDssaAdapter _storage;
+    private readonly LocalDSAAAdapter _storage;
     private readonly byte[] _password;
     private string _fingerprint = "";
 
@@ -16,7 +16,7 @@ public class VersionedRestoreTests : IDisposable
     {
         _dir = Path.Combine(Path.GetTempPath(), $"rdrf_vrestore_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_dir);
-        _storage = new LocalDssaAdapter(_dir);
+        _storage = new LocalDSAAAdapter(_dir);
         _password = EncryptionLayer.GenerateRcCode(32);
     }
 

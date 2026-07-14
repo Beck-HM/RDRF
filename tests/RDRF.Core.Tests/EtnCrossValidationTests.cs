@@ -1,7 +1,7 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Encryption;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.ETN;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
@@ -486,7 +486,7 @@ public class EtnCrossValidationTests
         {
             var (indexBytes, fragments, rcBytes, fingerprint, rcCode) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             byte[] onDisk = storage.ReadRc(fingerprint);
 
             // Encrypted RC should not equal plaintext
@@ -509,7 +509,7 @@ public class EtnCrossValidationTests
         {
             var (indexBytes, fragments, rcBytes, fingerprint, rcCode) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             byte[] encryptedRc = storage.ReadRc(fingerprint);
 
             byte[] wrongKey = new byte[32];
@@ -517,7 +517,7 @@ public class EtnCrossValidationTests
 
             byte[] decrypted = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, wrongKey);
             Assert.ThrowsAny<Exception>(() =>
-                RDRF.Core.Dssa.RcFile.FromCbor(decrypted));
+                RDRF.Core.DSAA.RcFile.FromCbor(decrypted));
             _output.WriteLine("PASS: Wrong key produces invalid CBOR");
         }
         finally
@@ -535,7 +535,7 @@ public class EtnCrossValidationTests
             var (indexBytes, fragments, rcBytes, fingerprint, rcCode) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
             byte[] aesKey = EncryptionLayer.DeriveKeyLegacy(rcCode);
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             byte[] encryptedRc = storage.ReadRc(fingerprint);
 
             // Flip one byte in the encrypted blob
@@ -546,7 +546,7 @@ public class EtnCrossValidationTests
             byte[] tampered = storage.ReadRc(fingerprint);
             byte[] decrypted = EncryptionLayer.DecryptFragmentWithKey(tampered, aesKey);
             Assert.ThrowsAny<Exception>(() =>
-                RDRF.Core.Dssa.RcFile.FromCbor(decrypted));
+                RDRF.Core.DSAA.RcFile.FromCbor(decrypted));
             _output.WriteLine("PASS: Tampered RC file rejected by CBOR parsing");
         }
         finally

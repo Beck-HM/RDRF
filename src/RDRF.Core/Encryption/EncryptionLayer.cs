@@ -1,4 +1,4 @@
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using System.Buffers;
 using System.Formats.Cbor;
 using System.Security.Cryptography;
@@ -82,7 +82,7 @@ public static class EncryptionLayer
     }
 
     /// <summary>Encrypts with a caller-provided nonce. Output = nonce || ciphertext.</summary>
-    public static byte[] EncryptFragmentWithKey(byte[] plaintext, byte[] aesKey, byte[] nonce)
+    private static byte[] EncryptFragmentWithKey(byte[] plaintext, byte[] aesKey, byte[] nonce)
     {
         byte[] ciphertext = CtrCryptWithKey(plaintext, aesKey, nonce);
         byte[] result = new byte[Constants.NonceLength + ciphertext.Length];
@@ -131,7 +131,7 @@ public static class EncryptionLayer
     }
 
     /// <summary>Encrypts plaintext with caller-provided nonce.</summary>
-    public static byte[] EncryptFragmentCtrWithKey(byte[] plaintext, byte[] aesKey, byte[] nonce)
+    private static byte[] EncryptFragmentCtrWithKey(byte[] plaintext, byte[] aesKey, byte[] nonce)
     {
         byte[] ciphertext = CtrCryptWithKey(plaintext, aesKey, nonce);
         byte[] result = new byte[nonce.Length + ciphertext.Length];

@@ -9,7 +9,7 @@ namespace RDRF.Cli.Services;
 
 public static class ProgressReporter
 {
-    public static async Task Run(string title, Func<IProgress<RdrfProgressReport>, Task> action)
+    public static async Task Run(string title, Func<IProgress<RdrfProgressReport>, Task> action, CancellationToken ct = default)
     {
         await AnsiConsole.Progress()
             .Columns(new ProgressColumn[]

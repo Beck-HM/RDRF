@@ -1,26 +1,54 @@
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
+using RDRF.Core.PasswordManager;
 using Spectre.Console;
 using System.CommandLine;
 
 namespace RDRF.Cli.Commands;
 
-/// <summary>
-/// List configured backends or registered projects. CLI: rdrf list.
-/// </summary>
-
 public class ListCommand : Command
 {
-    public ListCommand() : base("list", "List configured backends or registered projects")
+    public ListCommand(PasswordManager? passwordManager = null) : base("list", "List configured backends or registered projects")
     {
         var nodeOpt = new Option<bool>("-node") { Description = "List all configured storage backends" };
+        var fpOpt = new Option<bool>("-fp") { Description = "List all stored FastPasswords" };
         Add(nodeOpt);
+        Add(fpOpt);
 
         SetAction((ParseResult parseResult) =>
         {
             bool node = parseResult.GetValue(nodeOpt);
+            bool fp = parseResult.GetValue(fpOpt);
+
+            if (fp)
+            {
+                var mgr = passwordManager ?? new PasswordManager();
+                mgr.Initialize();
+                var keys = mgr.ListKeys();
+                if (keys.Length == 0)
+                {
+                    AnsiConsole.MarkupLine("[yellow]No FastPasswords stored. Use 'rdrf fp set <key>' to add one.[/]");
+                    return 0;
+                }
+                var table = new Table();
+                table.Border(TableBorder.Rounded);
+                table.AddColumn("Key");
+                table.AddColumn("Backups");
+                table.AddColumn("Created");
+                foreach (var k in keys)
+                {
+                    var detail = mgr.GetKeyDetail(k);
+                    string created = detail.Length > 0
+                        ? DateTimeOffset.FromUnixTimeSeconds(detail[0].CreatedAt).LocalDateTime.ToString("yyyy-MM-dd HH:mm")
+                        : "-";
+                    table.AddRow(k, detail.Length.ToString(), created);
+                }
+                AnsiConsole.Write(new Panel(table).Header($"FastPasswords ({keys.Length})").BorderColor(Color.Grey));
+                return 0;
+            }
+
             if (!node)
             {
-                AnsiConsole.MarkupLine("[red]Error: -node is required[/]");
+                AnsiConsole.MarkupLine("[red]Error: -node or -fp is required[/]");
                 return 1;
             }
 
@@ -31,11 +59,11 @@ public class ListCommand : Command
                 return 0;
             }
 
-            var table = new Table();
-            table.Border(TableBorder.Rounded);
-            table.AddColumn("Name");
-            table.AddColumn("Type");
-            table.AddColumn("Info");
+            var table2 = new Table();
+            table2.Border(TableBorder.Rounded);
+            table2.AddColumn("Name");
+            table2.AddColumn("Type");
+            table2.AddColumn("Info");
 
             foreach (var b in backends)
             {
@@ -46,10 +74,10 @@ public class ListCommand : Command
                     "path" => $"base_path: {b.Parameters.GetValueOrDefault("base_path", "-")}",
                     _ => b.Type,
                 };
-                table.AddRow(b.Name, b.Type, info);
+                table2.AddRow(b.Name, b.Type, info);
             }
 
-            AnsiConsole.Write(new Panel(table).Header($"Configured backends ({backends.Count})").BorderColor(Color.Grey));
+            AnsiConsole.Write(new Panel(table2).Header($"Configured backends ({backends.Count})").BorderColor(Color.Grey));
             return 0;
         });
     }

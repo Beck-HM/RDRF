@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Windows;
@@ -22,12 +23,13 @@ public partial class MainWindow : Window
     private readonly DecryptViewModel _decryptVM;
     private readonly HistoryViewModel _historyVM;
     internal readonly SettingsViewModel _settingsVM;
+    private readonly PasswordViewModel _passwordVM;
 
     private string _configDir = string.Empty;
 
     private readonly Dictionary<string, Button> _strategyBorders = new();
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _notifyIcon;
-    private int _allowedIpcPid;
+    private readonly string _ipcToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
 
     private const int WM_COPYDATA = 0x004A;
 
@@ -48,9 +50,11 @@ public partial class MainWindow : Window
         _decryptVM = serviceProvider.GetRequiredService<DecryptViewModel>();
         _historyVM = serviceProvider.GetRequiredService<HistoryViewModel>();
         _settingsVM = serviceProvider.GetRequiredService<SettingsViewModel>();
+        _passwordVM = new PasswordViewModel();
 
         InitializeComponent();
         InitializeConfig();
+        WriteIpcToken();
 
         EncryptPage.DataContext = _encryptVM;
         DecryptPage.DataContext = _decryptVM;
@@ -93,7 +97,7 @@ public partial class MainWindow : Window
         // HwndSource hook for WM_COPYDATA IPC (used by rdrf-mcp-wpf)
         SourceInitialized += OnSourceInitialized;
 
-        // Set window icon from embedded assembly icon
+        // Set window icon and logo from embedded assembly icon
         try
         {
             var hIcon = System.Drawing.Icon.ExtractAssociatedIcon(
@@ -104,16 +108,8 @@ public partial class MainWindow : Window
                     new System.Windows.Int32Rect(0, 0, 32, 32),
                     System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
 
-            // Also set the title bar icon image
-            using var iconStream = new System.IO.MemoryStream();
-            hIcon?.Save(iconStream);
-            iconStream.Position = 0;
-            var bitmap = new System.Windows.Media.Imaging.BitmapImage();
-            bitmap.BeginInit();
-            bitmap.StreamSource = iconStream;
-            bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-            bitmap.EndInit();
-            AppIconImage.Source = bitmap;
+            AppIconImage.Source = new System.Windows.Media.Imaging.BitmapImage(
+                new Uri("pack://application:,,,/rdrf.ico"));
         }
         catch (Exception ex) { Debug.WriteLine($"[RDRF] Failed to set window icon: {ex.Message}"); }
 
@@ -175,15 +171,6 @@ public partial class MainWindow : Window
     {
         if (msg != WM_COPYDATA) return IntPtr.Zero;
 
-        GetWindowThreadProcessId(wParam, out uint senderPid);
-        if (_allowedIpcPid == 0)
-            _allowedIpcPid = (int)senderPid;
-        else if (_allowedIpcPid != (int)senderPid)
-        {
-            handled = true;
-            return IntPtr.Zero;
-        }
-
         handled = true;
         try
         {
@@ -193,21 +180,36 @@ public partial class MainWindow : Window
 
             byte[] bytes = new byte[cds.cbData];
             Marshal.Copy(cds.lpData, bytes, 0, cds.cbData);
-            var (action, value) = ParseIpcMessage(bytes);
+
+            byte[] payload = bytes;
+            if (bytes.Length > 0 && bytes[0] == 0x01)
+            {
+                int encLen = BitConverter.ToInt32(bytes, 1);
+                if (encLen <= 0 || encLen > bytes.Length - 5) return IntPtr.Zero;
+                byte[] encData = new byte[encLen];
+                Buffer.BlockCopy(bytes, 5, encData, 0, encLen);
+                try { payload = ProtectedData.Unprotect(encData, null, DataProtectionScope.CurrentUser); }
+                catch { return IntPtr.Zero; }
+            }
+
+            var (action, value, token) = ParseIpcMessage(payload);
+            if (!string.IsNullOrEmpty(token) && token != _ipcToken) return IntPtr.Zero;
+            if (string.IsNullOrEmpty(token)) return IntPtr.Zero;
             DispatchIpcAction(action, value);
         }
         catch (Exception ex_ipc) { Debug.WriteLine($"[RDRF] Malformed IPC message ignored: {ex_ipc.Message}"); }
         return IntPtr.Zero;
     }
 
-    private static (string action, string value) ParseIpcMessage(byte[] bytes)
+    private static (string action, string value, string token) ParseIpcMessage(byte[] bytes)
     {
         string json = Encoding.UTF8.GetString(bytes);
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
         string action = root.GetProperty("action").GetString() ?? "";
         string value = root.TryGetProperty("value", out var valueEl) ? valueEl.GetString() ?? "" : "";
-        return (action, value);
+        string token = root.TryGetProperty("token", out var tokenEl) ? tokenEl.GetString() ?? "" : "";
+        return (action, value, token);
     }
 
     private void DispatchIpcAction(string action, string value)
@@ -318,6 +320,18 @@ public partial class MainWindow : Window
         _configDir = Path.Combine(baseDir, ".rdrf");
     }
 
+    private void WriteIpcToken()
+    {
+        try
+        {
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string dir = Path.Combine(localAppData, "RDRF");
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "ipc_token"), _ipcToken);
+        }
+        catch (Exception ex) { Debug.WriteLine($"[RDRF] Failed to write IPC token: {ex.Message}"); }
+    }
+
     private void InitializeStrategyCards()
     {
         _strategyBorders["FSS1"] = StrategyFSS1;
@@ -377,58 +391,118 @@ public partial class MainWindow : Window
 
     private void TabEncrypt_Click(object sender, RoutedEventArgs e)
     {
+        _settingsOpen = false;
         TabEncrypt.Style = (Style)FindResource("TabButtonActiveStyle");
         TabDecrypt.Style = (Style)FindResource("TabButtonStyle");
         TabHistory.Style = (Style)FindResource("TabButtonStyle");
+        TabDSAA.Style = (Style)FindResource("TabButtonStyle");
+        TabPasswords.Style = (Style)FindResource("TabButtonStyle");
+        SettingsButton.Style = (Style)FindResource("SettingsButtonStyle");
         EncryptPage.Visibility = Visibility.Visible;
         DecryptPage.Visibility = Visibility.Collapsed;
         HistoryPage.Visibility = Visibility.Collapsed;
         SettingsPage.Visibility = Visibility.Collapsed;
+        PasswordPage.Visibility = Visibility.Collapsed;
         _decryptVM.StopFragmentWatcher();
     }
 
     private void TabDecrypt_Click(object sender, RoutedEventArgs e)
     {
+        _settingsOpen = false;
         TabDecrypt.Style = (Style)FindResource("TabButtonActiveStyle");
         TabEncrypt.Style = (Style)FindResource("TabButtonStyle");
         TabHistory.Style = (Style)FindResource("TabButtonStyle");
+        TabDSAA.Style = (Style)FindResource("TabButtonStyle");
+        TabPasswords.Style = (Style)FindResource("TabButtonStyle");
+        SettingsButton.Style = (Style)FindResource("SettingsButtonStyle");
         DecryptPage.Visibility = Visibility.Visible;
         EncryptPage.Visibility = Visibility.Collapsed;
         HistoryPage.Visibility = Visibility.Collapsed;
         SettingsPage.Visibility = Visibility.Collapsed;
+        PasswordPage.Visibility = Visibility.Collapsed;
         _decryptVM.StopFragmentWatcher();
     }
 
     private void TabHistory_Click(object sender, RoutedEventArgs e)
     {
+        _settingsOpen = false;
         TabHistory.Style = (Style)FindResource("TabButtonActiveStyle");
         TabEncrypt.Style = (Style)FindResource("TabButtonStyle");
         TabDecrypt.Style = (Style)FindResource("TabButtonStyle");
+        TabDSAA.Style = (Style)FindResource("TabButtonStyle");
+        TabPasswords.Style = (Style)FindResource("TabButtonStyle");
+        SettingsButton.Style = (Style)FindResource("SettingsButtonStyle");
         HistoryPage.Visibility = Visibility.Visible;
         EncryptPage.Visibility = Visibility.Collapsed;
         DecryptPage.Visibility = Visibility.Collapsed;
+        SettingsPage.Visibility = Visibility.Collapsed;
+        PasswordPage.Visibility = Visibility.Collapsed;
+        _decryptVM.StopFragmentWatcher();
+    }
+
+    private void TabDSAA_Click(object sender, RoutedEventArgs e)
+    {
+        _settingsOpen = false;
+        TabDSAA.Style = (Style)FindResource("TabButtonActiveStyle");
+        TabEncrypt.Style = (Style)FindResource("TabButtonStyle");
+        TabDecrypt.Style = (Style)FindResource("TabButtonStyle");
+        TabHistory.Style = (Style)FindResource("TabButtonStyle");
+        TabPasswords.Style = (Style)FindResource("TabButtonStyle");
+        SettingsButton.Style = (Style)FindResource("SettingsButtonStyle");
+        EncryptPage.Visibility = Visibility.Collapsed;
+        DecryptPage.Visibility = Visibility.Collapsed;
+        HistoryPage.Visibility = Visibility.Collapsed;
+        SettingsPage.Visibility = Visibility.Collapsed;
+        PasswordPage.Visibility = Visibility.Collapsed;
+        System.Windows.MessageBox.Show("DSAA storage backend — coming soon.", "DSAA",
+            System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+    }
+
+    private void TabPasswords_Click(object sender, RoutedEventArgs e)
+    {
+        _settingsOpen = false;
+        TabPasswords.Style = (Style)FindResource("TabButtonActiveStyle");
+        TabEncrypt.Style = (Style)FindResource("TabButtonStyle");
+        TabDecrypt.Style = (Style)FindResource("TabButtonStyle");
+        TabHistory.Style = (Style)FindResource("TabButtonStyle");
+        TabDSAA.Style = (Style)FindResource("TabButtonStyle");
+        SettingsButton.Style = (Style)FindResource("SettingsButtonStyle");
+        PasswordPage.Visibility = Visibility.Visible;
+        PasswordPage.DataContext = _passwordVM;
+        _passwordVM.Refresh();
+        EncryptPage.Visibility = Visibility.Collapsed;
+        DecryptPage.Visibility = Visibility.Collapsed;
+        HistoryPage.Visibility = Visibility.Collapsed;
         SettingsPage.Visibility = Visibility.Collapsed;
         _decryptVM.StopFragmentWatcher();
     }
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        bool isOpen = SettingsPage.Visibility == Visibility.Visible;
-        SettingsPage.Visibility = isOpen ? Visibility.Collapsed : Visibility.Visible;
-        if (SettingsPage.Visibility == Visibility.Visible)
-        {
-            SettingsPage.DataContext = _settingsVM;
-            EncryptPage.Visibility = Visibility.Collapsed;
-            DecryptPage.Visibility = Visibility.Collapsed;
-            HistoryPage.Visibility = Visibility.Collapsed;
-            _decryptVM.StopFragmentWatcher();
-        }
+        if (SettingsPage.Visibility == Visibility.Visible) return;
+        _settingsOpen = true;
+        SettingsPage.Visibility = Visibility.Visible;
+        SettingsPage.DataContext = _settingsVM;
+        UpdateLayout();
+        EncryptPage.Visibility = Visibility.Collapsed;
+        DecryptPage.Visibility = Visibility.Collapsed;
+        HistoryPage.Visibility = Visibility.Collapsed;
+        _decryptVM.StopFragmentWatcher();
+
+        // Update tab button styles
+        TabEncrypt.Style = (Style)FindResource("TabButtonStyle");
+        TabDecrypt.Style = (Style)FindResource("TabButtonStyle");
+        TabHistory.Style = (Style)FindResource("TabButtonStyle");
+        TabDSAA.Style = (Style)FindResource("TabButtonStyle");
+        TabPasswords.Style = (Style)FindResource("TabButtonStyle");
+        SettingsButton.Style = (Style)FindResource("SettingsButtonActiveStyle");
     }
 
     // -- Strategy Selection --
 
     private bool _fsaEnabled;
     private string? _fsaPrimary;
+    private bool _settingsOpen;
 
     private void FsaToggle_Click(object sender, RoutedEventArgs e)
     {
@@ -659,5 +733,47 @@ public partial class MainWindow : Window
         {
             Debug.WriteLine($"[RDRF] Config save failed: {ex.Message}");
         }
+    }
+
+    private void PasswordOverlayAdd_Click(object sender, RoutedEventArgs e)
+    {
+        var box = PasswordOverlayBox;
+        if (box != null)
+            _passwordVM.SubmitAddWithPassword(box.Password);
+    }
+
+    private void EncryptKeySelect_Click(object sender, RoutedEventArgs e)
+    {
+        _passwordVM.Refresh();
+        KeySelectList.Tag = "encrypt";
+        KeySelectList.ItemsSource = _passwordVM.Items;
+        KeySelectOverlay.Visibility = Visibility.Visible;
+    }
+
+    private void DecryptKeySelect_Click(object sender, RoutedEventArgs e)
+    {
+        _passwordVM.Refresh();
+        KeySelectList.Tag = "decrypt";
+        KeySelectList.ItemsSource = _passwordVM.Items;
+        KeySelectOverlay.Visibility = Visibility.Visible;
+    }
+
+    private void KeySelectItem_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        var item = KeySelectList.SelectedItem as PasswordItem;
+        if (item == null) return;
+        string? pw = _passwordVM.GetPassword(item.Key);
+        if (pw == null) return;
+        var target = (string)KeySelectList.Tag;
+        if (target == "encrypt")
+            EncryptKeyBox.Password = pw;
+        else
+            DecryptKeyBox.Password = pw;
+        KeySelectOverlay.Visibility = Visibility.Collapsed;
+    }
+
+    private void KeySelectOverlayClose_Click(object sender, RoutedEventArgs e)
+    {
+        KeySelectOverlay.Visibility = Visibility.Collapsed;
     }
 }

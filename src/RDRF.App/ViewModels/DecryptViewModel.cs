@@ -431,7 +431,7 @@ public class DecryptViewModel : ViewModelBase, IDisposable
         if (prefix != null &&
             Path.GetFileName(e.FullPath).StartsWith(prefix))
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            Dispatch(() =>
             {
                 _refreshTimer?.Stop();
                 _refreshTimer?.Start();
@@ -507,7 +507,7 @@ public class DecryptViewModel : ViewModelBase, IDisposable
 
                 bool success = service.Restore(outputFilePath, progress);
 
-                Application.Current.Dispatcher.Invoke(() =>
+                Dispatch(() =>
                 {
                     if (success)
                     {
@@ -523,14 +523,14 @@ public class DecryptViewModel : ViewModelBase, IDisposable
             }
             catch (Exception ex)
             {
-                Application.Current.Dispatcher.Invoke(() =>
+                Dispatch(() =>
                 {
                     RequestShowError?.Invoke("Decryption failed", ex.Message, ex.ToString());
                 });
             }
             finally
             {
-                Application.Current.Dispatcher.Invoke(() =>
+                Dispatch(() =>
                 {
                     IsDecrypting = false;
                 });

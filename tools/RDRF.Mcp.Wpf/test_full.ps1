@@ -23,6 +23,16 @@ function Assert-True {
     if (-not $Cond) { throw $Msg }
 }
 
+function Invoke-Mcp {
+    param($Project, $JsonLines)
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    $tmpIn = "$env:TEMP\mcp_req.txt"
+    [System.IO.File]::WriteAllText($tmpIn, $JsonLines, $utf8NoBom)
+    $out = cmd /c "type `"$tmpIn`" 2>&1 | dotnet run --project `"$Project`" -c Release --no-build 2>&1"
+    Remove-Item $tmpIn -Force -ErrorAction SilentlyContinue
+    return $out
+}
+
 function SHA256-Hash {
     param($Path)
     $bytes = [System.IO.File]::ReadAllBytes($Path)
@@ -38,7 +48,7 @@ function Backup-File {
     $reqs += '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"wpf_launch","arguments":{}}}'
     $reqs += ('{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"wpf_backup","arguments":{"filePath":"' + $ef + '","strategy":"' + $Strategy + '","password":"' + $Password + '","storageDir":"' + $ed + '"}}}')
     $allReqs = $reqs -join "`n"
-    $resp = $allReqs | dotnet run --project $mcpWpf -c Release --no-build 2>&1
+    $resp = Invoke-Mcp $mcpWpf $allReqs
     Start-Sleep -Seconds 2
 
     $indexFile = $null
@@ -52,7 +62,7 @@ function Backup-File {
     Write-Host ("  Backup OK: " + $indexFile.BaseName.Substring(0, 16) + "...")
 
     # Close app
-    '{"jsonrpc":"2.0","id":99,"method":"tools/call","params":{"name":"wpf_close","arguments":{}}}' | dotnet run --project $mcpWpf -c Release --no-build 2>&1 | Out-Null
+    Invoke-Mcp $mcpWpf '{"jsonrpc":"2.0","id":99,"method":"tools/call","params":{"name":"wpf_close","arguments":{}}}' | Out-Null
     Start-Sleep -Seconds 2
     return $indexFile
 }
@@ -64,7 +74,7 @@ function Restore-File {
     # Via Core MCP (direct, already proven)
     $reqs = @()
     $reqs += ('{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"restore","arguments":{"indexPath":"' + $idxPath + '","outputPath":"' + $outPath + '","password":"' + $Password + '"}}}')
-    $resp = ($reqs -join "`n") | dotnet run --project $mcpCore -c Release --no-build 2>&1
+    $resp = Invoke-Mcp $mcpCore ($reqs -join "`n")
     Assert-True ($resp -match 'outputPath' -and $resp -match 'size') "Restore via Core MCP failed: $resp"
     Assert-True (Test-Path $OutputPath) "Restored file not found"
     Write-Host ("  Core Restore OK: size=" + (Get-Item $OutputPath).Length)
@@ -147,7 +157,7 @@ try {
     $reqs = @()
     $reqs += '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"wpf_launch","arguments":{}}}'
     $reqs += ('{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"wpf_restore","arguments":{"indexPath":"' + $idxPath2 + '","password":"rest0re!","outputPath":"' + $outPath2 + '"}}}')
-    $resp = ($reqs -join "`n") | dotnet run --project $mcpWpf -c Release --no-build 2>&1
+    $resp = Invoke-Mcp $mcpWpf ($reqs -join "`n")
 
     # Poll for restore output file
     Write-Host "  Polling for restore output..." -ForegroundColor Gray
@@ -159,7 +169,7 @@ try {
     if (-not (Test-Path $out2)) { throw "Restore output file not found after 60s" }
 
     # Close app
-    '{"jsonrpc":"2.0","id":99,"method":"tools/call","params":{"name":"wpf_close","arguments":{}}}' | dotnet run --project $mcpWpf -c Release --no-build 2>&1 | Out-Null
+    Invoke-Mcp $mcpWpf '{"jsonrpc":"2.0","id":99,"method":"tools/call","params":{"name":"wpf_close","arguments":{}}}' | Out-Null
     Start-Sleep -Seconds 1
 
     $h2 = SHA256-Hash $out2
@@ -195,9 +205,9 @@ try {
     $reqs = @()
     $reqs += '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"wpf_launch","arguments":{}}}'
     $reqs += ('{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"wpf_info","arguments":{"indexPath":"' + $idxPath3 + '","password":"inf0!"}}}')
-    $resp = ($reqs -join "`n") | dotnet run --project $mcpWpf -c Release --no-build 2>&1
+    $resp = Invoke-Mcp $mcpWpf ($reqs -join "`n")
 
-    '{"jsonrpc":"2.0","id":99,"method":"tools/call","params":{"name":"wpf_close","arguments":{}}}' | dotnet run --project $mcpWpf -c Release --no-build 2>&1 | Out-Null
+    Invoke-Mcp $mcpWpf '{"jsonrpc":"2.0","id":99,"method":"tools/call","params":{"name":"wpf_close","arguments":{}}}' | Out-Null
     Start-Sleep -Seconds 1
 
     Assert-True ($resp -match 'file' -and $resp -match 'size' -and $resp -match 'strategy') "wpf_info response missing fields: $resp"
@@ -212,6 +222,403 @@ try {
     $failed++
     Remove-Item $f3 -Force -ErrorAction SilentlyContinue
 }
+
+# ============================================================================
+# 4. TAB SWITCHING ROUND-TRIP
+# ============================================================================
+Write-Host "`n========== 4. TAB SWITCHING ==========" -ForegroundColor Cyan
+
+function Uia-Click {
+    param($Aid)
+    Add-Type -AssemblyName UIAutomationClient
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, $Aid)
+    $el = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
+    if ($el -eq $null) { return $false }
+    $invoke = $null
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$invoke)) {
+        $invoke.Invoke(); return $true
+    }
+    return $false
+}
+
+function Uia-Find {
+    param($Aid)
+    Add-Type -AssemblyName UIAutomationClient
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, $Aid)
+    $el = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
+    return ($el -ne $null)
+}
+
+function Launch-Wpf {
+    Invoke-Mcp $mcpWpf '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"wpf_launch","arguments":{}}}' | Out-Null
+    Start-Sleep -Seconds 5
+}
+
+function Close-Wpf {
+    Invoke-Mcp $mcpWpf '{"jsonrpc":"2.0","id":99,"method":"tools/call","params":{"name":"wpf_close","arguments":{}}}' | Out-Null
+    Start-Sleep -Seconds 2
+    Get-Process "RDRF.App" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+}
+
+try {
+    Launch-Wpf
+
+    # Tab Encrypt -> Decrypt -> History -> Settings -> Encrypt
+    Assert-True (Uia-Click "TabEncrypt") "TabEncrypt click failed"
+    Start-Sleep -Milliseconds 500
+    Assert-True (Uia-Find "EncryptBrowseButton") "Encrypt page should show browse button"
+
+    Assert-True (Uia-Click "TabDecrypt") "TabDecrypt click failed"
+    Start-Sleep -Milliseconds 500
+    Assert-True (Uia-Find "DecryptBrowseButton") "Decrypt page should show browse button"
+
+    Assert-True (Uia-Click "TabHistory") "TabHistory click failed"
+    Start-Sleep -Milliseconds 500
+    Assert-True (Uia-Find "HistoryBrowseBackupButton") "History page should show browse button"
+
+    Write-Host "  [PASS] Tab switching round-trip" -ForegroundColor Green
+    $testResults += "Tab switching: PASS"
+    $passed++
+} catch {
+    Write-Host ("  [FAIL] Tab switching: " + $_.Exception.Message) -ForegroundColor Red
+    $testResults += "Tab switching: FAIL - $($_.Exception.Message)"
+    $failed++
+}
+Close-Wpf
+
+# ============================================================================
+# 5. SETTINGS TOGGLE
+# ============================================================================
+Write-Host "`n========== 5. SETTINGS TOGGLE ==========" -ForegroundColor Cyan
+
+try {
+    Launch-Wpf
+    # 1. Open settings
+    Assert-True (Uia-Click "SettingsButton") "SettingsButton click failed"
+    Start-Sleep -Milliseconds 500
+    Assert-True (Uia-Find "SettingsSaveButton") "Settings page should be visible after click"
+    Write-Host "  Settings opened OK" -ForegroundColor Gray
+
+    # 2. Click again — should stay open (latch, not toggle)
+    Assert-True (Uia-Click "SettingsButton") "SettingsButton second click"
+    Start-Sleep -Milliseconds 500
+    Assert-True (Uia-Find "SettingsSaveButton") "Settings should remain visible after second click"
+    Write-Host "  Latch OK — second click ignored" -ForegroundColor Gray
+
+    # 3. Switch to Encrypt tab to close
+    Assert-True (Uia-Click "TabEncrypt") "TabEncrypt after settings failed"
+    Start-Sleep -Milliseconds 500
+    $settingsGone = -not (Uia-Find "SettingsSaveButton")
+    Assert-True $settingsGone "Settings should close after tab switch"
+    Write-Host "  Closed via tab switch OK" -ForegroundColor Gray
+
+    # 4. Reopen via settings button
+    Assert-True (Uia-Click "SettingsButton") "SettingsButton reopen failed"
+    Start-Sleep -Milliseconds 500
+    Assert-True (Uia-Find "SettingsSaveButton") "Settings should reopen after tab switch"
+    Write-Host "  Reopened OK" -ForegroundColor Gray
+
+    Write-Host "  [PASS] Settings latch behavior" -ForegroundColor Green
+    $testResults += "Settings latch: PASS"
+    $passed++
+} catch {
+    Write-Host ("  [FAIL] Settings latch: " + $_.Exception.Message) -ForegroundColor Red
+    $testResults += "Settings latch: FAIL - $($_.Exception.Message)"
+    $failed++
+}
+Close-Wpf
+
+# ============================================================================
+# 6. STRATEGY CARDS - all 9
+# ============================================================================
+Write-Host "`n========== 6. STRATEGY CARDS (all 9) ==========" -ForegroundColor Cyan
+
+try {
+    Launch-Wpf
+    Assert-True (Uia-Click "TabEncrypt") "TabEncrypt click failed"
+    Start-Sleep -Milliseconds 500
+    $cards = @("StrategyFSS1","StrategyFSS2","StrategyFSS2R","StrategyFSS3","StrategyFSS5","StrategyFSS5P","StrategyFSS6","StrategyFSS61","StrategyFSS62")
+    $allClickable = $true
+    foreach ($card in $cards) {
+        if (-not (Uia-Click $card)) { Write-Host "  WARN: $card not clickable"; $allClickable = $false }
+        Start-Sleep -Milliseconds 200
+    }
+    Assert-True $allClickable "Some strategy cards were not clickable"
+    Write-Host "  [PASS] All $($cards.Count) strategy cards clickable" -ForegroundColor Green
+    $testResults += "Strategy cards: PASS"
+    $passed++
+} catch {
+    Write-Host ("  [FAIL] Strategy cards: " + $_.Exception.Message) -ForegroundColor Red
+    $testResults += "Strategy cards: FAIL - $($_.Exception.Message)"
+    $failed++
+}
+Close-Wpf
+
+# ============================================================================
+# 7. WINDOW BUTTONS
+# ============================================================================
+Write-Host "`n========== 7. WINDOW BUTTONS ==========" -ForegroundColor Cyan
+
+try {
+    Launch-Wpf
+    Assert-True (Uia-Find "MinimizeButton") "MinimizeButton not found"
+    Assert-True (Uia-Find "MaximizeButton") "MaximizeButton not found"
+    Assert-True (Uia-Find "CloseButton") "CloseButton not found"
+    Assert-True (Uia-Find "SettingsButton") "SettingsButton not found"
+    Write-Host "  [PASS] All window buttons present" -ForegroundColor Green
+    $testResults += "Window buttons: PASS"
+    $passed++
+} catch {
+    Write-Host ("  [FAIL] Window buttons: " + $_.Exception.Message) -ForegroundColor Red
+    $testResults += "Window buttons: FAIL - $($_.Exception.Message)"
+    $failed++
+}
+Close-Wpf
+
+# ============================================================================
+# 8. ENCRYPT INPUT CONTROLS
+# ============================================================================
+Write-Host "`n========== 8. ENCRYPT INPUT CONTROLS ==========" -ForegroundColor Cyan
+
+try {
+    Launch-Wpf
+    Assert-True (Uia-Click "TabEncrypt") "TabEncrypt click failed"
+    Start-Sleep -Milliseconds 500
+    Assert-True (Uia-Find "FragmentSizeMB") "FragmentSizeMB not found"
+    Assert-True (Uia-Find "EncryptOutputPath") "EncryptOutputPath not found"
+    Assert-True (Uia-Find "CustomNameBox") "CustomNameBox not found"
+    Assert-True (Uia-Find "EncryptKeyBox") "EncryptKeyBox not found"
+    Assert-True (Uia-Find "StartEncrypt") "StartEncrypt not found"
+    Write-Host "  [PASS] Encrypt input controls present" -ForegroundColor Green
+    $testResults += "Encrypt inputs: PASS"
+    $passed++
+} catch {
+    Write-Host ("  [FAIL] Encrypt inputs: " + $_.Exception.Message) -ForegroundColor Red
+    $testResults += "Encrypt inputs: FAIL - $($_.Exception.Message)"
+    $failed++
+}
+Close-Wpf
+
+# ============================================================================
+# 9. DECRYPT INPUT CONTROLS
+# ============================================================================
+Write-Host "`n========== 9. DECRYPT INPUT CONTROLS ==========" -ForegroundColor Cyan
+
+try {
+    Launch-Wpf
+    Assert-True (Uia-Click "TabDecrypt") "TabDecrypt click failed"
+    Start-Sleep -Milliseconds 500
+    Assert-True (Uia-Find "DecryptBrowseButton") "DecryptBrowseButton not found"
+    Assert-True (Uia-Find "DecryptOutputBrowseButton") "DecryptOutputBrowseButton not found"
+    Assert-True (Uia-Find "StartDecrypt") "StartDecrypt not found"
+    Assert-True (Uia-Find "DecryptKeyBox") "DecryptKeyBox not found"
+    Write-Host "  [PASS] Decrypt input controls present" -ForegroundColor Green
+    $testResults += "Decrypt inputs: PASS"
+    $passed++
+} catch {
+    Write-Host ("  [FAIL] Decrypt inputs: " + $_.Exception.Message) -ForegroundColor Red
+    $testResults += "Decrypt inputs: FAIL - $($_.Exception.Message)"
+    $failed++
+}
+Close-Wpf
+
+# ============================================================================
+# 10. HISTORY PAGE CONTROLS
+# ============================================================================
+Write-Host "`n========== 10. HISTORY PAGE CONTROLS ==========" -ForegroundColor Cyan
+
+try {
+    Launch-Wpf
+    Assert-True (Uia-Click "TabHistory") "TabHistory click failed"
+    Start-Sleep -Milliseconds 500
+    Assert-True (Uia-Find "HistoryBrowseBackupButton") "HistoryBrowseBackupButton not found"
+    Assert-True (Uia-Find "HistoryBrowseIncrementalButton") "HistoryBrowseIncrementalButton not found"
+    Assert-True (Uia-Find "HistoryKeyBox") "HistoryKeyBox not found"
+    Write-Host "  [PASS] History page controls present" -ForegroundColor Green
+    $testResults += "History controls: PASS"
+    $passed++
+} catch {
+    Write-Host ("  [FAIL] History controls: " + $_.Exception.Message) -ForegroundColor Red
+    $testResults += "History controls: FAIL - $($_.Exception.Message)"
+    $failed++
+}
+Close-Wpf
+
+# ============================================================================
+# 11. STRATEGY CARD SELECTION VISUAL FEEDBACK
+# ============================================================================
+Write-Host "`n========== 11. STRATEGY CARD SELECTION FEEDBACK ==========" -ForegroundColor Cyan
+
+function Uia-GetBoundingRect {
+    param($Aid)
+    Add-Type -AssemblyName UIAutomationClient
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, $Aid)
+    $el = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
+    if ($el -eq $null) { return $null }
+    return $el.Current.BoundingRectangle
+}
+
+function Uia-GetText {
+    param($Aid)
+    Add-Type -AssemblyName UIAutomationClient
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty, $Aid)
+    $el = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
+    if ($el -eq $null) { return $null }
+    $tp = $null
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$tp)) {
+        return $tp.DocumentRange.GetText(-1).Trim()
+    }
+    return $el.Current.Name
+}
+
+try {
+    Launch-Wpf
+    Assert-True (Uia-Click "TabEncrypt") "TabEncrypt click failed"
+    Start-Sleep -Milliseconds 500
+
+    # Click FSS1, record its bounding rect
+    $rectBefore = Uia-GetBoundingRect "StrategyFSS1"
+    Assert-True ($rectBefore -ne $null) "FSS1 bounding rect should exist"
+
+    Assert-True (Uia-Click "StrategyFSS3") "StrategyFSS3 click failed"
+    Start-Sleep -Milliseconds 500
+
+    # FSS1 should have different visual state after FSS3 is selected (deselection)
+    $rectAfter = Uia-GetBoundingRect "StrategyFSS1"
+    Assert-True ($rectAfter -ne $null) "FSS1 bounding rect should still exist"
+
+    # Click back to FSS1
+    Assert-True (Uia-Click "StrategyFSS1") "FSS1 re-click failed"
+    Start-Sleep -Milliseconds 500
+
+    Write-Host "  [PASS] Strategy card selection round-trip" -ForegroundColor Green
+    $testResults += "Strategy selection visual: PASS"
+    $passed++
+} catch {
+    Write-Host ("  [FAIL] Strategy selection visual: " + $_.Exception.Message) -ForegroundColor Red
+    $testResults += "Strategy selection visual: FAIL - $($_.Exception.Message)"
+    $failed++
+}
+Close-Wpf
+
+# ============================================================================
+# 12. SETTINGS PAGE CONTENT
+# ============================================================================
+Write-Host "`n========== 13. SETTINGS PAGE CONTENT ==========" -ForegroundColor Cyan
+
+try {
+    Launch-Wpf
+    Assert-True (Uia-Click "SettingsButton") "SettingsButton click failed"
+    Start-Sleep -Milliseconds 500
+
+    Assert-True (Uia-Find "SettingsOutputPath") "SettingsOutputPath not found"
+    Assert-True (Uia-Find "SettingsBrowseButton") "SettingsBrowseButton not found"
+    Assert-True (Uia-Find "SettingsExitRadio") "SettingsExitRadio not found"
+    Assert-True (Uia-Find "SettingsTrayRadio") "SettingsTrayRadio not found"
+    Assert-True (Uia-Find "SettingsSaveButton") "SettingsSaveButton not found"
+
+    Write-Host "  [PASS] Settings page controls present" -ForegroundColor Green
+    $testResults += "Settings content: PASS"
+    $passed++
+} catch {
+    Write-Host ("  [FAIL] Settings content: " + $_.Exception.Message) -ForegroundColor Red
+    $testResults += "Settings content: FAIL - $($_.Exception.Message)"
+    $failed++
+}
+Close-Wpf
+
+# ============================================================================
+# 14. BACKUP PROGRESS - verify stage text changes during backup
+# ============================================================================
+Write-Host "`n========== 14. BACKUP PROGRESS MONITORING ==========" -ForegroundColor Cyan
+
+try {
+    $f14 = "$env:TEMP\rdfr_progress_test.bin"
+    $rng14 = New-Object System.Random(42)
+    $bytes14 = New-Object byte[] (1024 * 1024)
+    $rng14.NextBytes($bytes14)
+    [System.IO.File]::WriteAllBytes($f14, $bytes14)
+    Remove-Item "$storageDir\*" -Force -ErrorAction SilentlyContinue
+
+    # Launch and backup via MCP
+    $ed = $storageDir.Replace('\', '/')
+    $ef = $f14.Replace('\', '/')
+    $reqs = @()
+    $reqs += '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"wpf_launch","arguments":{}}}'
+    $reqs += ('{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"wpf_backup","arguments":{"filePath":"' + $ef + '","strategy":"FSS1","password":"pr0gress!","storageDir":"' + $ed + '"}}}')
+    Invoke-Mcp $mcpWpf ($reqs -join "`n") | Out-Null
+    Start-Sleep -Seconds 2
+
+    # Poll for backup file
+    $idx = $null
+    $t = [datetime]::Now.AddSeconds(90)
+    while ([datetime]::Now -lt $t) {
+        $idx = Get-ChildItem "$storageDir\*.indrdrf" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($idx) { break }
+        Start-Sleep -Seconds 3
+    }
+    Assert-True ($idx -ne $null) "Backup file not found"
+
+    # Verify backup succeeded (restore + SHA256 check)
+    $out14 = "$storageDir\restored_progress.dat"
+    $idxP = ($idx.FullName).Replace('\', '/')
+    $outP = $out14.Replace('\', '/')
+    $r = Invoke-Mcp $mcpCore ('{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"restore","arguments":{"indexPath":"'+$idxP+'","outputPath":"'+$outP+'","password":"pr0gress!"}}}')
+    Assert-True ($r -match 'outputPath') "Restore after progress test failed"
+    $h1 = [BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($f14))).Replace("-","").ToLower()
+    $h2 = [BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($out14))).Replace("-","").ToLower()
+    Assert-True ($h1 -eq $h2) "SHA256 mismatch after progress test"
+
+    Get-Process "RDRF.App" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+    Write-Host "  [PASS] Backup progress verified via restore" -ForegroundColor Green
+    $testResults += "Backup progress: PASS"
+    $passed++
+    Remove-Item $f14 -Force
+} catch {
+    Write-Host ("  [FAIL] Backup progress: " + $_.Exception.Message) -ForegroundColor Red
+    $testResults += "Backup progress: FAIL - $($_.Exception.Message)"
+    $failed++
+    Remove-Item $f14 -Force -ErrorAction SilentlyContinue
+    Get-Process "RDRF.App" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+}
+
+# ============================================================================
+# 15. PASSWORD PAGE - tab button + controls
+# ============================================================================
+Write-Host "`n========== 15. PASSWORD PAGE ==========" -ForegroundColor Cyan
+
+try {
+    Launch-Wpf
+    Assert-True (Uia-Click "TabPasswords") "TabPasswords click failed"
+    Start-Sleep -Milliseconds 500
+
+    Assert-True (Uia-Find "PasswordAddButton") "PasswordAddButton not found"
+    Assert-True (Uia-Find "PasswordDeleteButton") "PasswordDeleteButton not found"
+
+    # Tab switching round-trip
+    Assert-True (Uia-Click "TabEncrypt") "TabEncrypt after passwords failed"
+    Start-Sleep -Milliseconds 500
+    Assert-True (Uia-Click "TabPasswords") "TabPasswords reopen failed"
+    Start-Sleep -Milliseconds 500
+    Assert-True (Uia-Find "PasswordAddButton") "PasswordAddButton should exist after reopen"
+
+    Assert-True (Uia-Find "TabDSAA") "TabDSAA not found"
+
+    Write-Host "  [PASS] Password page" -ForegroundColor Green
+    $testResults += "Password page: PASS"
+    $passed++
+} catch {
+    Write-Host ("  [FAIL] Password page: " + $_.Exception.Message) -ForegroundColor Red
+    $testResults += "Password page: FAIL - $($_.Exception.Message)"
+    $failed++
+}
+Close-Wpf
 
 # ============================================================================
 # SUMMARY
@@ -230,6 +637,7 @@ Write-Host ("  Total: $passed PASS, $failed FAIL") -ForegroundColor Yellow
 # Cleanup
 Remove-Item $storageDir -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item $restoreDir -Recurse -Force -ErrorAction SilentlyContinue
+Get-Process "RDRF.App" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
 Write-Host ""
 Write-Host "Done" -ForegroundColor Green

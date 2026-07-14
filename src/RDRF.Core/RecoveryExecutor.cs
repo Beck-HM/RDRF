@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using RDRF.Core.Abstractions;
-using RDRF.Core.FSS;
+using RDRF.Core.Logging;using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using RDRF.Core.Integrity;
 
@@ -105,7 +105,7 @@ public class RecoveryExecutor : IRecoveryExecutor
         // Step 3: Try FSS recovery
         if (missingIndices.Count > 0)
         {
-            Debug.WriteLine($"[RecoveryExecutor] Attempting FSS recovery: {missingIndices.Count} missing, strategy={index.FssStrategy}");
+            RdrfLogger.Default.Info("",$"[RecoveryExecutor] Attempting FSS recovery: {missingIndices.Count} missing, strategy={index.FssStrategy}");
 
             try
             {
@@ -127,7 +127,7 @@ public class RecoveryExecutor : IRecoveryExecutor
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[RecoveryExecutor] FSS recovery failed: {ex.Message}");
+                RdrfLogger.Default.Info("",$"[RecoveryExecutor] FSS recovery failed: {ex.Message}");
             }
         }
 
@@ -144,7 +144,7 @@ public class RecoveryExecutor : IRecoveryExecutor
         else
         {
             result.Status = RecoveryStatus.Partial;
-            Debug.WriteLine($"[RecoveryExecutor] Partial recovery: {stillMissing.Count} fragments still missing");
+            RdrfLogger.Default.Info("",$"[RecoveryExecutor] Partial recovery: {stillMissing.Count} fragments still missing");
         }
 
         result.RecoveredFragments = verified;

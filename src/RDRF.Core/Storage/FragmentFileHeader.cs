@@ -1,6 +1,6 @@
 using RDRF.Core.Encryption;
 
-namespace RDRF.Core.Dssa;
+namespace RDRF.Core.DSAA;
 
 /// <summary>
 /// Fragment file header (magic + metadata) and EncryptWithEmbeddedIndex logic.

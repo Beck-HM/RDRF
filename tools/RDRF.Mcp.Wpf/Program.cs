@@ -84,10 +84,11 @@ await foreach (var json in ReadStdInAsync())
             }
             else if (method == "tools/call")
             {
-                if (!string.IsNullOrEmpty(apiKey))
+                string? envKey = Environment.GetEnvironmentVariable("RDRF_MCP_KEY");
+                if (!string.IsNullOrEmpty(envKey))
                 {
                     string? requestKey = root.TryGetProperty("params", out var p) && p.TryGetProperty("apiKey", out var ak) ? ak.GetString() : null;
-                    if (requestKey != apiKey)
+                    if (requestKey != envKey)
                     {
                         if (id != null)
                             WriteJson(new { jsonrpc = "2.0", id = id, error = new { code = -32001, message = "Unauthorized: invalid or missing apiKey" } });

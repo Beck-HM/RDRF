@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using Xunit;
 using Xunit.Abstractions;
 

@@ -1,6 +1,6 @@
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 
 namespace RDRF.Core.ETN;
 

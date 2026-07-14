@@ -1,6 +1,6 @@
 using RDRF.Core;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
 using RDRF.Cli.Services;
@@ -37,13 +37,13 @@ public class VerifyCommand : Command
             }
 
             byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
+            if (password.Length == 0)
+            {
+                AnsiConsole.MarkupLine("[red]Error: password is required. Use -password <pass> or run interactively.[/]");
+                return 1;
+            }
             try
             {
-                if (password.Length == 0)
-                {
-                    AnsiConsole.MarkupLine("[red]Error: password cannot be empty[/]");
-                    return 1;
-                }
                 byte[] encryptedIndex = await File.ReadAllBytesAsync(indexFile.FullName);
 
                 RdrfIndex index;
@@ -66,7 +66,7 @@ public class VerifyCommand : Command
                 }
 
                 string storageDir = indexFile.DirectoryName!;
-                var storage = new LocalDssaAdapter(storageDir);
+                var storage = new LocalDSAAAdapter(storageDir);
                 string prefix = index.CustomName ?? index.FileFingerprint;
 
             byte[] encryptedRc = storage.ReadRc(prefix);

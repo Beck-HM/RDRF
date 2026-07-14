@@ -1,11 +1,11 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using RDRF.Core;
 using RDRF.Core.Abstractions;
 using RDRF.Core.Composition;
 using RDRF.Core.Encryption;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using RDRF.Core.FragmentEngine;
@@ -95,7 +95,7 @@ public class RegressionTests
         string tempDir = Path.Combine(Path.GetTempPath(), $"RDRF_StreamTest_{Guid.NewGuid():N}");
         try
         {
-            var adapter = new LocalDssaAdapter(tempDir);
+            var adapter = new LocalDSAAAdapter(tempDir);
             byte[] testData = Encoding.UTF8.GetBytes("Stream read/write test data for RDRF fragment storage.");
 
             // Write via stream
@@ -129,7 +129,7 @@ public class RegressionTests
     [Fact]
     public void StorageAdapter_StreamReadWrite_ShouldValidateFilename()
     {
-        var adapter = new LocalDssaAdapter(Path.GetTempPath());
+        var adapter = new LocalDSAAAdapter(Path.GetTempPath());
         Assert.Throws<ArgumentException>(() => adapter.OpenReadFragment("../evil.rdrf"));
         Assert.Throws<ArgumentException>(() => adapter.OpenWriteFragment("sub\\evil.rdrf"));
         Assert.Throws<ArgumentException>(() => adapter.OpenReadFragment("sub/evil.rdrf"));
@@ -178,7 +178,7 @@ public class RegressionTests
             File.WriteAllText(testFile, testContent);
 
             // Backup with preDerived=true
-        var storage = new LocalDssaAdapter(storageDir);
+        var storage = new LocalDSAAAdapter(storageDir);
             using var engine = new RDRFEngine(preDerivedKey, rcCode, storage);
             string fingerprint = engine.BackupFile(testFile, "FSS1");
             Assert.False(string.IsNullOrEmpty(fingerprint));
@@ -214,7 +214,7 @@ public class RegressionTests
         {
             File.WriteAllText(testFile, testContent);
 
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             using var enginePre = new RDRFEngine(preDerivedKey, rcCode, storage);
             string fingerprint = enginePre.BackupFile(testFile, "FSS1");
 
@@ -246,9 +246,9 @@ public class RegressionTests
 
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
             byte[] testSalt = EncryptionLayer.GenerateRcCode(Constants.SaltPrefixLength);
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             using var engine = new BackupOrchestrator(rcCode, storage, testSalt);
-            string fingerprint = engine.BackupFile(testFile, "FSS1");
+            string fingerprint = engine.BackupFileAsync(testFile, "FSS1").GetAwaiter().GetResult();
 
             // Read the index directly
         byte[] encryptedIndex = storage.ReadIndex(fingerprint);
@@ -283,7 +283,7 @@ public class RegressionTests
             File.WriteAllText(testFile, testContent);
 
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             using var engine = new RDRFEngine(rcCode, storage);
             string fingerprint = engine.BackupFile(testFile, "FSS1");
 
@@ -356,7 +356,7 @@ public class RegressionTests
         {
             File.WriteAllText(testFile, testContent);
 
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             using var engine = new RDRFEngine(rcCode, storage);
             string fingerprint = engine.BackupFile(testFile, "FSS1");
 
@@ -447,7 +447,7 @@ public class RegressionTests
         // Do NOT set Salt - simulating old backup
 
         // Create orchestrator and call the internal salt derivation
-        var storage = new LocalDssaAdapter(Path.GetTempPath());
+        var storage = new LocalDSAAAdapter(Path.GetTempPath());
         byte[] aesKeyForTest = EncryptionLayer.DeriveKeyLegacy(rcCode);
         using var orchestrator = new RestoreOrchestrator(aesKeyForTest, rcCode, storage);
 

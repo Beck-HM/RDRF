@@ -1,6 +1,6 @@
 using RDRF.Core.Abstractions;
+using RDRF.Core.Logging;
 using System.Buffers;
-using System.Diagnostics;
 using System.IO.Hashing;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -13,7 +13,7 @@ using RDRF.Core.FSA;
 using RDRF.Core.Index;
 using RDRF.Core.Integrity;
 using RDRF.Core.Metadata;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 
 namespace RDRF.Core;
 
@@ -39,10 +39,13 @@ public class BackupOrchestrator : IDisposable
     private readonly byte[] _rcCode;
     private readonly byte[] _aesKey;
     private readonly byte[] _salt;
-    private readonly DssaAdapter _storage;
+    private readonly DSAAAdapter _storage;
     private readonly IFSSEngine _fss;
     private readonly IFsaEngine _fsa;
     private readonly IMetadataManager _metadata;
+    private readonly IEncryptionLayer _encryption;
+    private readonly IIndexManager _indexManager;
+    private readonly RdrfLogger _logger;
 
     /// <summary>
     /// Initializes with a pre-derived AES key. Used by callers that have
@@ -51,10 +54,13 @@ public class BackupOrchestrator : IDisposable
     public BackupOrchestrator(
         byte[] aesKey,
         byte[] rcCode,
-        DssaAdapter storage,
+        DSAAAdapter storage,
         IFSSEngine? fssEngine = null,
         IFsaEngine? fsaEngine = null,
-        IMetadataManager? metadata = null)
+        IMetadataManager? metadata = null,
+        IEncryptionLayer? encryption = null,
+        IIndexManager? indexManager = null,
+        RdrfLogger? logger = null)
     {
         _aesKey = aesKey?.Clone() as byte[] ?? throw new ArgumentNullException("AES key required");
         _rcCode = rcCode?.Clone() as byte[] ?? [];
@@ -63,6 +69,9 @@ public class BackupOrchestrator : IDisposable
         _fss = fssEngine ?? new FSSEngineWrapper();
         _fsa = fsaEngine ?? new FsaEngineWrapper();
         _metadata = metadata ?? new MetadataManagerWrapper();
+        _encryption = encryption ?? new EncryptionLayerWrapper();
+        _indexManager = indexManager ?? new IndexManagerWrapper();
+        _logger = logger ?? new RdrfLogger();
     }
 
     /// <summary>
@@ -71,55 +80,28 @@ public class BackupOrchestrator : IDisposable
     /// </summary>
     public BackupOrchestrator(
         byte[] rcCode,
-        DssaAdapter storage,
+        DSAAAdapter storage,
         byte[] salt,
         IFSSEngine? fssEngine = null,
         IFsaEngine? fsaEngine = null,
-        IMetadataManager? metadata = null)
+        IMetadataManager? metadata = null,
+        IEncryptionLayer? encryption = null,
+        IIndexManager? indexManager = null,
+        RdrfLogger? logger = null)
     {
         if (rcCode == null || rcCode.Length == 0)
             throw new ArgumentException("RC code cannot be null or empty", nameof(rcCode));
         _rcCode = (byte[])rcCode.Clone();
         _salt = salt ?? throw new ArgumentNullException(nameof(salt));
-        _aesKey = EncryptionLayer.DeriveKey(rcCode, salt);
+        _encryption = encryption ?? new EncryptionLayerWrapper();
+        _indexManager = indexManager ?? new IndexManagerWrapper();
+        _aesKey = _encryption.DeriveKey(rcCode, salt);
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _fss = fssEngine ?? new FSSEngineWrapper();
         _fsa = fsaEngine ?? new FsaEngineWrapper();
         _metadata = metadata ?? new MetadataManagerWrapper();
+        _logger = logger ?? new RdrfLogger();
     }
-
-    /// <summary>
-    /// Synchronous backup. Blocks on the async pipeline.
-    /// </summary>
-    [Obsolete("Use BackupFileAsync instead")]
-    public string BackupFile(
-        string filePath,
-        string fssStrategy = "FSS1",
-        List<string>? auxiliaryStrategies = null,
-        string? originalFilename = null,
-        int fragmentSize = 0,
-        string? customName = null,
-        IProgress<RdrfProgressReport>? progress = null)
-    {
-        var task = Task.Run(() => BackupCoreAsync(filePath, fssStrategy, auxiliaryStrategies,
-            originalFilename, fragmentSize, customName, progress, CancellationToken.None));
-        if (task.Wait(TimeSpan.FromHours(2)))
-            return task.Result;
-        throw new TimeoutException($"Backup timed out after 2 hours: {filePath}");
-    }
-
-    /// <summary>
-    /// Synchronous backup with FileInfo. Blocks on the async pipeline.
-    /// </summary>
-    [Obsolete("Use BackupFileAsync instead")]
-    public string BackupFile(
-        FileInfo filePath,
-        string fssStrategy = "FSS1",
-        List<string>? auxiliary = null,
-        int fragmentSize = 0,
-        string? customName = null,
-        IProgress<RdrfProgressReport>? progress = null)
-        => BackupFile(filePath.FullName, fssStrategy, auxiliary, fragmentSize: fragmentSize, customName: customName, progress: progress);
 
     /// <summary>
     /// Asynchronous backup entry point.
@@ -189,9 +171,9 @@ public class BackupOrchestrator : IDisposable
     ///     -> Fss6Etn.InjectCrossValidation (Phase 3)
     ///     -> FssRepairService.Generate61/62 (Phase 3)
     ///     -> FragmentFileHeader.EncryptWithEmbeddedIndex (Phase 4)
-    ///     -> DssaAdapter.WriteFragmentAsync (Phase 4)
+    ///     -> DSAAAdapter.WriteFragmentAsync (Phase 4)
     ///     -> EncryptionLayer.EncryptIndexWithKey/SaltPrefix (Phase 5)
-    ///     -> DssaAdapter.WriteIndexAsync / WriteRcAsync (Phase 5)
+    ///     -> DSAAAdapter.WriteIndexAsync / WriteRcAsync (Phase 5)
     ///     -> MetadataManager.SaveBackup
     /// </summary>
     private async Task<string> BackupCoreAsync(
@@ -213,7 +195,7 @@ public class BackupOrchestrator : IDisposable
         if (fileSize > maxFileSize)
             throw new InvalidOperationException($"File too large ({fileSize:N0} bytes). Maximum supported size is {maxFileSize:N0} bytes.");
 
-        Debug.WriteLine($"Backing up: {filename} ({fileSize:N0} bytes)");
+        _logger.Info("BackupOrchestrator", $"Backing up: {filename} ({fileSize:N0} bytes)");
 
         int fragSize = fragmentSize > 0 ? fragmentSize : 1024 * 1024;
         var compressionMethod = Constants.CompressionLz4;
@@ -223,87 +205,19 @@ public class BackupOrchestrator : IDisposable
         // Multi-strategy (auxiliary) temporarily disabled; single-strategy only.
         var plan = _fsa.Compute(fssStrategy, null);
 
-        // Phase 1: Stream file -> hash -> split raw -> LZ4 per block -> pad
-        using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
-            FileShare.Read, 65536, FileOptions.SequentialScan);
-        using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        var rawFragments = new List<byte[]>();
-        var originalFragments = new List<byte[]>();
-        var originalFragmentSizes = new List<int>();
-        long totalRead = 0;
-        long nextReport = 0;
-        var fragBuf = new byte[fragSize];
-        int fragOff = 0;
-
-        int bytesRead;
-        while ((bytesRead = await fs.ReadAsync(fragBuf.AsMemory(fragOff, fragSize - fragOff), cancellationToken).ConfigureAwait(false)) > 0)
-        {
-            hasher.AppendData(fragBuf.AsSpan(fragOff, bytesRead));
-            fragOff += bytesRead;
-            totalRead += bytesRead;
-
-            if (totalRead >= nextReport)
-            {
-                progress?.Report(new RdrfProgressReport { Stage = "Read", CurrentBytes = totalRead, TotalBytes = fileSize });
-                nextReport = totalRead + Math.Max(65536, fileSize / 100);
-            }
-
-            if (fragOff < fragSize)
-                continue;
-
-            byte[] raw = new byte[fragSize];
-            Buffer.BlockCopy(fragBuf, 0, raw, 0, fragSize);
-            rawFragments.Add(raw);
-            byte[] compressed = Compressor.AlwaysCompress(raw);
-            byte[] stored = compressed.Length < raw.Length ? compressed : raw;
-            originalFragmentSizes.Add(stored.Length);
-            byte[] padded = new byte[fragSize];
-            Buffer.BlockCopy(stored, 0, padded, 0, Math.Min(stored.Length, fragSize));
-            originalFragments.Add(padded);
-            fragOff = 0;
-        }
-
-        // Last partial fragment
-        if (fragOff > 0)
-        {
-            byte[] raw = new byte[fragOff];
-            Buffer.BlockCopy(fragBuf, 0, raw, 0, fragOff);
-            rawFragments.Add(raw);
-            byte[] compressed = Compressor.AlwaysCompress(raw);
-            byte[] stored = compressed.Length < raw.Length ? compressed : raw;
-            originalFragmentSizes.Add(stored.Length);
-            byte[] padded = new byte[fragSize];
-            Buffer.BlockCopy(stored, 0, padded, 0, Math.Min(stored.Length, fragSize));
-            originalFragments.Add(padded);
-        }
-
-        fileFingerprint = Hex.EncodeLower(hasher.GetHashAndReset());
-        originalHash = fileFingerprint;
-
-        int originalFragmentCount = rawFragments.Count;
-        var rawHashes = rawFragments.Select(f => XxHash128.Hash(f.AsSpan())).ToList();
+        // Phase 1: Stream file -> hash -> split raw -> LZ4 compress
+        var readResult = await BackupPhases.BackupReadPhase.ExecuteAsync(
+            filePath, fragSize, progress, cancellationToken).ConfigureAwait(false);
+        fileFingerprint = readResult.FileFingerprint;
+        originalHash = readResult.OriginalHash;
 
         progress?.Report(new RdrfProgressReport { Stage = "Read", CurrentBytes = fileSize, TotalBytes = fileSize,
-            CurrentItem = originalFragmentCount, TotalItems = originalFragmentCount });
+            CurrentItem = readResult.OriginalFragmentCount, TotalItems = readResult.OriginalFragmentCount });
 
-        Debug.WriteLine($"  Phase 1: Read {fileSize:N0} bytes, {originalFragmentCount} raw fragments, each LZ4->padded to {fragSize}");
+        _logger.Info("BackupOrchestrator", $"Phase 1: Read {fileSize:N0} bytes, {readResult.OriginalFragmentCount} raw fragments, each LZ4->padded to {fragSize}");
 
         // Phase 2: FSS encode all fragments
-        var fragments = new List<byte[]>(originalFragments);
-        foreach (var step in plan.EncodeSteps)
-        {
-            if (step.Step == "encode")
-            {
-                fragments = _fss.Encode(fragments, step.Strategy);
-                Debug.WriteLine($"  Step 2: Encode ({step.Strategy}): {fragments.Count} fragments");
-            }
-            else if (step.Step == "etn_inject")
-            {
-                fragments = _fss.Encode(fragments, Constants.FssLevel6);
-                Debug.WriteLine($"  Step 2: ETN inject: {fragments.Count} fragments");
-            }
-        }
-
+        var fragments = EncodeViaPlan(new List<byte[]>(readResult.OriginalFragments), plan);
         progress?.Report(new RdrfProgressReport { Stage = "Encode", CurrentItem = fragments.Count, TotalItems = fragments.Count });
 
         string filePrefix = customName ?? fileFingerprint;
@@ -323,8 +237,8 @@ public class BackupOrchestrator : IDisposable
             fragmentHashes: fragmentHashes.ToList(),
             originalHash: originalHash,
             fssStrategy: plan.EffectivePrimary,
-            originalFragmentSizes: originalFragmentSizes,
-            originalFragmentCount: originalFragmentCount,
+            originalFragmentSizes: new List<int>(readResult.OriginalFragmentSizes),
+            originalFragmentCount: readResult.OriginalFragmentCount,
             fssParams: new Dictionary<string, object>
             {
                 ["plan"] = JsonSerializer.SerializeToElement(plan)
@@ -337,9 +251,9 @@ public class BackupOrchestrator : IDisposable
         embeddedIndex.Compression = compressionMethod;
 
         // RawFragmentHashes = XxHash128 of UNCOMPRESSED data (content-addressable dedup key)
-        embeddedIndex.RawFragmentHashes = rawHashes;
+        embeddedIndex.RawFragmentHashes = readResult.RawHashes;
 
-        byte[] serializedIndex = IndexManager.SerializeIndex(embeddedIndex);
+        byte[] serializedIndex = _indexManager.SerializeIndex(embeddedIndex);
         byte[] rcBytes = [];
 
         bool hasFss6 = plan.ActiveStrategies.Contains(Constants.FssLevel6)
@@ -349,87 +263,62 @@ public class BackupOrchestrator : IDisposable
         bool hasFss62 = plan.ActiveStrategies.Contains(Constants.FssLevel62);
         if (hasFss6)
         {
-            var (etnFragments, etnIndexJson, etnRcJson) = Fss6Etn.InjectCrossValidation(
-                fragments, serializedIndex, filePrefix, fileSize, plan.EffectivePrimary);
+            var (etnFragments, etnRcJson) = Fss6Etn.InjectCrossValidation(
+                fragments, serializedIndex, embeddedIndex, filePrefix, fileSize, plan.EffectivePrimary);
             fragments = etnFragments;
-            serializedIndex = etnIndexJson;
             rcBytes = etnRcJson;
         }
 
-        // Deserialize once; modify in-place for FSS6.1 + FSS6.2; serialize once at end
-        var indexObj = IndexManager.DeserializeIndex(serializedIndex);
-        bool indexModified = false;
+        if (hasFss61)
+            rcBytes = RunFss61Repair(serializedIndex, fragments, rcBytes, fileSize, filePrefix, fileFingerprint, plan.EffectivePrimary, embeddedIndex);
+        if (hasFss62)
+            rcBytes = RunFss62Repair(serializedIndex, fragments, rcBytes, fileSize, filePrefix, fileFingerprint, plan.EffectivePrimary, embeddedIndex);
 
-        // FSS6.1: three-node independent LT repair generation
-        if (hasFss61 && rcBytes.Length > 0)
-        {
-            try
-            {
-                int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
-                var (repairA, repairB, repairC) = FssRepairService.Generate61(
-                    serializedIndex, fragments, rcBytes, bs);
-
-                var rcFile61 = RcFile.FromCbor(rcBytes);
-                if (repairA != null) rcFile61.RepairA = repairA;
-                if (repairB != null) { rcFile61.RepairB = repairB; indexObj.Fss61RepairB = repairB; indexModified = true; }
-                if (repairC != null) { indexObj.Fss61RepairC = repairC; indexModified = true; }
-
-                string fp61 = filePrefix ?? fileFingerprint;
-                FssRepairService.Append61Trailers(fragments, fp61, repairA, repairC);
-
-                rcBytes = rcFile61.ToCborBytes();
-            }
-            catch (Exception ex) { Console.Error.WriteLine($"Warning: FSS6.1 repair generation failed - {ex.Message}"); }
-        }
-
-        // FSS6.2: three-node independent Duip repair generation
-        if (hasFss62 && rcBytes.Length > 0)
-        {
-            try
-            {
-                int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
-                var (repair62A, repair62B, repair62C) = FssRepairService.Generate62(
-                    serializedIndex, fragments, rcBytes, bs);
-
-                var rcFile62 = RcFile.FromCbor(rcBytes);
-                if (repair62A != null) rcFile62.Repair62A = repair62A;
-                if (repair62B != null) { rcFile62.Repair62B = repair62B; indexObj.Fss62RepairB = repair62B; indexModified = true; }
-                if (repair62C != null) { indexObj.Fss62RepairC = repair62C; indexModified = true; }
-
-                string fp62 = filePrefix ?? fileFingerprint;
-                FssRepairService.Append62Trailers(fragments, fp62, repair62A, repair62C);
-
-                rcBytes = rcFile62.ToCborBytes();
-            }
-            catch (Exception ex) { Console.Error.WriteLine($"Warning: FSS6.2 repair generation failed - {ex.Message}"); }
-        }
-
-        // Serialize once if any FSS6.x step modified the index
-        if (indexModified)
-            serializedIndex = IndexManager.SerializeIndex(indexObj);
+        // Serialize ONCE after all in-place modifications
+        byte[] finalSerializedIndex = _indexManager.SerializeIndex(embeddedIndex);
 
         // Strip BM fields from the Index before embedding in fragment headers
         // to save ~20KB/fragment. The standalone Index file retains full BM data.
-        byte[] embeddedIndexBytes = Fss6Etn.StripEtnFieldsFromIndexJson(serializedIndex);
+        byte[] embeddedIndexBytes = Fss6Etn.StripEtnFieldsFromIndexJson(finalSerializedIndex);
 
         long totalBytes = fragments.Sum(f => f.Length);
 
         // Phase 3: Batch encrypt + write (8 fragments per batch)
         const int BatchSize = 8;
         var writeBatch = new List<(string path, byte[] data)>(BatchSize);
+        var writtenFragments = new HashSet<string>();
 
-        for (int i = 0; i < fragments.Count; i++)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            byte[] fileData = FragmentFileHeader.EncryptWithEmbeddedIndex(
-                fragments[i], embeddedIndexBytes, _aesKey, _salt.Length > 0 ? _salt : null);
-            string fname = Frags.FragmentFilename(filePrefix, i);
-            writeBatch.Add((fname, fileData));
-            fragments[i] = null!;
+            for (int i = 0; i < fragments.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                byte[] fileData = FragmentFileHeader.EncryptWithEmbeddedIndex(
+                    fragments[i], embeddedIndexBytes, _aesKey, _salt.Length > 0 ? _salt : null);
+                string fname = Frags.FragmentFilename(filePrefix, i);
+                writeBatch.Add((fname, fileData));
+                fragments[i] = null!;
 
-            progress?.Report(new RdrfProgressReport { Stage = "Write", CurrentItem = i + 1, TotalItems = fragments.Count });
+                progress?.Report(new RdrfProgressReport { Stage = "Write", CurrentItem = i + 1, TotalItems = fragments.Count });
 
-            if (writeBatch.Count >= BatchSize)
+                if (writeBatch.Count >= BatchSize)
+                {
+                    await Parallel.ForEachAsync(writeBatch, new ParallelOptions
+                    {
+                        MaxDegreeOfParallelism = Constants.DefaultParallelism,
+                        CancellationToken = cancellationToken
+                    }, async (item, ct) =>
+                    {
+                        for (int retry = 0; ; retry++)
+                            try { await _storage.WriteFragmentAsync(item.path, item.data, ct).ConfigureAwait(false); writtenFragments.Add(item.path); break; }
+                            catch when (retry < 2) { await Task.Delay(100 * (retry + 1), ct).ConfigureAwait(false); }
+                    }).ConfigureAwait(false);
+                    writeBatch.Clear();
+                }
+            }
+
+            // Flush remaining
+            if (writeBatch.Count > 0)
             {
                 await Parallel.ForEachAsync(writeBatch, new ParallelOptions
                 {
@@ -437,43 +326,37 @@ public class BackupOrchestrator : IDisposable
                     CancellationToken = cancellationToken
                 }, async (item, ct) =>
                 {
-                    for (int retry = 0; ; retry++)
-                        try { await _storage.WriteFragmentAsync(item.path, item.data, ct).ConfigureAwait(false); break; }
-                        catch when (retry < 2) { await Task.Delay(100 * (retry + 1), ct).ConfigureAwait(false); }
+                    await _storage.WriteFragmentAsync(item.path, item.data, ct).ConfigureAwait(false);
+                    writtenFragments.Add(item.path);
                 }).ConfigureAwait(false);
                 writeBatch.Clear();
             }
         }
-
-        // Flush remaining
-        if (writeBatch.Count > 0)
+        catch (OperationCanceledException)
         {
-            await Parallel.ForEachAsync(writeBatch, new ParallelOptions
+            foreach (var f in writtenFragments)
             {
-                MaxDegreeOfParallelism = Constants.DefaultParallelism,
-                CancellationToken = cancellationToken
-            }, async (item, ct) =>
-            {
-                await _storage.WriteFragmentAsync(item.path, item.data, ct).ConfigureAwait(false);
-            }).ConfigureAwait(false);
-            writeBatch.Clear();
+                try { _storage.DeleteFragment(f); }
+                catch { /* best-effort cleanup */ }
+            }
+            throw;
         }
 
-        byte[] indexBytes = serializedIndex;
+        byte[] indexBytes = finalSerializedIndex;
         if (_salt.Length > 0)
         {
-                byte[] salted = EncryptionLayer.EncryptIndexWithSaltPrefix(indexBytes, _rcCode, _salt);
+                byte[] salted = _encryption.EncryptIndexWithSaltPrefix(indexBytes, _rcCode, _salt);
             await _storage.WriteIndexAsync(filePrefix, salted, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            byte[] encryptedIndex = EncryptionLayer.EncryptIndexWithKey(indexBytes, _aesKey);
+            byte[] encryptedIndex = _encryption.EncryptIndexWithKey(indexBytes, _aesKey);
             await _storage.WriteIndexAsync(filePrefix, encryptedIndex, cancellationToken).ConfigureAwait(false);
         }
 
         if (rcBytes.Length > 0)
         {
-            byte[] encryptedRc = EncryptionLayer.EncryptFragmentWithKey(rcBytes, _aesKey);
+            byte[] encryptedRc = _encryption.EncryptFragmentWithKey(rcBytes, _aesKey);
             await _storage.WriteRcAsync(filePrefix, encryptedRc, cancellationToken).ConfigureAwait(false);
         }
 
@@ -485,7 +368,7 @@ public class BackupOrchestrator : IDisposable
             fssStrategy: fssStrategy,
             fragmentHashes: fragmentHashes.ToList());
 
-        Debug.WriteLine($"Backup complete!");
+        _logger.Info("BackupOrchestrator", "Backup complete!");
         return fileFingerprint;
     }
 
@@ -523,15 +406,7 @@ public class BackupOrchestrator : IDisposable
         string filePrefix = customName ?? fileFingerprint;
         var plan = _fsa.Compute(fssStrategy, null);
 
-        var fragments = new List<byte[]>(allRawFragments);
-        foreach (var step in plan.EncodeSteps)
-        {
-            if (step.Step == "encode")
-                fragments = _fss.Encode(fragments, step.Strategy);
-            else if (step.Step == "etn_inject")
-                fragments = _fss.Encode(fragments, Constants.FssLevel6);
-        }
-
+        var fragments = EncodeViaPlan(new List<byte[]>(allRawFragments), plan);
         var fragmentHashes = new List<string>(fragments.Count);
         foreach (var f in fragments)
             fragmentHashes.Add(IntegrityChecker.HashBytes(f));
@@ -565,7 +440,7 @@ public class BackupOrchestrator : IDisposable
             .Select(f => System.IO.Hashing.XxHash128.Hash(f.AsSpan()))
             .ToList();
 
-        byte[] serializedIndex = IndexManager.SerializeIndex(index);
+        byte[] serializedIndex = _indexManager.SerializeIndex(index);
         byte[] rcBytes = [];
 
         bool hasFss6 = plan.ActiveStrategies.Contains(Constants.FssLevel6)
@@ -573,61 +448,20 @@ public class BackupOrchestrator : IDisposable
         bool hasFss61 = plan.ActiveStrategies.Contains(Constants.FssLevel61);
         if (hasFss6)
         {
-            var (etnFragments, etnIndexJson, etnRcJson) = Fss6Etn.InjectCrossValidation(
-                fragments, serializedIndex, filePrefix, fileSize, plan.EffectivePrimary);
+            var (etnFragments, etnRcJson) = Fss6Etn.InjectCrossValidation(
+                fragments, serializedIndex, index, filePrefix, fileSize, plan.EffectivePrimary);
             fragments = etnFragments;
-            serializedIndex = etnIndexJson;
             rcBytes = etnRcJson;
         }
 
-        // Shared index object - modify in-place, no re-serialize for FSS6.1
-        var indexObj = IndexManager.DeserializeIndex(serializedIndex);
-        bool indexModified = false;
+        if (hasFss61)
+            rcBytes = RunFss61Repair(serializedIndex, fragments, rcBytes, fileSize, filePrefix, fileFingerprint, plan.EffectivePrimary, index);
 
-        if (hasFss61 && rcBytes.Length > 0)
-        {
-            try
-            {
-                int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
-                var (repairA, repairB, repairC) = FssRepairService.Generate61(
-                    serializedIndex, fragments, rcBytes, bs);
-
-                var rcFile61 = RcFile.FromCbor(rcBytes);
-                if (repairA != null) rcFile61.RepairA = repairA;
-                if (repairB != null) { rcFile61.RepairB = repairB; indexObj.Fss61RepairB = repairB; indexModified = true; }
-                if (repairC != null) { indexObj.Fss61RepairC = repairC; indexModified = true; }
-
-                FssRepairService.Append61Trailers(fragments, filePrefix, repairA, repairC);
-
-                rcBytes = rcFile61.ToCborBytes();
-            }
-            catch (Exception ex) { Debug.WriteLine($"FSS6.1 repair generation failed: {ex.Message}"); }
-        }
-
-        if (indexModified)
-            serializedIndex = IndexManager.SerializeIndex(indexObj);
-
-        byte[] embeddedIndexBytes = Fss6Etn.StripEtnFieldsFromIndexJson(serializedIndex);
-
-        // Use working index object for final index, add FssParams, serialize once
-        var finalIndex = indexModified
-            ? IndexManager.DeserializeIndex(serializedIndex)
-            : indexObj;
-        finalIndex.FssParams = new Dictionary<string, object>
+        // Add FssParams and SourceVersion references, then serialize once
+        index.FssParams = new Dictionary<string, object>
         {
             ["plan"] = JsonSerializer.SerializeToElement(plan)
         };
-        if (finalIndex.Fragments != null && index.Fragments != null)
-        {
-            for (int i = 0; i < Math.Min(finalIndex.Fragments.Count, index.Fragments.Count); i++)
-                finalIndex.Fragments[i].SourceVersion = index.Fragments[i].SourceVersion;
-        }
-
-        byte[] indexBytes = IndexManager.SerializeIndex(finalIndex);
-        long totalBytes = fragments.Sum(f => f.Length);
-        long processedBytes = 0;
-
-        // Initialize all fragments with SourceVersion references
         if (index.Fragments != null)
         {
             for (int i = 0; i < index.Fragments.Count; i++)
@@ -636,6 +470,11 @@ public class BackupOrchestrator : IDisposable
                     index.Fragments[i].SourceVersion = prevFingerprint;
             }
         }
+
+        byte[] indexBytes = _indexManager.SerializeIndex(index);
+        byte[] embeddedIndexBytes = Fss6Etn.StripEtnFieldsFromIndexJson(indexBytes);
+        long totalBytes = fragments.Sum(f => f.Length);
+        long processedBytes = 0;
 
         for (int i = 0; i < fragments.Count; i++)
         {
@@ -668,18 +507,18 @@ public class BackupOrchestrator : IDisposable
 
         if (_salt.Length > 0)
         {
-            byte[] salted = EncryptionLayer.EncryptIndexWithSaltPrefix(indexBytes, _rcCode, _salt);
+            byte[] salted = _encryption.EncryptIndexWithSaltPrefix(indexBytes, _rcCode, _salt);
             await _storage.WriteIndexAsync(filePrefix, salted, ct).ConfigureAwait(false);
         }
         else
         {
-            byte[] encryptedIndex = EncryptionLayer.EncryptIndexWithKey(indexBytes, _aesKey);
+            byte[] encryptedIndex = _encryption.EncryptIndexWithKey(indexBytes, _aesKey);
             await _storage.WriteIndexAsync(filePrefix, encryptedIndex, ct).ConfigureAwait(false);
         }
 
         if (rcBytes.Length > 0)
         {
-            byte[] encryptedRc = EncryptionLayer.EncryptFragmentWithKey(rcBytes, _aesKey);
+            byte[] encryptedRc = _encryption.EncryptFragmentWithKey(rcBytes, _aesKey);
             await _storage.WriteRcAsync(filePrefix, encryptedRc, ct).ConfigureAwait(false);
         }
 
@@ -698,6 +537,70 @@ public class BackupOrchestrator : IDisposable
     /// Zeroes all sensitive key material from memory and disposes
     /// the metadata manager. Suppresses finalization.
     /// </summary>
+    private List<byte[]> EncodeViaPlan(List<byte[]> fragments, FsaPlan plan)
+    {
+        foreach (var step in plan.EncodeSteps)
+        {
+            if (step.Step == "encode")
+            {
+                fragments = _fss.Encode(fragments, step.Strategy);
+                _logger.Info("BackupOrchestrator", $"Encode ({step.Strategy}): {fragments.Count} fragments");
+            }
+            else if (step.Step == "etn_inject")
+            {
+                fragments = _fss.Encode(fragments, Constants.FssLevel6);
+                _logger.Info("BackupOrchestrator", $"ETN inject: {fragments.Count} fragments");
+            }
+        }
+        return fragments;
+    }
+
+    private byte[] RunFss61Repair(byte[] serializedIndex, List<byte[]> fragments, byte[] rcBytes,
+        long fileSize, string filePrefix, string fileFingerprint, string strategy, RdrfIndex index)
+    {
+        if (rcBytes.Length == 0) return rcBytes;
+        try
+        {
+            int bs = EtnBlockMap.GetBlockSize(fileSize, strategy);
+            var (repairA, repairB, repairC) = FssRepairService.Generate61(
+                serializedIndex, fragments, rcBytes, bs);
+
+            var rcFile61 = RcFile.FromCbor(rcBytes);
+            if (repairA != null) rcFile61.RepairA = repairA;
+            if (repairB != null) { rcFile61.RepairB = repairB; index.Fss61RepairB = repairB; }
+            if (repairC != null) { index.Fss61RepairC = repairC; }
+
+            string fp = filePrefix ?? fileFingerprint;
+            FssRepairService.Append61Trailers(fragments, fp, repairA, repairC);
+
+            return rcFile61.ToCborBytes();
+        }
+        catch (Exception ex) { _logger.Error("BackupOrchestrator", "FSS6.1 repair generation failed", ex); return rcBytes; }
+    }
+
+    private byte[] RunFss62Repair(byte[] serializedIndex, List<byte[]> fragments, byte[] rcBytes,
+        long fileSize, string filePrefix, string fileFingerprint, string strategy, RdrfIndex index)
+    {
+        if (rcBytes.Length == 0) return rcBytes;
+        try
+        {
+            int bs = EtnBlockMap.GetBlockSize(fileSize, strategy);
+            var (repair62A, repair62B, repair62C) = FssRepairService.Generate62(
+                serializedIndex, fragments, rcBytes, bs);
+
+            var rcFile62 = RcFile.FromCbor(rcBytes);
+            if (repair62A != null) rcFile62.Repair62A = repair62A;
+            if (repair62B != null) { rcFile62.Repair62B = repair62B; index.Fss62RepairB = repair62B; }
+            if (repair62C != null) { index.Fss62RepairC = repair62C; }
+
+            string fp = filePrefix ?? fileFingerprint;
+            FssRepairService.Append62Trailers(fragments, fp, repair62A, repair62C);
+
+            return rcFile62.ToCborBytes();
+        }
+        catch (Exception ex) { _logger.Error("BackupOrchestrator", "FSS6.2 repair generation failed", ex); return rcBytes; }
+    }
+
     public void Dispose()
     {
         if (_rcCode != null && _rcCode.Length > 0)

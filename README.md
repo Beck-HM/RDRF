@@ -351,7 +351,6 @@ Although the MCP tool has been prepared, it is still under development. Please s
 | `-fss1` &hellip; `--fss6.2` | *(required)* | Strategy (exactly one) |
 | `-next` | | Enable versioning |
 | `-node` | | Node mode to `.rdrf/` |
-| `-real` | | Real incremental mode: keep all version files permanently |
 | `-m <msg>` | | Commit message |
 
 Use `--fss6.1` / `--fss6.2` on POSIX shells (single-dash with dot causes parsing issues).
@@ -371,7 +370,6 @@ Use `--fss6.1` / `--fss6.2` on POSIX shells (single-dash with dot causes parsing
 | `-m <msg>` | *(required)* Commit message |
 | `-o <dir>` | Storage directory |
 | `-password <pw>` | Password |
-| `-real` | Real incremental mode: keep all version files permanently |
 
 ### `rdrf push <indexFile>` &mdash; Push to backends
 

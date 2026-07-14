@@ -2,7 +2,7 @@ using System.Text.Json;
 using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.FSS;
 
 namespace RDRF.Mcp.Core.Tools;
@@ -40,7 +40,7 @@ public class VerifyTool : IMcpTool
             throw new InvalidOperationException("Backup does not contain FSS6/ETN data");
 
         string storageDir = Path.GetDirectoryName(indexPath)!;
-        var storage = new LocalDssaAdapter(storageDir);
+        var storage = new LocalDSAAAdapter(storageDir);
         string prefix = index.CustomName ?? index.FileFingerprint;
 
         byte[] encryptedRc = storage.ReadRc(prefix);

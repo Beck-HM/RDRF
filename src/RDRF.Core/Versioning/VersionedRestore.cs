@@ -1,6 +1,6 @@
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 
 namespace RDRF.Core.Versioning;
 
@@ -18,7 +18,7 @@ public static class VersionedRestore
         IProgress<RdrfProgressReport>? progress = null)
     {
         string storageDir = Path.GetDirectoryName(indexFilePath) ?? ".";
-        var storage = new LocalDssaAdapter(storageDir);
+        var storage = new LocalDSAAAdapter(storageDir);
         string fingerprint = Path.GetFileNameWithoutExtension(indexFilePath);
 
         byte[] encryptedIndex = File.ReadAllBytes(indexFilePath);

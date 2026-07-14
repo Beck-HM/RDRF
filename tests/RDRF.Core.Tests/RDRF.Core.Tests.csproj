@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\RDRF.Core\RDRF.Core.csproj" />
+    <ProjectReference Include="..\..\tools\RDRF.Plugins.Key\RDRF.Plugins.Key.csproj" />
   </ItemGroup>
 
 </Project>

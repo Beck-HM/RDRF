@@ -1,6 +1,6 @@
-namespace RDRF.Core.Dssa;
+namespace RDRF.Core.DSAA;
 
-public abstract class DssaAdapter
+public abstract class DSAAAdapter
 {
     // -- Synchronous API --
     public abstract byte[] ReadFragment(string filename);
@@ -45,14 +45,14 @@ public abstract class DssaAdapter
 }
 
 /// <summary>
-/// Abstract DssaAdapter + LocalDssaAdapter for local filesystem fragment/index/RC storage.
+/// Abstract DSAAAdapter + LocalDSAAAdapter for local filesystem fragment/index/RC storage.
 /// </summary>
 
-public class LocalDssaAdapter : DssaAdapter
+public class LocalDSAAAdapter : DSAAAdapter
 {
     private readonly string _basePath;
 
-    public LocalDssaAdapter(string basePath)
+    public LocalDSAAAdapter(string basePath)
     {
         _basePath = basePath ?? throw new ArgumentNullException(nameof(basePath));
         Directory.CreateDirectory(_basePath);

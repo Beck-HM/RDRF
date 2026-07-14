@@ -4,7 +4,7 @@ using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.Versioning;
 using RDRF.Core.FragmentEngine;
 
@@ -120,7 +120,7 @@ if (hasNewTests)
 if (flagParity)
 {
     var d = Path.Combine(resultDir, "parity"); Directory.CreateDirectory(d);
-    var s = new LocalDssaAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
+    var s = new LocalDSAAAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
     string fp; using (var e = new RDRFEngine(pw, s)) fp = e.BackupFile(testFile, "FSS5", fragmentSize: fragSize);
     byte[] ei = s.ReadIndex(fp); var (_, cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(ei, r()); var idx = IndexManager.DeserializeIndex(cbor);
     string pf = idx.CustomName ?? fp; int tf = idx.FragmentCount;
@@ -139,7 +139,7 @@ if (flagParity)
     // RC file
     string rcp = Path.Combine(d, $"{pf}.rdrc"); if (File.Exists(rcp)) File.WriteAllBytes(Path.Combine(dd, $"{pf}.rdrc"), File.ReadAllBytes(rcp));
     string od = Path.Combine(d, "dict.bin"); extraSw.Restart();
-    using (var ro = new RestoreOrchestrator(r(), new LocalDssaAdapter(dd))) ro.RestoreFileAsync(fp, od).GetAwaiter().GetResult();
+    using (var ro = new RestoreOrchestrator(r(), new LocalDSAAAdapter(dd))) ro.RestoreFileAsync(fp, od).GetAwaiter().GetResult();
     long dt = extraSw.ElapsedMilliseconds; bool dOK = File.Exists(od) && VerifySha(od, SHA256.HashData(File.ReadAllBytes(testFile)));
     bool ok = sOK && dOK;
     csv.Add($"\"parity\",stream_vs_dict,0,0,{tf},{tf - 1},{sOK},{dOK},{Math.Max(st,dt)},\"stream={st}ms dict={dt}ms\"");
@@ -152,7 +152,7 @@ if (flagBoundary)
     foreach (string strat in new[] { "FSS1", "FSS2" })
     {
         var d = Path.Combine(resultDir, $"boundary_{strat}"); Directory.CreateDirectory(d);
-        var s = new LocalDssaAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
+        var s = new LocalDSAAAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
         string fp; using (var e = new RDRFEngine(pw, s)) fp = e.BackupFile(testFile, strat, fragmentSize: fragSize);
         // delete frag 0
         string pf = fp; // fingerprint is short enough
@@ -172,7 +172,7 @@ if (flagBoundary)
 if (flagVersioning)
 {
     var d = Path.Combine(resultDir, "versioning"); Directory.CreateDirectory(d);
-    var s = new LocalDssaAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32);
+    var s = new LocalDSAAAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32);
     string vf = Path.Combine(d, "version_test.txt"); File.WriteAllText(vf, "v1 content");
     string fp = VersionedBackup.BackupAsync(vf, d, pw, "initial", "FSS3", fragmentSize: 65536).GetAwaiter().GetResult();
     File.WriteAllText(vf, "v2 content modified");
@@ -189,7 +189,7 @@ if (flagVersioning)
 if (flagCacheIsolation)
 {
     var d = Path.Combine(resultDir, "cache_iso"); Directory.CreateDirectory(d);
-    var s = new LocalDssaAdapter(d); var pwA = EncryptionLayer.GenerateRcCode(32); var pwB = EncryptionLayer.GenerateRcCode(32);
+    var s = new LocalDSAAAdapter(d); var pwA = EncryptionLayer.GenerateRcCode(32); var pwB = EncryptionLayer.GenerateRcCode(32);
     byte[] rA() => (byte[])pwA.Clone();
     // Use different files to avoid fingerprint collision (same file -> same fingerprint -> overwrite)
     string fa = Path.Combine(d, "aaa.bin"); File.WriteAllBytes(fa, new byte[] { 0x41 });
@@ -213,7 +213,7 @@ if (flagIncompressible)
     var d = Path.Combine(resultDir, "incompressible"); Directory.CreateDirectory(d);
     byte[] rand = RandomNumberGenerator.GetBytes(10 * 1024 * 1024);
     string rf = Path.Combine(d, "random.bin"); File.WriteAllBytes(rf, rand);
-    var s = new LocalDssaAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
+    var s = new LocalDSAAAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
     string fp; using (var e = new RDRFEngine(pw, s)) fp = e.BackupFile(rf, "FSS1", fragmentSize: fragSize);
     string op = Path.Combine(d, "restored.bin"); extraSw.Restart();
     bool rec; using (var ro = new RestoreOrchestrator(r(), s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
@@ -226,7 +226,7 @@ if (flagIncompressible)
 if (flagStress)
 {
     var d = Path.Combine(resultDir, "stress"); Directory.CreateDirectory(d);
-    var s = new LocalDssaAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
+    var s = new LocalDSAAAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
     // Use small file to keep it fast
     byte[] tiny = new byte[65536]; RandomNumberGenerator.Fill(tiny);
     string tfS = Path.Combine(d, "tiny.bin"); File.WriteAllBytes(tfS, tiny);
@@ -254,7 +254,7 @@ if (flagTiny)
     {
         var d = Path.Combine(resultDir, $"tiny_{name}"); Directory.CreateDirectory(d);
         string tf = Path.Combine(d, "file.bin"); File.WriteAllBytes(tf, data);
-        var s = new LocalDssaAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
+        var s = new LocalDSAAAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
         byte[] h = SHA256.HashData(data);
         string fp; using (var e = new RDRFEngine(pw, s)) fp = e.BackupFile(tf, "FSS1", fragmentSize: fragSize);
         string op = Path.Combine(d, "restored.bin"); extraSw.Restart();
@@ -273,7 +273,7 @@ if (flagUnicode)
     // Copy original test file to unicode path
     byte[] srcData = File.ReadAllBytes(testFile);
     File.WriteAllBytes(uf, srcData);
-    var s = new LocalDssaAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
+    var s = new LocalDSAAAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
     string fp; using (var e = new RDRFEngine(pw, s)) fp = e.BackupFile(uf, "FSS1", originalFilename: "test_file_unicode_support.mp4", fragmentSize: fragSize);
     // Check index has original name
     byte[] ei = s.ReadIndex(fp); var (_, cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(ei, r()); var idx = IndexManager.DeserializeIndex(cbor);
@@ -289,7 +289,7 @@ if (flagUnicode)
 if (flagCorruptIdx)
 {
     var d = Path.Combine(resultDir, "corrupt_idx"); Directory.CreateDirectory(d);
-    var s = new LocalDssaAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
+    var s = new LocalDSAAAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
     string fp; using (var e = new RDRFEngine(pw, s)) fp = e.BackupFile(testFile, "FSS1", fragmentSize: fragSize);
     byte[] ei = s.ReadIndex(fp);
     // Keep salt valid, corrupt ciphertext with random bytes (guaranteed to fail decryption)
@@ -307,7 +307,7 @@ if (flagCorruptIdx)
 if (flagMany)
 {
     var d = Path.Combine(resultDir, "many"); Directory.CreateDirectory(d);
-    var s = new LocalDssaAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
+    var s = new LocalDSAAAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
     string fp; using (var e = new RDRFEngine(pw, s)) fp = e.BackupFile(testFile, "FSS1", fragmentSize: 4096);
     string op = Path.Combine(d, "restored.bin"); extraSw.Restart();
     bool rec; using (var ro = new RestoreOrchestrator(r(), s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
@@ -319,7 +319,7 @@ if (flagMany)
 if (flagMetadata)
 {
     var d = Path.Combine(resultDir, "metadata"); Directory.CreateDirectory(d);
-    var s = new LocalDssaAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32);
+    var s = new LocalDSAAAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32);
     using (var e = new RDRFEngine(pw, s)) e.BackupFile(testFile, "FSS1", fragmentSize: fragSize);
     string mp = Path.Combine(Directory.GetCurrentDirectory(), "rdrf_metadata.json");
     bool created = File.Exists(mp);
@@ -348,7 +348,7 @@ if (flagKdfBench)
 if (flagCustomName)
 {
     var d = Path.Combine(resultDir, "custom_name"); Directory.CreateDirectory(d);
-    var s = new LocalDssaAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
+    var s = new LocalDSAAAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
     string cn = "my-custom-label-42";
     string fp = ""; bool nameOk = false; bool sha = false; long t = 0; bool cnExist = false;
     try
@@ -386,7 +386,7 @@ if (flagZeroMem)
     byte[] pwBefore = (byte[])pw.Clone();
     // Create and dispose an engine
     var d = Path.Combine(resultDir, "zeromem"); Directory.CreateDirectory(d);
-    var s = new LocalDssaAdapter(d);
+    var s = new LocalDSAAAdapter(d);
     string fp;
     using (var e = new RDRFEngine(pw, s))
     {
@@ -411,7 +411,7 @@ foreach (string strategy in strategies)
 
     var testRoot = Path.Combine(resultDir, strategy);
     Directory.CreateDirectory(testRoot);
-    var storage = new LocalDssaAdapter(testRoot);
+    var storage = new LocalDSAAAdapter(testRoot);
     byte[] password = EncryptionLayer.GenerateRcCode(32);
     byte[] rcMaster = (byte[])password.Clone();
     byte[] rcClone() => (byte[])rcMaster.Clone();
@@ -561,7 +561,7 @@ foreach (string strategy in strategies)
                     }
                 }
 
-                var ts = new LocalDssaAdapter(td);
+                var ts = new LocalDSAAAdapter(td);
                 string outPath = Path.Combine(td, "restored.bin");
                 extraSw.Restart();
                 bool r = false;
@@ -616,7 +616,7 @@ foreach (string strategy in strategies)
             if (File.Exists(rcSrcP))
                 File.WriteAllBytes(Path.Combine(trialDir, $"{prefix}.rdrc"), File.ReadAllBytes(rcSrcP));
 
-            var trialStorage = new LocalDssaAdapter(trialDir);
+            var trialStorage = new LocalDSAAAdapter(trialDir);
             string trialOut = Path.Combine(trialDir, "restored.bin");
 
             extraSw.Restart();
@@ -649,7 +649,7 @@ foreach (string strategy in strategies)
         foreach (int d in toDel)
             File.Delete(Path.Combine(td, $"{prefix}_{d}.rdrf"));
 
-        var ts = new LocalDssaAdapter(td);
+        var ts = new LocalDSAAAdapter(td);
         string outPath = Path.Combine(td, "restored.bin");
         extraSw.Restart();
         bool r = false;
@@ -683,7 +683,7 @@ foreach (string strategy in strategies)
         int eDel = 0;
         for (int i = 0; i < totalFrags; i += 2)
         { File.Delete(Path.Combine(eDir, $"{prefix}_{i}.rdrf")); eDel++; }
-        var eTs = new LocalDssaAdapter(eDir);
+        var eTs = new LocalDSAAAdapter(eDir);
         extraSw.Restart();
         bool eR;
         using (var ro = new RestoreOrchestrator(rcClone(), eTs))
@@ -699,7 +699,7 @@ foreach (string strategy in strategies)
         int oDel = 0;
         for (int i = 1; i < totalFrags; i += 2)
         { File.Delete(Path.Combine(oDir, $"{prefix}_{i}.rdrf")); oDel++; }
-        var oTs = new LocalDssaAdapter(oDir);
+        var oTs = new LocalDSAAAdapter(oDir);
         extraSw.Restart();
         bool oR;
         using (var ro = new RestoreOrchestrator(rcClone(), oTs))
@@ -715,7 +715,7 @@ foreach (string strategy in strategies)
         var sDir = Path.Combine(testRoot, "custom_one_survivor");
         Directory.CreateDirectory(sDir);
         WriteTrialDir(sDir, new HashSet<int>(Enumerable.Range(1, totalFrags - 1)));
-        var sTs = new LocalDssaAdapter(sDir);
+        var sTs = new LocalDSAAAdapter(sDir);
         extraSw.Restart();
         bool sR;
         using (var ro = new RestoreOrchestrator(rcClone(), sTs))
@@ -761,7 +761,7 @@ foreach (string strategy in strategies)
         corrupt[rawOff + 1] ^= 0xFF;
         File.WriteAllBytes(Path.Combine(bcDir, $"{prefix}_0.rdrf"), corrupt);
 
-        var bcTs = new LocalDssaAdapter(bcDir);
+        var bcTs = new LocalDSAAAdapter(bcDir);
         extraSw.Restart();
         bool bcR;
         using (var r = new RestoreOrchestrator(rcClone(), bcTs))
@@ -782,7 +782,7 @@ foreach (string strategy in strategies)
         Directory.CreateDirectory(td1Dir);
         WriteTrialDir(td1Dir, null);
         File.Delete(Path.Combine(td1Dir, $"{prefix}_0.rdrf"));
-        var ts1 = new LocalDssaAdapter(td1Dir);
+        var ts1 = new LocalDSAAAdapter(td1Dir);
         extraSw.Restart();
         bool r1;
         using (var r = new RestoreOrchestrator(rcClone(), ts1))
@@ -797,7 +797,7 @@ foreach (string strategy in strategies)
         WriteTrialDir(td2Dir, null);
         File.Delete(Path.Combine(td2Dir, $"{prefix}_0.rdrf"));
         File.Delete(Path.Combine(td2Dir, $"{prefix}_1.rdrf"));
-        var ts2 = new LocalDssaAdapter(td2Dir);
+        var ts2 = new LocalDSAAAdapter(td2Dir);
         bool r2;
         using (var r = new RestoreOrchestrator(rcClone(), ts2))
             r2 = r.RestoreFileAsync(fingerprint, Path.Combine(td2Dir, "restored.bin")).GetAwaiter().GetResult();
@@ -813,7 +813,7 @@ foreach (string strategy in strategies)
         WriteTrialDir(tDir, null);
         File.Delete(Path.Combine(tDir, $"{prefix}_0.rdrf"));
         File.Delete(Path.Combine(tDir, $"{prefix}_1.rdrf"));
-        var ts = new LocalDssaAdapter(tDir);
+        var ts = new LocalDSAAAdapter(tDir);
         bool ro;
         using (var r = new RestoreOrchestrator(rcClone(), ts))
             ro = r.RestoreFileAsync(fingerprint, Path.Combine(tDir, "restored.bin")).GetAwaiter().GetResult();
@@ -834,7 +834,7 @@ foreach (string strategy in strategies)
             var f = Path.Combine(tDir, $"{prefix}_{i}.rdrf");
             if (File.Exists(f)) { File.Delete(f); deleted++; }
         }
-        var ts = new LocalDssaAdapter(tDir);
+        var ts = new LocalDSAAAdapter(tDir);
         bool ro;
         extraSw.Restart();
         using (var r = new RestoreOrchestrator(rcClone(), ts))
@@ -867,7 +867,7 @@ foreach (string strategy in strategies)
         toKill.Add(targetFrag);
         foreach (int fi in toKill)
             File.Delete(Path.Combine(tDir, $"{prefix}_{fi}.rdrf"));
-        var ts = new LocalDssaAdapter(tDir);
+        var ts = new LocalDSAAAdapter(tDir);
         bool ro;
         extraSw.Restart();
         using (var r = new RestoreOrchestrator(rcClone(), ts))
@@ -884,7 +884,7 @@ foreach (string strategy in strategies)
         Directory.CreateDirectory(tDir);
         WriteTrialDir(tDir, null);
         File.Delete(Path.Combine(tDir, $"{prefix}_0.rdrf"));
-        var ts = new LocalDssaAdapter(tDir);
+        var ts = new LocalDSAAAdapter(tDir);
         bool ro;
         extraSw.Restart();
         using (var r = new RestoreOrchestrator(rcClone(), ts))

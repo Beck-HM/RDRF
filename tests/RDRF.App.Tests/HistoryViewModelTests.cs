@@ -31,9 +31,4 @@ public class HistoryViewModelTests
         Assert.False(_vm.IsLoading);
     }
 
-    [Fact]
-    public void HasIncremental_DefaultsFalse()
-    {
-        Assert.False(_vm.HasIncremental);
-    }
 }

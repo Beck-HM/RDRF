@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Encryption;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using Xunit;
 
 namespace RDRF.App.Tests;
@@ -77,7 +77,7 @@ public class RoundTripTests
         using var dir = new Fixtures.TempDir();
         byte[] password = RandomNumberGenerator.GetBytes(32);
         byte[] aesKey = EncryptionLayer.DeriveKeyLegacy(password);
-        var storage = new LocalDssaAdapter(dir.Path);
+        var storage = new LocalDSAAAdapter(dir.Path);
 
         using var engine = new RDRFEngine(aesKey, password, storage);
         string input = dir.CreateTextFile("test.txt", "Pre-derived round-trip test.");

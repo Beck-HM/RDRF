@@ -1,5 +1,5 @@
 using System.Buffers;
-using System.Diagnostics;
+using RDRF.Core.Logging;using System.Diagnostics;
 using System.IO.Hashing;
 using RDRF.Core.Index;
 
@@ -91,7 +91,7 @@ public class Fss5PSend : IFssStrategy
             if (!actualHash.AsSpan(0, 8).SequenceEqual(
                 seed.AsSpan(seedDataSize + b * 8, 8)))
             {
-                Debug.WriteLine($"[Fss5PSend] Seed block {b} fingerprint mismatch");
+                RdrfLogger.Default.Debug("",$"[Fss5PSend] Seed block {b} fingerprint mismatch");
                 return null;
             }
         }

@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 
-namespace RDRF.Core.Dssa;
+namespace RDRF.Core.DSAA;
 
 /// <summary>
 /// SQLite management database for tracking backends, projects, versions, and fragment locations.

@@ -1,7 +1,7 @@
 using RDRF.Core.Abstractions;
 using System.Security.Cryptography;
 
-namespace RDRF.Core.Dssa;
+namespace RDRF.Core.DSAA;
 
 /// <summary>
 /// Multi-backend fragment orchestration: write, read, delete, ping across registered backends.

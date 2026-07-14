@@ -3,7 +3,7 @@ using RDRF.Core.Compression;
 using RDRF.Core.Encryption;
 using RDRF.Core.FragmentEngine;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 
 namespace RDRF.Core.Versioning;
 
@@ -15,7 +15,7 @@ namespace RDRF.Core.Versioning;
 public static class RealVersionedRestore
 {
     public static bool RestoreVersion(
-        DssaAdapter storage, string latestFingerprint, int targetVersion,
+        DSAAAdapter storage, string latestFingerprint, int targetVersion,
         string outputPath, byte[] password,
         IProgress<RdrfProgressReport>? progress = null)
     {
@@ -25,7 +25,7 @@ public static class RealVersionedRestore
     }
 
     public static async Task<bool> RestoreVersionAsync(
-        DssaAdapter storage, string latestFingerprint, int targetVersion,
+        DSAAAdapter storage, string latestFingerprint, int targetVersion,
         string outputPath, byte[] password,
         IProgress<RdrfProgressReport>? progress = null,
         CancellationToken ct = default)

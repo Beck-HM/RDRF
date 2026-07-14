@@ -23,11 +23,17 @@ $csprojFiles = @(
   "$root\src\RDRF.App\RDRF.App.csproj",
   "$root\tools\RDRF.Plugins.Path\RDRF.Plugins.Path.csproj",
   "$root\tools\RDRF.Plugins.Rest\RDRF.Plugins.Rest.csproj",
-  "$root\tools\RDRF.Plugins.Key\RDRF.Plugins.Key.csproj"
+  "$root\tools\RDRF.Plugins.Key\RDRF.Plugins.Key.csproj",
+  "$root\tools\RDRF.Mcp.Core\RDRF.Mcp.Core.csproj",
+  "$root\tools\RDRF.Mcp.Wpf\RDRF.Mcp.Wpf.csproj"
 )
 foreach ($f in $csprojFiles) {
   $content = Get-Content $f -Raw
   $content = $content -replace '<Version>.*?</Version>', "<Version>$Version</Version>"
+  # Ensure AssemblyVersion and FileVersion match
+  if ($content -notmatch '<AssemblyVersion>') {
+    $content = $content -replace "(?s)(<Version>$Version</Version>)", "`$1`r`n    <AssemblyVersion>$Version.0</AssemblyVersion>`r`n    <FileVersion>$Version.0</FileVersion>"
+  }
   Set-Content $f $content
 }
 Write-Host "       Version updated." -ForegroundColor Green

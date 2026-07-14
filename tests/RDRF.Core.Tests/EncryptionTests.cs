@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using Xunit;
@@ -81,9 +81,8 @@ public class EncryptionTests
         byte[] aesKey = RandomNumberGenerator.GetBytes(32);
         byte[] plaintext = System.Text.Encoding.UTF8.GetBytes("No header test data.");
 
-        // Encrypt without header (raw fragment)
-        byte[] nonce = RandomNumberGenerator.GetBytes(Constants.NonceLength);
-        byte[] encrypted = EncryptionLayer.EncryptFragmentCtrWithKey(plaintext, aesKey, nonce);
+        // Encrypt without header (raw fragment, auto-generated nonce)
+        byte[] encrypted = EncryptionLayer.EncryptFragmentCtrWithKey(plaintext, aesKey);
 
         // The encrypted output is just nonce + ciphertext, no file header
         byte[] result = EncryptionLayer.DecryptAndStripFragment(encrypted, aesKey);

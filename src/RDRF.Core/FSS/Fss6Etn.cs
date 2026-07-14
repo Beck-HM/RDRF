@@ -1,6 +1,7 @@
 using RDRF.Core.ETN;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
+using RDRF.Core.Logging;
 
 namespace RDRF.Core.FSS;
 
@@ -25,7 +26,7 @@ public class Fss6Etn : IFssStrategy
         List<int>? originalSizes = null)
     {
         if (missingIndices.Count > 0)
-            System.Diagnostics.Debug.WriteLine($"[ETN] FSS6 cannot decode - ETN is validation-only (missing: {missingIndices.Count}/{totalFragments})");
+            RdrfLogger.Default.Debug("Fss6Etn", $"[ETN] FSS6 cannot decode - ETN is validation-only (missing: {missingIndices.Count}/{totalFragments})");
         return new();
     }
 
@@ -51,8 +52,9 @@ public class Fss6Etn : IFssStrategy
     public static byte[] StripEtnFieldsFromIndexJson(byte[] indexBytes)
         => EtnPrecision.StripFss6Fields(indexBytes);
 
-    public static (List<byte[]> Fragments, byte[] IndexJson, byte[] RcJson) InjectCrossValidation(
-        List<byte[]> fragments, byte[] indexBytes, string fileFingerprint, long fileSize, string strategy)
+    public static (List<byte[]> Fragments, byte[] RcJson) InjectCrossValidation(
+        List<byte[]> fragments, byte[] indexBytes, RdrfIndex index,
+        string fileFingerprint, long fileSize, string strategy)
     {
         int bs = EtnBlockMap.GetBlockSize(fileSize, strategy);
         byte[] indexBlockFlat = EtnBlockMap.Build(indexBytes, bs);
@@ -93,22 +95,17 @@ public class Fss6Etn : IFssStrategy
             fragments[i] = withTrailer;
         }
 
-        // A (Index) stores: Fragment(8B+2B) + RC(8B+2B)
-        byte[] updatedIndexBytes = AddFss6FieldsToIndex(indexBytes, fragmentBlockFlats, rcBlockFlat);
-        return (fragments, updatedIndexBytes, rcBytes);
+        // A (Index) stores: Fragment(8B+2B) + RC(8B+2B) — modify in-place
+        AddFss6FieldsToIndex(index, fragmentBlockFlats, rcBlockFlat);
+        return (fragments, rcBytes);
     }
 
-    private static byte[] AddFss6FieldsToIndex(
-        byte[] indexBytes, byte[][] fragmentBlockFlats, byte[] rcBlockFlat)
+    private static void AddFss6FieldsToIndex(
+        RdrfIndex index, byte[][] fragmentBlockFlats, byte[] rcBlockFlat)
     {
-        var index = IndexManager.DeserializeIndex(indexBytes);
-        if (index == null)
-            throw new InvalidDataException("Failed to parse index for ETN injection");
-
         int rcBlockCount = EtnBlockMap.BlockCount(rcBlockFlat);
         index.Fss6RcBlockMap = HexListFromSecondFlat(rcBlockFlat, rcBlockCount);
         index.Fss6Rc2B = HexListFromFirstFlat(rcBlockFlat, rcBlockCount);
-
         index.Fss6RcBlockMapFlat = (byte[])rcBlockFlat.Clone();
 
         index.Fss6FragmentBlockMaps = new List<List<string>>();
@@ -121,8 +118,6 @@ public class Fss6Etn : IFssStrategy
             index.Fss6FragmentBlockMapsFlat.Add((byte[])fragmentBlockFlats[i].Clone());
             index.Fss6Fragment2B.Add(HexListFromFirstFlat(fragmentBlockFlats[i], fc));
         }
-
-        return IndexManager.SerializeIndex(index);
     }
 
     public static CrossValidationResult CrossValidate(

@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 
 namespace RDRF.Plugins.Key;
 
@@ -86,7 +86,11 @@ public class KeyStorageBackend : IStorageBackend
     }
 
     private string ObjectUrl(string path)
-        => $"{_baseUrl}/{path}";
+    {
+        string sanitized = path.Replace('\\', '/');
+        string collapsed = string.Join("/", sanitized.Split('/').Where(p => p != ".."));
+        return $"{_baseUrl}/{collapsed}";
+    }
 
     protected static async Task SignRequestAsync(HttpRequestMessage request,
         string service, string region, string method, string path,

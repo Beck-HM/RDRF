@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using RDRF.Core;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using Xunit;
 
 namespace RDRF.App.Tests;
@@ -56,7 +56,7 @@ public class EncryptTests
         using var dir = new Fixtures.TempDir();
         byte[] password = RandomNumberGenerator.GetBytes(32);
         string input = dir.CreateTextFile("test.txt", "Custom name test.");
-        var storage = new LocalDssaAdapter(dir.Path);
+        var storage = new LocalDSAAAdapter(dir.Path);
         using var engine = new RDRFEngine(password, storage);
         string fp = engine.BackupFile(input, "FSS1", customName: "my_custom_name");
 
@@ -72,7 +72,7 @@ public class EncryptTests
         using var dir = new Fixtures.TempDir();
         byte[] password = RandomNumberGenerator.GetBytes(32);
         string input = dir.CreateFile("test.bin", 1_000_000);
-        var storage = new LocalDssaAdapter(dir.Path);
+        var storage = new LocalDSAAAdapter(dir.Path);
         using var engine = new RDRFEngine(password, storage);
         string fp = engine.BackupFile(input, "FSS3",
             auxiliaryStrategies: new List<string> { "FSS6" });

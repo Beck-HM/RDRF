@@ -5,7 +5,7 @@ using RDRF.Core.Encryption;
 using RDRF.Core.FragmentEngine;
 using RDRF.Core.Index;
 
-namespace RDRF.Core.Dssa;
+namespace RDRF.Core.DSAA;
 
 /// <summary>
 /// Push fragments/RC to remote backends via round-robin distribution through registered plugins.

@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Encryption;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using RDRF.Core.FragmentEngine;
@@ -115,7 +115,7 @@ public class FssEndToEndTests
         {
             // Create engine
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             using var engine = new RDRFEngine(rcCode, storage);
 
             // Backup
@@ -153,7 +153,7 @@ public class FssEndToEndTests
         try
         {
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             using var engine = new RDRFEngine(rcCode, storage);
 
             string fingerprint = await engine.BackupFileAsync(TestFile, strategy);
@@ -185,7 +185,7 @@ public class FssEndToEndTests
         try
         {
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             using var engine = new RDRFEngine(rcCode, storage);
 
             // Backup
@@ -264,7 +264,7 @@ public class FssEndToEndTests
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
             byte[] wrongRcCode = EncryptionLayer.GenerateRcCode(32);
 
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
 
             // Backup with correct key
             using (var engine = new RDRFEngine(rcCode, storage))

@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -297,7 +297,7 @@ public class Fss61Tests
         try
         {
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             using var engine = new RDRFEngine(rcCode, storage);
 
             string fingerprint = engine.BackupFile(EtnTestHelpers.TestFile, strategy);
@@ -329,7 +329,7 @@ public class Fss61Tests
         try
         {
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             using var engine = new RDRFEngine(rcCode, storage);
 
             string fingerprint = engine.BackupFile(EtnTestHelpers.TestFile, strategy);
@@ -366,7 +366,7 @@ public class Fss61Tests
         try
         {
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             string fingerprint;
 
             using (var engine = new RDRFEngine((byte[])rcCode.Clone(), storage))
@@ -426,7 +426,7 @@ public class Fss61Tests
         try
         {
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             string fingerprint;
 
             using (var engine = new RDRFEngine((byte[])rcCode.Clone(), storage))
@@ -470,7 +470,7 @@ public class Fss61Tests
         try
         {
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             string fingerprint;
 
             using (var engine = new RDRFEngine((byte[])rcCode.Clone(), storage))
@@ -519,7 +519,7 @@ public class Fss61Tests
         {
             byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
             byte[] rcClone = (byte[])rcCode.Clone();
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             string fingerprint;
 
             using (var engine = new RDRFEngine(rcCode, storage))

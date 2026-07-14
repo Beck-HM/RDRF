@@ -1,4 +1,4 @@
-namespace RDRF.Core.Dssa;
+namespace RDRF.Core.DSAA;
 
 public interface IStorageBackend
 {

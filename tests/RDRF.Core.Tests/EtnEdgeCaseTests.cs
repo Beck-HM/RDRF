@@ -1,11 +1,11 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using RDRF.Core.Compression;
 using RDRF.Core.Encryption;
 using RDRF.Core.ETN;
 using RDRF.Core.FragmentEngine;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -33,7 +33,7 @@ public class EtnEdgeCaseTests
         {
             var (indexBytes, fragments, rcBytes, fingerprint, rcCode) = EtnTestHelpers.CreateDecryptedBackup(storageDir);
 
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
             string rcPath = Path.Combine(storageDir, fingerprint + Constants.RcFileSuffix);
 
             // Delete the RC file

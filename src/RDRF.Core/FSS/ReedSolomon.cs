@@ -18,6 +18,7 @@ public class ReedSolomon
     private static readonly byte[] ExpTable = new byte[512];
     private static readonly byte[] LogTable = new byte[256];
     private static readonly ConcurrentDictionary<string, byte[][]> _invCache = new();
+    private static readonly byte[][] _mulTableStatic;
 
     static ReedSolomon()
     {
@@ -30,6 +31,8 @@ public class ReedSolomon
         }
         for (int i = 255; i < 512; i++)
             ExpTable[i] = ExpTable[i - 255];
+
+        _mulTableStatic = BuildMulTable();
     }
 
     public ReedSolomon(int dataShards, int parityShards)
@@ -43,16 +46,7 @@ public class ReedSolomon
             for (int k = 0; k < dataShards; k++)
                 _encodeMatrix[p, k] = ExpTable[((p + 1) * k) % 255];
 
-        _mulTable = new byte[256][];
-        _mulTable[0] = new byte[256];
-        for (int c = 1; c < 256; c++)
-        {
-            var row = new byte[256];
-            _mulTable[c] = row;
-            int logC = LogTable[c];
-            for (int a = 1; a < 256; a++)
-                row[a] = ExpTable[LogTable[a] + logC];
-        }
+        _mulTable = _mulTableStatic;
     }
 
     public byte[][] Encode(byte[][] shards)
@@ -237,8 +231,6 @@ public class ReedSolomon
         if (a == 0 || b == 0) return 0;
         return ExpTable[LogTable[a] + LogTable[b]];
     }
-    private static readonly byte[][] _mulTableStatic = BuildMulTable();
-
     private static byte[][] BuildMulTable()
     {
         var tbl = new byte[256][];

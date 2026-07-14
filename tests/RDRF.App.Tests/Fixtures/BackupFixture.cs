@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 
 namespace RDRF.App.Tests.Fixtures;
 
@@ -51,7 +51,7 @@ public static class BackupHelpers
     public static string Backup(byte[] password, string inputFile, string storageDir,
         string strategy = "FSS1", int? fragmentSize = null)
     {
-        var storage = new LocalDssaAdapter(storageDir);
+        var storage = new LocalDSAAAdapter(storageDir);
         using var engine = new RDRFEngine(password, storage);
         return engine.BackupFile(inputFile, strategy,
             fragmentSize: fragmentSize ?? 256 * 1024);
@@ -60,15 +60,15 @@ public static class BackupHelpers
     public static string BackupWithSalt(byte[] password, byte[] salt, string inputFile, string storageDir,
         string strategy = "FSS1", int? fragmentSize = null)
     {
-        var storage = new LocalDssaAdapter(storageDir);
+        var storage = new LocalDSAAAdapter(storageDir);
         using var engine = new BackupOrchestrator(password, storage, salt);
-        return engine.BackupFile(inputFile, strategy,
-            fragmentSize: fragmentSize ?? 256 * 1024);
+        return engine.BackupFileAsync(inputFile, strategy,
+            fragmentSize: fragmentSize ?? 256 * 1024).GetAwaiter().GetResult();
     }
 
     public static BackupLoadResult LoadIndex(byte[] password, string storageDir, string fingerprint)
     {
-        var storage = new LocalDssaAdapter(storageDir);
+        var storage = new LocalDSAAAdapter(storageDir);
         byte[] encIdx = storage.ReadIndex(fingerprint);
         (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encIdx, password);
         var index = IndexManager.DeserializeIndex(cbor);
@@ -95,7 +95,7 @@ public static class BackupHelpers
 
     public static bool Restore(byte[] password, string storageDir, string fingerprint, string outputPath)
     {
-        var storage = new LocalDssaAdapter(storageDir);
+        var storage = new LocalDSAAAdapter(storageDir);
         using var engine = new RDRFEngine(password, storage);
         return engine.RestoreFile(fingerprint, outputPath);
     }

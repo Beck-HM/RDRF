@@ -17,14 +17,20 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>rdrf</AssemblyName>
     <ApplicationIcon>..\..\rdrf.ico</ApplicationIcon>
-    <Version>1.0.0-pre1</Version>
+    <Version>1.4.5</Version>
+    <AssemblyVersion>1.4.5.0</AssemblyVersion>
+    <FileVersion>1.4.5.0</FileVersion>
   </PropertyGroup>
 
 </Project>
+
+
+
 
 
 

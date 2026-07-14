@@ -54,19 +54,26 @@ public static class AesNiCtr
                 if (bytesRead == 0) break;
 
                 Span<byte> keyBlock = stackalloc byte[KeyBlockLen];
-                int offset = 0;
-                while (offset < bytesRead)
+                try
                 {
-                    int chunk = Math.Min(KeyBlockLen, bytesRead - offset);
-                    for (int k = 0; k < chunk; k += 16)
+                    int offset = 0;
+                    while (offset < bytesRead)
                     {
-                        AesEncryptBlock(counter, rk).CopyTo(keyBlock.Slice(k, 16));
-                        counter = IncrementCounter(counter);
+                        int chunk = Math.Min(KeyBlockLen, bytesRead - offset);
+                        for (int k = 0; k < chunk; k += 16)
+                        {
+                            AesEncryptBlock(counter, rk).CopyTo(keyBlock.Slice(k, 16));
+                            counter = IncrementCounter(counter);
+                        }
+                        XorSpan(buffer.AsSpan(offset, chunk), keyBlock.Slice(0, chunk));
+                        offset += chunk;
                     }
-                    XorSpan(buffer.AsSpan(offset, chunk), keyBlock.Slice(0, chunk));
-                    offset += chunk;
+                    output.Write(buffer, 0, bytesRead);
                 }
-                output.Write(buffer, 0, bytesRead);
+                finally
+                {
+                    SCryptography.CryptographicOperations.ZeroMemory(keyBlock);
+                }
             }
         }
         else

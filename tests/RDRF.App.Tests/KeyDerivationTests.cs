@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using Xunit;
 
 namespace RDRF.App.Tests;
@@ -33,11 +33,11 @@ public class KeyDerivationTests
         using var dir = new Fixtures.TempDir();
         byte[] password = RandomNumberGenerator.GetBytes(32);
         byte[] salt = RandomNumberGenerator.GetBytes(32);
-        var storage = new LocalDssaAdapter(dir.Path);
+        var storage = new LocalDSAAAdapter(dir.Path);
 
         using var orchestrator = new BackupOrchestrator(password, storage, salt);
         string input = dir.CreateTextFile("test.txt", "Auto-detect new format test content.");
-        string fp = orchestrator.BackupFile(input, "FSS1");
+        string fp = orchestrator.BackupFileAsync(input, "FSS1").GetAwaiter().GetResult();
 
         byte[] encIdx = storage.ReadIndex(fp);
         var (aesKey, cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encIdx, password);
@@ -53,7 +53,7 @@ public class KeyDerivationTests
     {
         using var dir = new Fixtures.TempDir();
         byte[] password = RandomNumberGenerator.GetBytes(32);
-        var storage = new LocalDssaAdapter(dir.Path);
+        var storage = new LocalDSAAAdapter(dir.Path);
 
         using var engine = new RDRFEngine(password, storage);
         string input = dir.CreateTextFile("test.txt", "Auto-detect legacy format test.");
@@ -73,7 +73,7 @@ public class KeyDerivationTests
         using var dir = new Fixtures.TempDir();
         byte[] password = RandomNumberGenerator.GetBytes(32);
         byte[] wrongPwd = RandomNumberGenerator.GetBytes(32);
-        var storage = new LocalDssaAdapter(dir.Path);
+        var storage = new LocalDSAAAdapter(dir.Path);
 
         using var engine = new RDRFEngine(password, storage);
         string input = dir.CreateTextFile("test.txt", "Wrong password test.");
@@ -90,11 +90,11 @@ public class KeyDerivationTests
         using var dir = new Fixtures.TempDir();
         byte[] rcCode = RandomNumberGenerator.GetBytes(32);
         byte[] salt = RandomNumberGenerator.GetBytes(32);
-        var storage = new LocalDssaAdapter(dir.Path);
+        var storage = new LocalDSAAAdapter(dir.Path);
 
         using var orchestrator = new BackupOrchestrator(rcCode, storage, salt);
         string input = dir.CreateTextFile("test.txt", "Salt match test.");
-        string fp = orchestrator.BackupFile(input, "FSS1");
+        string fp = orchestrator.BackupFileAsync(input, "FSS1").GetAwaiter().GetResult();
 
         byte[] encIdx = storage.ReadIndex(fp);
         byte[] saltFromPrefix = encIdx.AsSpan(0, 32).ToArray();

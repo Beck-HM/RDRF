@@ -1,11 +1,8 @@
-using System.Diagnostics;
 using System.Reflection;
+using RDRF.Core.DSAA.NativePlugin;
+using RDRF.Core.Logging;
 
-namespace RDRF.Core.Dssa;
-
-/// <summary>
-/// Loads IStorageBackendFactory plugins from DLL files at runtime.
-/// </summary>
+namespace RDRF.Core.DSAA;
 
 public static class PluginLoader
 {
@@ -15,6 +12,7 @@ public static class PluginLoader
         if (!Directory.Exists(directory))
             return factories;
 
+        // Load .NET assembly plugins
         foreach (var dllPath in Directory.GetFiles(directory, "*.dll"))
         {
             try
@@ -32,11 +30,16 @@ public static class PluginLoader
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[PluginLoader] Failed to load plugin DLL '{dllPath}': {ex.Message}");
-                Console.Error.WriteLine($"[PluginLoader] Failed to load plugin '{Path.GetFileName(dllPath)}': {ex.Message}");
+                RdrfLogger.Default.Warn("PluginLoader",
+                    $"Failed to load plugin DLL '{dllPath}': {ex.Message}");
+                Console.Error.WriteLine(
+                    $"[PluginLoader] Failed to load plugin '{Path.GetFileName(dllPath)}': {ex.Message}");
             }
         }
+
+        // Load native (C ABI) plugins
+        factories.AddRange(NativePluginLoader.Load(directory));
+
         return factories;
     }
 }
-

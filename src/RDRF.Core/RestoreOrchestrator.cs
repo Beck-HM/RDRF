@@ -9,12 +9,12 @@ using RDRF.Core.Compression;
 using RDRF.Core.Encryption;
 using RDRF.Core.ETN;
 using RDRF.Core.FragmentEngine;
-using RDRF.Core.FSS;
+using RDRF.Core.Logging;using RDRF.Core.FSS;
 using RDRF.Core.FSA;
 using RDRF.Core.Index;
 using RDRF.Core.Integrity;
 using RDRF.Core.Metadata;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 
 namespace RDRF.Core;
 
@@ -46,26 +46,33 @@ namespace RDRF.Core;
 public class RestoreOrchestrator : IDisposable
 {
     private readonly byte[] _rcCode;
-    private byte[] _aesKey;
-    private readonly DssaAdapter _storage;
+    private readonly DSAAAdapter _storage;
     private readonly IFSSEngine _fss;
     private readonly IMetadataManager _metadata;
     private readonly IRecoveryExecutor _recoveryExecutor;
+    private readonly IEncryptionLayer _encryption;
+    private readonly IIndexManager _indexManager;
+    private readonly RdrfLogger _logger;
 
     public RestoreOrchestrator(
         byte[] aesKey,
         byte[] rcCode,
-        DssaAdapter storage,
+        DSAAAdapter storage,
         IFSSEngine? fssEngine = null,
         IMetadataManager? metadata = null,
-        IRecoveryExecutor? recoveryExecutor = null)
+        IRecoveryExecutor? recoveryExecutor = null,
+        IEncryptionLayer? encryption = null,
+        IIndexManager? indexManager = null,
+        RdrfLogger? logger = null)
     {
-        _aesKey = aesKey?.Clone() as byte[] ?? throw new ArgumentNullException("AES key required");
         _rcCode = rcCode?.Clone() as byte[] ?? [];
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _fss = fssEngine ?? new FSSEngineWrapper();
         _metadata = metadata ?? new MetadataManagerWrapper();
         _recoveryExecutor = recoveryExecutor ?? new RecoveryExecutor(_fss);
+        _encryption = encryption ?? new EncryptionLayerWrapper();
+        _indexManager = indexManager ?? new IndexManagerWrapper();
+        _logger = logger ?? new RdrfLogger();
     }
 
     // --- Public Restore Methods ---
@@ -81,10 +88,10 @@ public class RestoreOrchestrator : IDisposable
             throw new FileNotFoundException($"Index not found for fingerprint: {fileFingerprint}");
 
         byte[] encryptedIndex = _storage.ReadIndex(fileFingerprint);
-        (_aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, _rcCode);
-        var index = IndexManager.DeserializeIndex(cbor);
+        (byte[] aesKey, byte[] cbor) = _encryption.DecryptIndexWithAutoDetect(encryptedIndex, _rcCode);
+        var index = _indexManager.DeserializeIndex(cbor);
         string prefix = filePrefix ?? fileFingerprint;
-        return RestoreCore(index, prefix, outputPath, allowFssRecovery, progress);
+        return RestoreCore(index, aesKey, prefix, outputPath, allowFssRecovery, progress);
     }
 
     public bool RestoreFile(string fileFingerprint, FileInfo outputPath, bool allowFssRecovery = true, string? filePrefix = null, IProgress<RdrfProgressReport>? progress = null)
@@ -106,27 +113,29 @@ public class RestoreOrchestrator : IDisposable
         if (!FragmentFileHeader.HasHeader(fragData))
             throw new InvalidDataException("Fragment does not contain an embedded index.");
 
+        byte[] aesKey;
+        byte[] idxBytes;
         if (FragmentFileHeader.GetTotalHeaderSize(fragData) > FragmentFileHeader.HeaderSize)
         {
-            var (embeddedIndexBytes, _, salt) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, _aesKey);
+            var (embeddedIdx, _, salt) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData,
+                _encryption.DeriveKeyLegacy(_rcCode));
             if (salt != null && salt.Length == Constants.SaltPrefixLength)
-            {
-                _aesKey = EncryptionLayer.DeriveKey(_rcCode, salt);
-                var (reDecrypted, _, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, _aesKey);
-                if (reDecrypted != null)
-                    embeddedIndexBytes = reDecrypted;
-            }
-            if (embeddedIndexBytes == null)
-                throw new InvalidDataException("Failed to extract embedded index from fragment");
-            var index = IndexManager.DeserializeIndex(embeddedIndexBytes);
-            return RestoreCore(index, filePrefix, outputPath, allowFssRecovery, progress);
+                aesKey = _encryption.DeriveKey(_rcCode, salt);
+            else
+                aesKey = _encryption.DeriveKeyLegacy(_rcCode);
+            var (reDecrypted, _, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, aesKey);
+            idxBytes = reDecrypted ?? embeddedIdx;
         }
-    
-        var (idxBytes, _, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, _aesKey);
+        else
+        {
+            aesKey = _encryption.DeriveKeyLegacy(_rcCode);
+            var (idx, _, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, aesKey);
+            idxBytes = idx;
+        }
         if (idxBytes == null)
             throw new InvalidDataException("Failed to extract embedded index from fragment");
-        var idx = IndexManager.DeserializeIndex(idxBytes);
-        return RestoreCore(idx, filePrefix, outputPath, allowFssRecovery, progress);
+        var index = _indexManager.DeserializeIndex(idxBytes);
+        return RestoreCore(index, aesKey, filePrefix, outputPath, allowFssRecovery, progress);
     }
 
     // --- Async Restore ---
@@ -144,10 +153,10 @@ public class RestoreOrchestrator : IDisposable
             throw new FileNotFoundException($"Index not found: {lookupKey}");
 
         byte[] encryptedIndex = await _storage.ReadIndexAsync(lookupKey, cancellationToken).ConfigureAwait(false);
-        (_aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, _rcCode);
-        var index = IndexManager.DeserializeIndex(cbor);
+        (byte[] aesKey, byte[] cbor) = _encryption.DecryptIndexWithAutoDetect(encryptedIndex, _rcCode);
+        var index = _indexManager.DeserializeIndex(cbor);
         string prefix = filePrefix ?? fileFingerprint;
-        return await RestoreCoreAsync(index, prefix, outputPath, allowFssRecovery, progress, cancellationToken).ConfigureAwait(false);
+        return await RestoreCoreAsync(index, aesKey, prefix, outputPath, allowFssRecovery, progress, cancellationToken).ConfigureAwait(false);
     }
 
     public Task<bool> RestoreFileAsync(string fileFingerprint, FileInfo outputPath, bool allowFssRecovery = true, string? filePrefix = null, IProgress<RdrfProgressReport>? progress = null, CancellationToken cancellationToken = default)
@@ -168,27 +177,29 @@ public class RestoreOrchestrator : IDisposable
         if (!FragmentFileHeader.HasHeader(fragData))
             throw new InvalidDataException("Fragment does not contain an embedded index.");
 
+        byte[] aesKey;
+        byte[] idxBytes;
         if (FragmentFileHeader.GetTotalHeaderSize(fragData) > FragmentFileHeader.HeaderSize)
         {
-            var (embeddedIndexBytes, _, salt) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, _aesKey);
+            var (embeddedIdx, _, salt) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData,
+                _encryption.DeriveKeyLegacy(_rcCode));
             if (salt != null && salt.Length == Constants.SaltPrefixLength)
-            {
-                _aesKey = EncryptionLayer.DeriveKey(_rcCode, salt);
-                var (reDecrypted, _, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, _aesKey);
-                if (reDecrypted != null)
-                    embeddedIndexBytes = reDecrypted;
-            }
-            if (embeddedIndexBytes == null)
-                throw new InvalidDataException("Failed to extract embedded index from fragment");
-            var index = IndexManager.DeserializeIndex(embeddedIndexBytes);
-            return await RestoreCoreAsync(index, filePrefix, outputPath, allowFssRecovery, progress, cancellationToken).ConfigureAwait(false);
+                aesKey = _encryption.DeriveKey(_rcCode, salt);
+            else
+                aesKey = _encryption.DeriveKeyLegacy(_rcCode);
+            var (reDecrypted, _, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, aesKey);
+            idxBytes = reDecrypted ?? embeddedIdx;
         }
-
-        var (idxBytes, _, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, _aesKey);
+        else
+        {
+            aesKey = _encryption.DeriveKeyLegacy(_rcCode);
+            var (idx, _, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragData, aesKey);
+            idxBytes = idx;
+        }
         if (idxBytes == null)
             throw new InvalidDataException("Failed to extract embedded index from fragment");
-        var idx = IndexManager.DeserializeIndex(idxBytes);
-        return await RestoreCoreAsync(idx, filePrefix, outputPath, allowFssRecovery, progress, cancellationToken).ConfigureAwait(false);
+        var index = _indexManager.DeserializeIndex(idxBytes);
+        return await RestoreCoreAsync(index, aesKey, filePrefix, outputPath, allowFssRecovery, progress, cancellationToken).ConfigureAwait(false);
     }
 
     // --- Restore From Index Data (pre-loaded encrypted index) ---
@@ -200,21 +211,22 @@ public class RestoreOrchestrator : IDisposable
         bool allowFssRecovery = true,
         IProgress<RdrfProgressReport>? progress = null)
     {
-        (_aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, _rcCode);
-        var index = IndexManager.DeserializeIndex(cbor);
-        return RestoreCore(index, filePrefix, outputPath, allowFssRecovery, progress);
+        (byte[] aesKey, byte[] cbor) = _encryption.DecryptIndexWithAutoDetect(encryptedIndex, _rcCode);
+        var index = _indexManager.DeserializeIndex(cbor);
+        return RestoreCore(index, aesKey, filePrefix, outputPath, allowFssRecovery, progress);
     }
 
     // --- Synchronous Core ---
 
     private bool RestoreCore(
         RdrfIndex index,
+        byte[] aesKey,
         string filePrefix,
         string outputPath,
         bool allowFssRecovery = true,
         IProgress<RdrfProgressReport>? progress = null)
     {
-        var task = Task.Run(() => RestoreCoreAsync(index, filePrefix, outputPath,
+        var task = Task.Run(() => RestoreCoreAsync(index, aesKey, filePrefix, outputPath,
             allowFssRecovery, progress, CancellationToken.None));
         if (task.Wait(TimeSpan.FromMinutes(30)))
             return task.Result;
@@ -225,6 +237,7 @@ public class RestoreOrchestrator : IDisposable
 
     private async Task<bool> RestoreCoreAsync(
         RdrfIndex index,
+        byte[] aesKey,
         string filePrefix,
         string outputPath,
         bool allowFssRecovery = true,
@@ -252,7 +265,7 @@ public class RestoreOrchestrator : IDisposable
 
         // Try streaming restore when all fragments are on disk (no recovery needed)
         bool streamingPath = false;
-        if (await TryStreamingRestoreCoreAsync(index, filePrefix, outputPath,
+        if (await TryStreamingRestoreCoreAsync(index, aesKey, filePrefix, outputPath,
                 progress, ct).ConfigureAwait(false))
         {
             streamingPath = true;
@@ -261,17 +274,17 @@ public class RestoreOrchestrator : IDisposable
         if (!streamingPath)
         {
             var decryptedFragments = await DownloadAndDecryptFragmentsAsync(
-                filePrefix, fragmentCount, fileFingerprint, progress, ct, index).ConfigureAwait(false);
+                aesKey, filePrefix, fragmentCount, fileFingerprint, progress, ct, index).ConfigureAwait(false);
 
             // ETN cross-validation (only if BM data available in the Index)
             // Must run BEFORE stripping trailers, as cross-validation needs them
             var etnActual = false;
-            Debug.WriteLine($"  [DICT] hasFss6={hasFss6} fragCount={decryptedFragments.Count} BM={index.Fss6FragmentBlockMaps?.Count} RcBM={index.Fss6RcBlockMap?.Count}");
+            _logger.Info("RestoreOrchestrator",$"  [DICT] hasFss6={hasFss6} fragCount={decryptedFragments.Count} BM={index.Fss6FragmentBlockMaps?.Count} RcBM={index.Fss6RcBlockMap?.Count}");
             if (hasFss6)
             {
                 ct.ThrowIfCancellationRequested();
                 etnActual = await RunEtnCrossValidateAsync(index, decryptedFragments,
-                    fileFingerprint, ct).ConfigureAwait(false);
+                    fileFingerprint, aesKey, ct).ConfigureAwait(false);
             }
 
             // Strip ETN/FSS6.1 trailers (parallel, only if ETN data exists)
@@ -298,7 +311,7 @@ public class RestoreOrchestrator : IDisposable
                         if (!decryptedFragments.ContainsKey(i)) stillMissing.Add(i);
                     if (stillMissing.Count > 0)
                     {
-                        Debug.WriteLine($"  Restore failed: {stillMissing.Count} fragments still missing");
+                        _logger.Info("RestoreOrchestrator",$"  Restore failed: {stillMissing.Count} fragments still missing");
                         return false;
                     }
                 }
@@ -309,7 +322,7 @@ public class RestoreOrchestrator : IDisposable
                     if (!decryptedFragments.ContainsKey(i)) missing.Add(i);
                 if (missing.Count > 0)
                 {
-                    Debug.WriteLine($"  Restore failed: {missing.Count} fragments missing (recovery disabled)");
+                    _logger.Info("RestoreOrchestrator",$"  Restore failed: {missing.Count} fragments missing (recovery disabled)");
                     return false;
                 }
             }
@@ -358,13 +371,13 @@ public class RestoreOrchestrator : IDisposable
         long outSize = File.Exists(outputPath) ? new FileInfo(outputPath).Length : -1;
         string restoredHash = IntegrityChecker.HashFile(outputPath);
         bool valid = IntegrityChecker.VerifyHash(restoredHash, index.OriginalHash);
-        Debug.WriteLine($"  Integrity check: {(valid ? "PASS" : "FAIL")}");
+        _logger.Info("RestoreOrchestrator",$"  Integrity check: {(valid ? "PASS" : "FAIL")}");
 
         if (valid)
         {
             return true;
         }
-        Debug.WriteLine($"  [RESTORE FAIL] hash={restoredHash} expected={index.OriginalHash} size={outSize}");
+        _logger.Info("RestoreOrchestrator",$"  [RESTORE FAIL] hash={restoredHash} expected={index.OriginalHash} size={outSize}");
         return false;
     }
 
@@ -377,103 +390,41 @@ public class RestoreOrchestrator : IDisposable
     // restore with O(1) memory by streaming fragments one at a time.
 
     private Dictionary<int, byte[]> DownloadAndDecryptFragments(
-        string filePrefix, int fragmentCount, string fileFingerprint,
+        byte[] aesKey, string filePrefix, int fragmentCount, string fileFingerprint,
         IProgress<RdrfProgressReport>? progress)
     {
-        var task = Task.Run(() => DownloadAndDecryptFragmentsAsync(filePrefix, fragmentCount,
+        var task = Task.Run(() => DownloadAndDecryptFragmentsAsync(aesKey, filePrefix, fragmentCount,
             fileFingerprint, progress, CancellationToken.None, null));
         if (task.Wait(TimeSpan.FromMinutes(30)))
             return task.Result;
         throw new TimeoutException($"Fragment download timed out after 30 minutes: {filePrefix}");
     }
 
-    private async Task<Dictionary<int, byte[]>> DownloadAndDecryptFragmentsAsync(
-        string filePrefix, int fragmentCount, string fileFingerprint,
+    private Task<Dictionary<int, byte[]>> DownloadAndDecryptFragmentsAsync(
+        byte[] aesKey, string filePrefix, int fragmentCount, string fileFingerprint,
         IProgress<RdrfProgressReport>? progress, CancellationToken ct,
         RdrfIndex? index = null)
-    {
-        var result = new ConcurrentDictionary<int, byte[]>();
-        int decryptErrors = 0;
-
-        // Pre-read all unique SourceVersion index files for salt + derive keys once per version
-        var sourceKeys = new Dictionary<string, byte[]>();
-        if (index?.Fragments != null)
-        {
-            for (int i = 0; i < fragmentCount && i < index.Fragments.Count; i++)
-            {
-                string? sv = index.Fragments[i].SourceVersion;
-                if (sv != null && !sourceKeys.ContainsKey(sv))
-                {
-                    byte[] srcIdx = await _storage.ReadIndexAsync(sv, ct).ConfigureAwait(false);
-                    byte[] salt = srcIdx.AsSpan(0, Constants.SaltPrefixLength).ToArray();
-                    sourceKeys[sv] = EncryptionLayer.DeriveKey(_rcCode, salt);
-                }
-            }
-        }
-
-        await Parallel.ForEachAsync(
-            Enumerable.Range(0, fragmentCount),
-            new ParallelOptions { MaxDegreeOfParallelism = Constants.DefaultParallelism },
-            async (i, ct2) =>
-            {
-                ct2.ThrowIfCancellationRequested();
-                try
-                {
-                    string sourceFp = fileFingerprint;
-                    string sourcePrefix = filePrefix;
-                    byte[] key = _aesKey;
-
-                    if (index?.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
-                    {
-                        sourceFp = index.Fragments[i].SourceVersion;
-                        sourcePrefix = sourceFp;
-                        if (sourceKeys.TryGetValue(sourceFp, out var cachedKey))
-                            key = cachedKey;
-                    }
-
-                    int sourceIdx = i;
-                    if (index?.Fragments?.Count > i && index.Fragments[i].SourceIndex.HasValue)
-                        sourceIdx = index.Fragments[i].SourceIndex.Value;
-
-                    string fname = Frags.FragmentFilename(sourcePrefix, sourceIdx);
-                    byte[] encrypted = await _storage.ReadFragmentAsync(fname, ct2)
-                        .ConfigureAwait(false);
-                    byte[] raw = EncryptionLayer.DecryptAndStripFragment(encrypted, key);
-                    result[i] = raw;
-                }
-                catch (CryptographicException)
-                {
-                    Interlocked.Increment(ref decryptErrors);
-                }
-                catch
-                {
-                    Interlocked.Increment(ref decryptErrors);
-                }
-            });
-
-        if (decryptErrors > 0 && result.Count == 0)
-            throw new CryptographicException("All fragments failed to decrypt.");
-
-        return new Dictionary<int, byte[]>(result);
-    }
+        => BackupPhases.RestoreFragmentReader.DownloadAndDecryptFragmentsAsync(
+            aesKey, _rcCode, filePrefix, fragmentCount, fileFingerprint,
+            _storage, _encryption, _indexManager, progress, ct, index);
 
     // --- ETN Cross-Validate ---
 
     private async Task<bool> RunEtnCrossValidateAsync(
         RdrfIndex index, Dictionary<int, byte[]> decryptedFragments,
-        string fileFingerprint, CancellationToken ct)
+        string fileFingerprint, byte[] aesKey, CancellationToken ct)
     {
-        Debug.WriteLine($"  [ETN] entered fp={fileFingerprint.Substring(0, 16)}...");
+        _logger.Info("RestoreOrchestrator",$"  [ETN] entered fp={fileFingerprint.Substring(0, 16)}...");
         bool validationActual = false;
         try
         {
             bool rcExists = await _storage.RcExistsAsync(fileFingerprint, ct).ConfigureAwait(false);
-            Debug.WriteLine($"  [ETN] rcExists={rcExists}");
+            _logger.Info("RestoreOrchestrator",$"  [ETN] rcExists={rcExists}");
             if (rcExists)
             {
                 byte[] encryptedRc = await _storage.ReadRcAsync(fileFingerprint, ct).ConfigureAwait(false);
-                byte[] rcBytes = EncryptionLayer.DecryptFragmentWithKey(encryptedRc, _aesKey);
-                byte[] indexBytes = IndexManager.SerializeIndex(index);
+                byte[] rcBytes = _encryption.DecryptFragmentWithKey(encryptedRc, aesKey);
+                byte[] indexBytes = _indexManager.SerializeIndex(index);
 
                 var cvResult = Fss6Etn.CrossValidate(
                     indexBytes,
@@ -482,17 +433,17 @@ public class RestoreOrchestrator : IDisposable
 
                 int totalCvBlocks = 0;
                 foreach (var kv in cvResult.CorruptedFragmentBlocks) totalCvBlocks += kv.Value.Count;
-                Debug.WriteLine($"  [CV] IsValid={cvResult.IsValid} BadFrags={cvResult.CorruptedFragments.Count} BadBlocks={totalCvBlocks} IndexBad={cvResult.IndexCorrupted} RcBad={cvResult.RcCorrupted}");
+                _logger.Info("RestoreOrchestrator",$"  [CV] IsValid={cvResult.IsValid} BadFrags={cvResult.CorruptedFragments.Count} BadBlocks={totalCvBlocks} IndexBad={cvResult.IndexCorrupted} RcBad={cvResult.RcCorrupted}");
 
                 if (!cvResult.IsValid)
                 {
-                    Debug.WriteLine($"  ETN cross-validation found corruption:");
+                    _logger.Info("RestoreOrchestrator",$"  ETN cross-validation found corruption:");
                     if (cvResult.IndexCorrupted)
-                        Debug.WriteLine($"    - Index corrupted ({cvResult.IndexCorruptedBlocks.Count} blocks)");
+                        _logger.Info("RestoreOrchestrator",$"    - Index corrupted ({cvResult.IndexCorruptedBlocks.Count} blocks)");
                     if (cvResult.RcCorrupted)
-                        Debug.WriteLine($"    - RC file corrupted ({cvResult.RcCorruptedBlocks.Count} blocks)");
+                        _logger.Info("RestoreOrchestrator",$"    - RC file corrupted ({cvResult.RcCorruptedBlocks.Count} blocks)");
                     if (cvResult.CorruptedFragments.Count > 0)
-                        Debug.WriteLine($"    - Corrupted fragments: {string.Join(", ", cvResult.CorruptedFragments)}");
+                        _logger.Info("RestoreOrchestrator",$"    - Corrupted fragments: {string.Join(", ", cvResult.CorruptedFragments)}");
 
                     if (!cvResult.IsValid)
                     {
@@ -504,14 +455,14 @@ public class RestoreOrchestrator : IDisposable
                 }
                 else
                 {
-                    Debug.WriteLine($"  ETN cross-validation passed");
+                    _logger.Info("RestoreOrchestrator",$"  ETN cross-validation passed");
                     validationActual = true;
                 }
             }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"RC file read/validation failed: {ex.Message}");
+            _logger.Error("RestoreOrchestrator", "RC file read/validation failed", ex);
             validationActual = false;
         }
 
@@ -585,7 +536,7 @@ public class RestoreOrchestrator : IDisposable
     // --- Streaming Restore ---
 
     private async Task<bool> TryStreamingRestoreCoreAsync(
-        RdrfIndex index, string filePrefix, string outputPath,
+        RdrfIndex index, byte[] aesKey, string filePrefix, string outputPath,
         IProgress<RdrfProgressReport>? progress, CancellationToken ct)
     {
         int fragmentCount = index.FragmentCount;
@@ -620,7 +571,7 @@ public class RestoreOrchestrator : IDisposable
                 {
                     byte[] srcIdx = await _storage.ReadIndexAsync(sv, ct).ConfigureAwait(false);
                     byte[] salt = srcIdx.AsSpan(0, Constants.SaltPrefixLength).ToArray();
-                    sourceKeys[sv] = EncryptionLayer.DeriveKey(_rcCode, salt);
+                    sourceKeys[sv] = _encryption.DeriveKey(_rcCode, salt);
                 }
             }
         }
@@ -638,7 +589,7 @@ public class RestoreOrchestrator : IDisposable
                 {
                     string svFp = filePrefix;
                     int svIdx = i;
-                    byte[] key = _aesKey;
+                    byte[] key = aesKey;
                     if (index.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
                     {
                         svFp = index.Fragments[i].SourceVersion;
@@ -648,7 +599,7 @@ public class RestoreOrchestrator : IDisposable
                     }
                     byte[] encrypted = await _storage.ReadFragmentAsync(
                         Frags.FragmentFilename(svFp, svIdx), ct2).ConfigureAwait(false);
-                    byte[] data = EncryptionLayer.DecryptAndStripFragment(encrypted, key);
+                    byte[] data = _encryption.DecryptAndStripFragment(encrypted, key);
                     if (etn != null)
                         data = StripAnyTrailer(data);
                     decrypted[i] = data;
@@ -676,7 +627,7 @@ public class RestoreOrchestrator : IDisposable
             byte[] hashBytes = hasher.GetHashAndReset();
             string restoredHash = Hex.EncodeLower(hashBytes);
             bool valid = IntegrityChecker.VerifyHash(restoredHash, index.OriginalHash);
-            Debug.WriteLine($"  Integrity check: {(valid ? "PASS" : "FAIL")}");
+            _logger.Info("RestoreOrchestrator",$"  Integrity check: {(valid ? "PASS" : "FAIL")}");
             return valid;
         }
         catch
@@ -692,8 +643,6 @@ public class RestoreOrchestrator : IDisposable
     {
         if (_rcCode != null && _rcCode.Length > 0)
             CryptographicOperations.ZeroMemory(_rcCode);
-        if (_aesKey != null && _aesKey.Length > 0)
-            CryptographicOperations.ZeroMemory(_aesKey);
         GC.SuppressFinalize(this);
     }
 }

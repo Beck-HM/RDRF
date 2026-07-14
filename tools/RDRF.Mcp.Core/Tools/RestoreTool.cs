@@ -1,6 +1,6 @@
 using System.Text.Json;
 using RDRF.Core;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.Versioning;
 
 namespace RDRF.Mcp.Core.Tools;
@@ -42,7 +42,7 @@ public class RestoreTool : IMcpTool
                 ?? throw new ArgumentException($"Version {version} not found");
             string storageDir = Path.GetDirectoryName(indexPath)!;
             string fp = Path.GetFileNameWithoutExtension(indexPath);
-            using var engine = new RDRFEngine((byte[])password.Clone(), new LocalDssaAdapter(storageDir));
+            using var engine = new RDRFEngine((byte[])password.Clone(), new LocalDSAAAdapter(storageDir));
             string prefix = vr.FileFingerprint;
             success = await engine.RestoreFileFromFragmentsAsync(prefix, outputPath);
         }

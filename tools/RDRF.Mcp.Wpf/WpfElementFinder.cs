@@ -22,6 +22,7 @@ public static class WpfElementFinder
                 case '$':  sb.Append("`$"); break;
                 case '`':  sb.Append("``"); break;
                 case '"':  sb.Append("`\""); break;
+                case ';':  sb.Append("`;"); break;
                 case '\n': sb.Append("`n"); break;
                 case '\r': sb.Append("`r"); break;
                 default:   sb.Append(c); break;

@@ -1,12 +1,9 @@
 using Spectre.Console;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace RDRF.Cli.Services;
-
-/// <summary>
-/// Interactive secure password input via Spectre.Console.
-/// </summary>
 
 public static class PasswordProvider
 {
@@ -14,14 +11,24 @@ public static class PasswordProvider
     {
         if (!Console.IsInputRedirected)
         {
-            var pw = AnsiConsole.Prompt(
+            string pw = AnsiConsole.Prompt(
                 new TextPrompt<string>(prompt).Secret());
             byte[] result = Encoding.UTF8.GetBytes(pw);
-            // string is immutable and cannot be zeroed, but we minimize its lifetime
+            ZeroString(pw);
             return result;
         }
         AnsiConsole.MarkupLine("[red]Error: stdin is redirected. Use -password <plaintext> to provide the password (INSECURE).[/]");
         return [];
+    }
+
+    private static unsafe void ZeroString(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return;
+        fixed (char* p = s)
+        {
+            for (int i = 0; i < s.Length; i++)
+                p[i] = '\0';
+        }
     }
 }
 

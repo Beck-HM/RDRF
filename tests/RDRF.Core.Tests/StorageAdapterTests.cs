@@ -1,4 +1,4 @@
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using Xunit;
 
 namespace RDRF.Core.Tests;
@@ -6,13 +6,13 @@ namespace RDRF.Core.Tests;
 public class StorageAdapterTests : IDisposable
 {
     private readonly string _testDir;
-    private readonly LocalDssaAdapter _adapter;
+    private readonly LocalDSAAAdapter _adapter;
 
     public StorageAdapterTests()
     {
-        _testDir = Path.Combine(Path.GetTempPath(), $"rdrf_dssa_test_{Guid.NewGuid():N}");
+        _testDir = Path.Combine(Path.GetTempPath(), $"rdrf_dsaa_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_testDir);
-        _adapter = new LocalDssaAdapter(_testDir);
+        _adapter = new LocalDSAAAdapter(_testDir);
     }
 
     [Fact]

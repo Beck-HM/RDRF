@@ -1,4 +1,4 @@
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using Xunit;
 
 namespace RDRF.Core.Tests;

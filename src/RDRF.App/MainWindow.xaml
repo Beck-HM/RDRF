@@ -18,13 +18,17 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
-        <!-- Toggle Button Style -->
+        <!-- ============================================================
+             GLOBAL STYLES
+             ============================================================ -->
+
+        <!-- Tab Button Style -->
         <Style x:Key="TabButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="32,10" />
-            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Padding" Value="20,8" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -39,7 +43,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource SurfaceHighlightBrush}" />
+                                <Setter TargetName="border" Property="Background"
+                                        Value="{StaticResource SurfaceHoverBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -47,15 +52,29 @@
             </Setter>
         </Style>
 
-        <Style x:Key="TabButtonActiveStyle" TargetType="Button" BasedOn="{StaticResource TabButtonStyle}">
+        <Style x:Key="TabButtonActiveStyle" TargetType="Button"
+               BasedOn="{StaticResource TabButtonStyle}">
             <Setter Property="Background" Value="{StaticResource AccentBrush}" />
-            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Foreground" Value="{StaticResource TextOnAccentBrush}" />
         </Style>
 
-        <!-- Primary Button -->
+        <!-- Settings Button Style (small, no padding override) -->
+        <Style x:Key="SettingsButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style x:Key="SettingsButtonActiveStyle" TargetType="Button"
+               BasedOn="{StaticResource SettingsButtonStyle}">
+            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextOnAccentBrush}" />
+        </Style>
+
+         <!-- Primary Button -->
         <Style x:Key="PrimaryButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="{StaticResource AccentBrush}" />
-            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Foreground" Value="{StaticResource TextOnAccentBrush}" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="24,12" />
             <Setter Property="FontSize" Value="15" />
@@ -67,16 +86,61 @@
                         <Border x:Name="border"
                                 Background="{TemplateBinding Background}"
                                 CornerRadius="8"
-                                Padding="{TemplateBinding Padding}">
+                                Padding="{TemplateBinding Padding}"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform x:Name="scale" ScaleX="1" ScaleY="1" />
+                            </Border.RenderTransform>
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource AccentHoverBrush}" />
+                                <Setter TargetName="border" Property="Background"
+                                        Value="{StaticResource AccentHoverBrush}" />
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="scale"
+                                                Storyboard.TargetProperty="ScaleX"
+                                                To="1.02" Duration="0:0:0.15">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="scale"
+                                                Storyboard.TargetProperty="ScaleY"
+                                                To="1.02" Duration="0:0:0.15">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="scale"
+                                                Storyboard.TargetProperty="ScaleX"
+                                                To="1" Duration="0:0:0.2">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="scale"
+                                                Storyboard.TargetProperty="ScaleY"
+                                                To="1" Duration="0:0:0.2">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Opacity" Value="0.9" />
+                                <Setter TargetName="border" Property="Opacity" Value="0.85" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="border" Property="Opacity" Value="0.4" />
@@ -89,9 +153,10 @@
 
         <!-- Secondary Button -->
         <Style x:Key="SecondaryButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource SurfaceHighlightBrush}" />
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
-            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="16,8" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Cursor" Value="Hand" />
@@ -100,6 +165,8 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="border"
                                 Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="6"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center"
@@ -107,10 +174,13 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource BorderBrush}" />
+                                <Setter TargetName="border" Property="Background"
+                                        Value="{StaticResource SurfaceHoverBrush}" />
+                                <Setter TargetName="border" Property="BorderBrush"
+                                        Value="{StaticResource BorderHoverBrush}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Opacity" Value="0.9" />
+                                <Setter TargetName="border" Property="Opacity" Value="0.85" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -121,30 +191,16 @@
         <!-- Card Style -->
         <Style x:Key="CardStyle" TargetType="Border">
             <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
-            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="CornerRadius" Value="12" />
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="20" />
+            <Setter Property="Effect" Value="{StaticResource CardShadow}" />
         </Style>
 
-        <!-- Strategy Card Style -->
-        <Style x:Key="StrategyCardStyle" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource BackgroundBrush}" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="14" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-
-        <Style x:Key="StrategyCardActiveStyle" TargetType="Border" BasedOn="{StaticResource StrategyCardStyle}">
-            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
-            <Setter Property="Background" Value="#2A2A40" />
-        </Style>
-
-        <!-- Strategy Card Button Style (UIA-accessible replacement for Border cards) -->
+        <!-- Strategy Card Button Style -->
         <Style x:Key="StrategyCardButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource BackgroundBrush}" />
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="14" />
@@ -159,17 +215,64 @@
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="8"
                                 Padding="{TemplateBinding Padding}"
+                                RenderTransformOrigin="0.5,0.5"
                                 SnapsToDevicePixels="True">
+                            <Border.RenderTransform>
+                                <ScaleTransform x:Name="scale" ScaleX="1" ScaleY="1" />
+                            </Border.RenderTransform>
                             <ContentPresenter HorizontalAlignment="Stretch"
                                               VerticalAlignment="Center"
                                               RecognizesAccessKey="False" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Opacity" Value="0.85" />
+                                <Setter TargetName="border" Property="Background"
+                                        Value="{StaticResource SurfaceHoverBrush}" />
+                                <Setter TargetName="border" Property="BorderBrush"
+                                        Value="{StaticResource BorderHoverBrush}" />
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="scale"
+                                                Storyboard.TargetProperty="ScaleX"
+                                                To="1.02" Duration="0:0:0.15">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="scale"
+                                                Storyboard.TargetProperty="ScaleY"
+                                                To="1.02" Duration="0:0:0.15">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="scale"
+                                                Storyboard.TargetProperty="ScaleX"
+                                                To="1" Duration="0:0:0.2">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="scale"
+                                                Storyboard.TargetProperty="ScaleY"
+                                                To="1" Duration="0:0:0.2">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Opacity" Value="0.7" />
+                                <Setter TargetName="border" Property="Opacity" Value="0.75" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -177,13 +280,15 @@
             </Setter>
         </Style>
 
-        <Style x:Key="StrategyCardActiveButtonStyle" TargetType="Button" BasedOn="{StaticResource StrategyCardButtonStyle}">
+        <Style x:Key="StrategyCardActiveButtonStyle" TargetType="Button"
+               BasedOn="{StaticResource StrategyCardButtonStyle}">
             <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
-            <Setter Property="Background" Value="#2A2A40" />
+            <Setter Property="Background" Value="{StaticResource AccentSubtleBrush}" />
         </Style>
 
+        <!-- FSA Toggle -->
         <Style x:Key="FsaToggleStyle" TargetType="ToggleButton">
-            <Setter Property="Background" Value="{StaticResource BackgroundBrush}" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
@@ -192,7 +297,8 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="4"
@@ -209,7 +315,7 @@
             <Style.Triggers>
                 <Trigger Property="IsChecked" Value="True">
                     <Setter Property="Background" Value="{StaticResource AccentBrush}" />
-                    <Setter Property="Foreground" Value="White" />
+                    <Setter Property="Foreground" Value="{StaticResource TextOnAccentBrush}" />
                     <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
@@ -221,7 +327,7 @@
 
         <!-- TextBox Style -->
         <Style x:Key="TextBoxStyle" TargetType="TextBox">
-            <Setter Property="Background" Value="{StaticResource BackgroundBrush}" />
+            <Setter Property="Background" Value="{StaticResource InputBackgroundBrush}" />
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
@@ -229,6 +335,7 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Height" Value="36" />
             <Setter Property="FontSize" Value="13" />
+            <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
@@ -244,16 +351,99 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="border" Property="BorderBrush"
+                                        Value="{StaticResource BorderHoverBrush}" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="border" Property="BorderBrush"
+                                        Value="{StaticResource AccentBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- GridViewColumnHeader Style -->
+        <Style x:Key="GridViewColumnHeaderStyle" TargetType="GridViewColumnHeader">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource TextTertiaryBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <!-- Password List View Card Style -->
+        <Style x:Key="PasswordListItemStyle" TargetType="ListViewItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Margin" Value="0,2" />
+            <Setter Property="Padding" Value="16,12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}"
+                                Margin="0,2"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="1" ScaleY="1" />
+                            </Border.RenderTransform>
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="12" ShadowDepth="0"
+                                    Color="#000000" Opacity="0.1" />
+                            </Border.Effect>
+                            <GridViewRowPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{StaticResource SurfaceHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{StaticResource AccentSubtleBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Password Card View Style -->
+        <Style x:Key="PasswordCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="Width" Value="240" />
+            <Setter Property="MinHeight" Value="120" />
+            <Setter Property="Effect" Value="{StaticResource CardShadow}" />
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        </Style>
+
+        <!-- Search Box Style -->
+        <Style x:Key="SearchBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="32,0,10,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}" />
+        </Style>
+
     </Window.Resources>
 
     <Border x:Name="WindowBorder"
@@ -268,14 +458,16 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- Title Bar -->
+            <!-- ============================================================
+                 TITLE BAR
+                 ============================================================ -->
             <Grid x:Name="TitleBar"
                   Grid.Row="0"
                   Background="{StaticResource SurfaceBrush}"
                   MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
@@ -284,13 +476,11 @@
                             VerticalAlignment="Center"
                             Margin="16,0,0,0">
                     <Image x:Name="AppIconImage"
-                           Width="20"
-                           Height="20"
+                           Width="20" Height="20"
                            Margin="0,0,8,0" />
                     <TextBlock Text="RDRF"
                                Foreground="{StaticResource TextPrimaryBrush}"
-                               FontSize="14"
-                               FontWeight="SemiBold"
+                               FontSize="14" FontWeight="SemiBold"
                                VerticalAlignment="Center" />
                 </StackPanel>
 
@@ -319,16 +509,26 @@
                                 Content="History"
                                 Style="{StaticResource TabButtonStyle}"
                                 Click="TabHistory_Click"
+                                Margin="2,0,2,0" />
+                        <Button x:Name="TabDSAA"
+                                AutomationProperties.AutomationId="TabDSAA"
+                                Content="DSAA"
+                                Style="{StaticResource TabButtonStyle}"
+                                Click="TabDSAA_Click"
+                                Margin="2,0,2,0" />
+                        <Button x:Name="TabPasswords"
+                                AutomationProperties.AutomationId="TabPasswords"
+                                Content="Passwords"
+                                Style="{StaticResource TabButtonStyle}"
+                                Click="TabPasswords_Click"
                                 Margin="2,0,0,0" />
                         <Button x:Name="SettingsButton"
-                                Content="⚙"
-                                Width="36"
-                                Height="32"
+                                AutomationProperties.AutomationId="SettingsButton"
+                                Content="&#x2699;"
+                                Width="36" Height="32"
                                 FontSize="16"
-                                Background="Transparent"
+                                Style="{StaticResource SettingsButtonStyle}"
                                 Foreground="{StaticResource TextSecondaryBrush}"
-                                BorderThickness="0"
-                                Cursor="Hand"
                                 Click="SettingsButton_Click"
                                 Margin="4,0,0,0" />
                     </StackPanel>
@@ -340,45 +540,42 @@
                             VerticalAlignment="Center"
                             Margin="0,0,8,0">
                     <Button x:Name="MinimizeButton"
-                            Content="─"
-                            Width="46"
-                            Height="32"
+                            AutomationProperties.AutomationId="MinimizeButton"
+                            Content="&#x2500;"
+                            Width="46" Height="32"
                             Background="Transparent"
                             Foreground="{StaticResource TextSecondaryBrush}"
                             BorderThickness="0"
                             Click="MinimizeButton_Click"
-                            Cursor="Hand"
-                            FontSize="12" />
+                            Cursor="Hand" FontSize="12" />
                     <Button x:Name="MaximizeButton"
-                            Content="▢"
-                            Width="46"
-                            Height="32"
+                            AutomationProperties.AutomationId="MaximizeButton"
+                            Content="&#x25A2;"
+                            Width="46" Height="32"
                             Background="Transparent"
                             Foreground="{StaticResource TextSecondaryBrush}"
                             BorderThickness="0"
                             Click="MaximizeButton_Click"
-                            Cursor="Hand"
-                            FontSize="10" />
+                            Cursor="Hand" FontSize="10" />
                     <Button x:Name="CloseButton"
-                            Content="✕"
-                            Width="46"
-                            Height="32"
+                            AutomationProperties.AutomationId="CloseButton"
+                            Content="&#x2715;"
+                            Width="46" Height="32"
                             Background="Transparent"
                             Foreground="{StaticResource TextSecondaryBrush}"
                             BorderThickness="0"
                             Click="CloseButton_Click"
-                            Cursor="Hand"
-                            FontSize="12" />
+                            Cursor="Hand" FontSize="12" />
                 </StackPanel>
             </Grid>
 
             <!-- Divider -->
-            <Grid Grid.Row="1"
-                  Background="{StaticResource BorderBrush}" />
+            <Grid Grid.Row="1" Background="{StaticResource BorderBrush}" />
 
-            <!-- Main Content -->
-            <Grid Grid.Row="2"
-                  Margin="24">
+            <!-- ============================================================
+                 MAIN CONTENT
+                 ============================================================ -->
+            <Grid Grid.Row="2" Margin="24">
 
                 <!-- ============== ENCRYPT PAGE ============== -->
                 <Grid x:Name="EncryptPage"
@@ -386,29 +583,42 @@
                       DragEnter="EncryptPage_DragEnter"
                       DragLeave="EncryptPage_DragLeave"
                       Drop="EncryptPage_Drop">
+                    <Grid.RenderTransform>
+                        <TranslateTransform />
+                    </Grid.RenderTransform>
+                    <Grid.Triggers>
+                        <EventTrigger RoutedEvent="Grid.Loaded">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation
+                                        Storyboard.TargetProperty="Opacity"
+                                        From="0" To="1" Duration="0:0:0.3">
+                                        <DoubleAnimation.EasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Grid.Triggers>
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>
                             <!-- File Selection -->
-                            <Border Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,16">
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="File to Encrypt"
-                                               FontSize="15"
-                                               FontWeight="SemiBold"
+                                               FontSize="15" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextPrimaryBrush}"
                                                Margin="0,0,0,12" />
-
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-
                                         <TextBox x:Name="EncryptFilePath"
                                                   Style="{StaticResource TextBoxStyle}"
                                                   Text="{Binding FilePathDisplay, FallbackValue='No file selected...'}"
                                                   IsReadOnly="True" />
-
                                         <Button Grid.Column="1"
                                                 Content="Browse"
                                                 Style="{StaticResource SecondaryButtonStyle}"
@@ -420,231 +630,182 @@
                             </Border>
 
                             <!-- FSS Strategy Selection -->
-                            <Border Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,16">
-                                 <StackPanel>
-                                     <Grid Margin="0,0,0,4">
-                                         <Grid.ColumnDefinitions>
-                                             <ColumnDefinition Width="*" />
-                                             <ColumnDefinition Width="Auto" />
-                                         </Grid.ColumnDefinitions>
-                                         <TextBlock Text="Recovery Strategy"
-                                                    FontSize="15"
-                                                    FontWeight="SemiBold"
-                                                    Foreground="{StaticResource TextPrimaryBrush}" />
-                                         <ToggleButton x:Name="FsaToggle"
-                                                       Grid.Column="1"
-                                                       Content="FSA"
-                                                       FontSize="12"
-                                                       Width="48"
-                                                       Height="24"
-                                                       IsChecked="False"
-                                                       Click="FsaToggle_Click"
-                                                       Style="{StaticResource FsaToggleStyle}" />
-                                     </Grid>
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Recovery Strategy"
+                                                   FontSize="15" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                                        <ToggleButton x:Name="FsaToggle"
+                                                      Grid.Column="1"
+                                                      Content="FSA"
+                                                      FontSize="12"
+                                                      Width="48" Height="24"
+                                                      IsChecked="False"
+                                                      Click="FsaToggle_Click"
+                                                      Style="{StaticResource FsaToggleStyle}" />
+                                    </Grid>
                                     <TextBlock Text="Choose a fragmentation and recovery strategy"
                                                FontSize="13"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Foreground="{StaticResource TextTertiaryBrush}"
                                                Margin="0,0,0,16" />
 
                                     <!-- Strategy Grid -->
-                                    <UniformGrid Columns="4"
-                                                  Rows="3">
-                                        <!-- FSS-1 -->
+                                    <UniformGrid Columns="4" Rows="3">
                                         <Button x:Name="StrategyFSS1"
                                                 Style="{StaticResource StrategyCardActiveButtonStyle}"
                                                 Margin="0,0,8,8"
                                                 AutomationProperties.AutomationId="StrategyFSS1"
                                                 Click="StrategyFSS1_Click">
                                             <StackPanel>
-                                                <TextBlock Text="FSS-1"
-                                                           FontSize="11"
-                                                           FontWeight="Bold"
+                                                <TextBlock Text="FSS-1" FontSize="11" FontWeight="Bold"
                                                            Foreground="{StaticResource AccentBrush}"
                                                            Margin="0,0,0,4" />
-                                                <TextBlock Text="Neighbor"
-                                                           FontSize="13"
+                                                <TextBlock Text="Neighbor" FontSize="13"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            Margin="0,0,0,2" />
-                                                <TextBlock Text="~100% overhead"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource TextSecondaryBrush}" />
-                                             </StackPanel>
+                                                <TextBlock Text="~100% overhead" FontSize="11"
+                                                           Foreground="{StaticResource TextTertiaryBrush}" />
+                                            </StackPanel>
                                         </Button>
 
-                                        <!-- FSS-2 -->
                                         <Button x:Name="StrategyFSS2"
                                                 Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="8,0,8,8"
                                                 AutomationProperties.AutomationId="StrategyFSS2"
                                                 Click="StrategyFSS2_Click">
                                             <StackPanel>
-                                                <TextBlock Text="FSS-2"
-                                                           FontSize="11"
-                                                           FontWeight="Bold"
-                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                <TextBlock Text="FSS-2" FontSize="11" FontWeight="Bold"
+                                                           Foreground="{StaticResource TextTertiaryBrush}"
                                                            Margin="0,0,0,4" />
-                                                <TextBlock Text="Verify"
-                                                           FontSize="13"
+                                                <TextBlock Text="Verify" FontSize="13"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            Margin="0,0,0,2" />
-                                                <TextBlock Text="~105% overhead"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource TextSecondaryBrush}" />
-                                             </StackPanel>
+                                                <TextBlock Text="~105% overhead" FontSize="11"
+                                                           Foreground="{StaticResource TextTertiaryBrush}" />
+                                            </StackPanel>
                                         </Button>
 
-                                        <!-- FSS-2R -->
                                         <Button x:Name="StrategyFSS2R"
                                                 Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="8,0,8,8"
                                                 AutomationProperties.AutomationId="StrategyFSS2R"
                                                 Click="StrategyFSS2R_Click">
                                             <StackPanel>
-                                                <TextBlock Text="FSS-2R"
-                                                           FontSize="11"
-                                                           FontWeight="Bold"
-                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                <TextBlock Text="FSS-2R" FontSize="11" FontWeight="Bold"
+                                                           Foreground="{StaticResource TextTertiaryBrush}"
                                                            Margin="0,0,0,4" />
-                                                <TextBlock Text="Diagnose"
-                                                           FontSize="13"
+                                                <TextBlock Text="Diagnose" FontSize="13"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            Margin="0,0,0,2" />
-                                                <TextBlock Text="~100% overhead"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                                <TextBlock Text="~100% overhead" FontSize="11"
+                                                           Foreground="{StaticResource TextTertiaryBrush}" />
                                             </StackPanel>
                                         </Button>
 
-                                        <!-- FSS-3 -->
                                         <Button x:Name="StrategyFSS3"
                                                 Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="8,0,0,8"
                                                 AutomationProperties.AutomationId="StrategyFSS3"
                                                 Click="StrategyFSS3_Click">
                                             <StackPanel>
-                                                <TextBlock Text="FSS-3"
-                                                           FontSize="11"
-                                                           FontWeight="Bold"
-                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                <TextBlock Text="FSS-3" FontSize="11" FontWeight="Bold"
+                                                           Foreground="{StaticResource TextTertiaryBrush}"
                                                            Margin="0,0,0,4" />
-                                                <TextBlock Text="Reed-Solomon"
-                                                           FontSize="13"
+                                                <TextBlock Text="Reed-Solomon" FontSize="13"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            Margin="0,0,0,2" />
-                                                <TextBlock Text="~33% overhead"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                                <TextBlock Text="~33% overhead" FontSize="11"
+                                                           Foreground="{StaticResource TextTertiaryBrush}" />
                                             </StackPanel>
                                         </Button>
 
-                                        <!-- FSS-5 -->
                                         <Button x:Name="StrategyFSS5"
                                                 Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="0,8,8,0"
                                                 AutomationProperties.AutomationId="StrategyFSS5"
                                                 Click="StrategyFSS5_Click">
                                             <StackPanel>
-                                                <TextBlock Text="FSS-5"
-                                                           FontSize="11"
-                                                           FontWeight="Bold"
-                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                <TextBlock Text="FSS-5" FontSize="11" FontWeight="Bold"
+                                                           Foreground="{StaticResource TextTertiaryBrush}"
                                                            Margin="0,0,0,4" />
-                                                <TextBlock Text="Cross Recovery"
-                                                           FontSize="13"
+                                                <TextBlock Text="Cross Recovery" FontSize="13"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            Margin="0,0,0,2" />
-                                                <TextBlock Text="~200% overhead"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                                <TextBlock Text="~200% overhead" FontSize="11"
+                                                           Foreground="{StaticResource TextTertiaryBrush}" />
                                             </StackPanel>
                                         </Button>
 
-                                        <!-- FSS-5+ -->
                                         <Button x:Name="StrategyFSS5P"
                                                 Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="8,8,8,0"
                                                 AutomationProperties.AutomationId="StrategyFSS5P"
                                                 Click="StrategyFSS5P_Click">
                                             <StackPanel>
-                                                <TextBlock Text="FSS-5+"
-                                                           FontSize="11"
-                                                           FontWeight="Bold"
-                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                <TextBlock Text="FSS-5+" FontSize="11" FontWeight="Bold"
+                                                           Foreground="{StaticResource TextTertiaryBrush}"
                                                            Margin="0,0,0,4" />
-                                                <TextBlock Text="Seed Recovery"
-                                                           FontSize="13"
+                                                <TextBlock Text="Seed Recovery" FontSize="13"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            Margin="0,0,0,2" />
-                                                <TextBlock Text="~529% overhead"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                                <TextBlock Text="~529% overhead" FontSize="11"
+                                                           Foreground="{StaticResource TextTertiaryBrush}" />
                                             </StackPanel>
                                         </Button>
 
-                                        <!-- FSS-6 -->
                                         <Button x:Name="StrategyFSS6"
                                                 Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="8,8,8,0"
                                                 AutomationProperties.AutomationId="StrategyFSS6"
                                                 Click="StrategyFSS6_Click">
                                             <StackPanel>
-                                                <TextBlock Text="FSS-6"
-                                                           FontSize="11"
-                                                           FontWeight="Bold"
-                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                <TextBlock Text="FSS-6" FontSize="11" FontWeight="Bold"
+                                                           Foreground="{StaticResource TextTertiaryBrush}"
                                                            Margin="0,0,0,4" />
-                                                <TextBlock Text="ETN Verify"
-                                                           FontSize="13"
+                                                <TextBlock Text="ETN Verify" FontSize="13"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            Margin="0,0,0,2" />
-                                                <TextBlock Text="~32% overhead"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                                <TextBlock Text="~32% overhead" FontSize="11"
+                                                           Foreground="{StaticResource TextTertiaryBrush}" />
                                             </StackPanel>
                                         </Button>
 
-                                        <!-- FSS-6.1 -->
                                         <Button x:Name="StrategyFSS61"
                                                 Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="8,8,0,0"
                                                 AutomationProperties.AutomationId="StrategyFSS61"
                                                 Click="StrategyFSS61_Click">
                                             <StackPanel>
-                                                <TextBlock Text="FSS-6.1"
-                                                           FontSize="11"
-                                                           FontWeight="Bold"
-                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                <TextBlock Text="FSS-6.1" FontSize="11" FontWeight="Bold"
+                                                           Foreground="{StaticResource TextTertiaryBrush}"
                                                            Margin="0,0,0,4" />
-                                                <TextBlock Text="ETN + LT Repair"
-                                                           FontSize="13"
+                                                <TextBlock Text="ETN + LT Repair" FontSize="13"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            Margin="0,0,0,2" />
-                                                <TextBlock Text="~5% overhead"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                                <TextBlock Text="~5% overhead" FontSize="11"
+                                                           Foreground="{StaticResource TextTertiaryBrush}" />
                                             </StackPanel>
                                         </Button>
 
-                                        <!-- FSS-6.2 -->
                                         <Button x:Name="StrategyFSS62"
                                                 Style="{StaticResource StrategyCardButtonStyle}"
                                                 Margin="0,8,8,0"
                                                 AutomationProperties.AutomationId="StrategyFSS62"
                                                 Click="StrategyFSS62_Click">
                                             <StackPanel>
-                                                <TextBlock Text="FSS-6.2"
-                                                           FontSize="11"
-                                                           FontWeight="Bold"
-                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                <TextBlock Text="FSS-6.2" FontSize="11" FontWeight="Bold"
+                                                           Foreground="{StaticResource TextTertiaryBrush}"
                                                            Margin="0,0,0,4" />
-                                                <TextBlock Text="ETN + Duip Repair"
-                                                           FontSize="13"
+                                                <TextBlock Text="ETN + Duip Repair" FontSize="13"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            Margin="0,0,0,2" />
-                                                <TextBlock Text="~5% overhead"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                                <TextBlock Text="~5% overhead" FontSize="11"
+                                                           Foreground="{StaticResource TextTertiaryBrush}" />
                                             </StackPanel>
                                         </Button>
                                     </UniformGrid>
@@ -652,30 +813,45 @@
                             </Border>
 
                             <!-- Encryption Key -->
-                            <Border Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,16">
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Encryption Key"
-                                               FontSize="15"
-                                               FontWeight="SemiBold"
+                                               FontSize="15" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextPrimaryBrush}"
                                                Margin="0,0,0,12" />
-                                    <PasswordBox x:Name="EncryptKeyBox"
-                                                 Height="36"
-                                                 Background="{StaticResource BackgroundBrush}"
-                                                 Foreground="{StaticResource TextPrimaryBrush}"
-                                                 BorderBrush="{StaticResource BorderBrush}"
-                                                 BorderThickness="1"
-                                                 Padding="10,0"
-                                                 FontSize="13"
-                                                 VerticalContentAlignment="Center"
-                                                 PasswordChar="●" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="36" />
+                                        </Grid.ColumnDefinitions>
+                                        <PasswordBox Grid.Column="0"
+                                                     x:Name="EncryptKeyBox"
+                                                     AutomationProperties.AutomationId="EncryptKeyBox"
+                                                     Height="36"
+                                                     Background="{StaticResource InputBackgroundBrush}"
+                                                     Foreground="{StaticResource TextPrimaryBrush}"
+                                                     BorderBrush="{StaticResource BorderBrush}"
+                                                     BorderThickness="1,1,0,1"
+                                                     Padding="10,0"
+                                                     FontSize="13"
+                                                     VerticalContentAlignment="Center"
+                                                     PasswordChar="&#x25CF;" />
+                                        <Button Grid.Column="1"
+                                                Width="36" Height="36"
+                                                Content="&#x1F511;"
+                                                FontSize="16"
+                                                Background="{StaticResource InputBackgroundBrush}"
+                                                Foreground="{StaticResource TextTertiaryBrush}"
+                                                BorderBrush="{StaticResource BorderBrush}"
+                                                BorderThickness="0,1,1,1"
+                                                Click="EncryptKeySelect_Click"
+                                                ToolTip="Select from FastPasswords" />
+                                    </Grid>
                                 </StackPanel>
                             </Border>
 
                             <!-- Options -->
-                            <Border Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,20">
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,20">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
@@ -687,11 +863,10 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
 
-                                    <StackPanel Grid.Row="0" Grid.Column="0"
-                                                Margin="0,0,8,0">
+                                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,0">
                                         <TextBlock Text="Fragment Size"
                                                    FontSize="13"
-                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   Foreground="{StaticResource TextTertiaryBrush}"
                                                    Margin="0,0,0,6" />
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -699,22 +874,21 @@
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <TextBox x:Name="FragmentSizeMB"
+                                                     AutomationProperties.AutomationId="FragmentSizeMB"
                                                      Style="{StaticResource TextBoxStyle}"
                                                      Text="1" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="MB"
+                                            <TextBlock Grid.Column="1" Text="MB"
                                                        FontSize="13"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       Foreground="{StaticResource TextTertiaryBrush}"
                                                        VerticalAlignment="Center"
                                                        Margin="8,0,0,0" />
                                         </Grid>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Row="0" Grid.Column="1"
-                                                Margin="8,0,0,0">
+                                    <StackPanel Grid.Row="0" Grid.Column="1" Margin="8,0,0,0">
                                         <TextBlock Text="Output Path"
                                                    FontSize="13"
-                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   Foreground="{StaticResource TextTertiaryBrush}"
                                                    Margin="0,0,0,6" />
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -722,11 +896,12 @@
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <TextBox x:Name="EncryptOutputPath"
-                                                      Style="{StaticResource TextBoxStyle}"
-                                                      Text="{Binding OutputPath, FallbackValue='./backup'}"
-                                                      IsReadOnly="True" />
-                                            <Button Grid.Column="1"
-                                                    Content="..."
+                                                     AutomationProperties.AutomationId="EncryptOutputPath"
+                                                     Style="{StaticResource TextBoxStyle}"
+                                                     Text="{Binding OutputPath, FallbackValue='./backup'}"
+                                                     IsReadOnly="True" />
+                                            <Button Grid.Column="1" Content="..."
+                                                    AutomationProperties.AutomationId="EncryptOutputBrowseButton"
                                                     Style="{StaticResource SecondaryButtonStyle}"
                                                     Padding="12,8"
                                                     Margin="8,0,0,0"
@@ -741,44 +916,36 @@
                                             Margin="0,12,0,0"
                                             Visibility="Collapsed">
                                         <StackPanel>
-                                            <StackPanel Orientation="Horizontal"
-                                                        Margin="0,0,0,12">
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                                                 <TextBlock Text="Fragment Preview"
-                                                           FontSize="15"
-                                                           FontWeight="SemiBold"
+                                                           FontSize="15" FontWeight="SemiBold"
                                                            Foreground="{StaticResource TextPrimaryBrush}"
                                                            VerticalAlignment="Center" />
                                                 <TextBlock x:Name="EncryptFragmentSummary"
                                                            FontSize="12"
-                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           Foreground="{StaticResource TextTertiaryBrush}"
                                                            Margin="12,0,0,0"
                                                            VerticalAlignment="Center" />
                                             </StackPanel>
 
                                             <!-- Legend -->
-                                            <StackPanel Orientation="Horizontal"
-                                                        Margin="0,0,0,12">
-                                                <StackPanel Orientation="Horizontal"
-                                                            Margin="0,0,16,0">
-                                                    <Ellipse Width="8"
-                                                             Height="8"
-                                                             Fill="{StaticResource SurfaceHighlightBrush}"
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                                                    <Ellipse Width="8" Height="8"
+                                                             Fill="{StaticResource SurfaceHoverBrush}"
                                                              Margin="0,0,4,0"
                                                              VerticalAlignment="Center" />
-                                                    <TextBlock Text="Fragment"
-                                                               FontSize="11"
-                                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                                    <TextBlock Text="Fragment" FontSize="11"
+                                                               Foreground="{StaticResource TextTertiaryBrush}"
                                                                VerticalAlignment="Center" />
                                                 </StackPanel>
                                                 <StackPanel Orientation="Horizontal">
-                                                    <Rectangle Width="8"
-                                                               Height="8"
-                                                               Fill="{StaticResource TextSecondaryBrush}"
+                                                    <Rectangle Width="8" Height="8"
+                                                               Fill="{StaticResource TextTertiaryBrush}"
                                                                Margin="0,0,4,0"
                                                                VerticalAlignment="Center" />
-                                                    <TextBlock Text="Per fragment size"
-                                                               FontSize="11"
-                                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                                    <TextBlock Text="Per fragment size" FontSize="11"
+                                                               Foreground="{StaticResource TextTertiaryBrush}"
                                                                VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </StackPanel>
@@ -792,16 +959,15 @@
                                                 </ItemsControl.ItemsPanel>
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
-                                                        <Border Width="40"
-                                                                Height="40"
+                                                        <Border Width="40" Height="40"
                                                                 CornerRadius="6"
-                                                                Background="{StaticResource SurfaceHighlightBrush}"
+                                                                Background="{StaticResource SurfaceHoverBrush}"
                                                                 BorderBrush="{StaticResource BorderBrush}"
                                                                 BorderThickness="1"
                                                                 Margin="0,0,6,6">
                                                             <TextBlock Text="{Binding Index}"
                                                                        FontSize="11"
-                                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                                       Foreground="{StaticResource TextTertiaryBrush}"
                                                                        HorizontalAlignment="Center"
                                                                        VerticalAlignment="Center" />
                                                         </Border>
@@ -811,13 +977,13 @@
                                         </StackPanel>
                                     </Border>
 
-                                    <StackPanel Grid.Row="2" Grid.ColumnSpan="2"
-                                                Margin="0,16,0,0">
+                                    <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Margin="0,16,0,0">
                                         <TextBlock Text="Custom Name (optional)"
                                                    FontSize="13"
-                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   Foreground="{StaticResource TextTertiaryBrush}"
                                                    Margin="0,0,0,6" />
                                         <TextBox x:Name="CustomNameBox"
+                                                 AutomationProperties.AutomationId="CustomNameBox"
                                                  Style="{StaticResource TextBoxStyle}"
                                                  ToolTip="Leave empty to use fingerprint. Only letters, numbers, underscores and hyphens allowed." />
                                     </StackPanel>
@@ -829,7 +995,8 @@
                                     Visibility="{Binding ShowProgress, Converter={StaticResource BoolToVis}}"
                                     Background="{StaticResource SurfaceBrush}"
                                     BorderBrush="{StaticResource BorderBrush}"
-                                    BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                                    BorderThickness="1" CornerRadius="8"
+                                    Padding="16" Margin="0,0,0,16">
                                 <StackPanel>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -839,16 +1006,18 @@
                                         <TextBlock Grid.Column="0" x:Name="EncryptStageText"
                                                    AutomationProperties.AutomationId="EncryptStageText"
                                                    Text="{Binding StageText}"
-                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="13" />
+                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   FontSize="13" />
                                         <TextBlock Grid.Column="1" x:Name="EncryptPercentText"
                                                    AutomationProperties.AutomationId="EncryptPercentText"
                                                    Text="{Binding PercentText}"
-                                                   Foreground="{StaticResource AccentBrush}" FontSize="13" FontWeight="SemiBold" />
+                                                   Foreground="{StaticResource AccentBrush}"
+                                                   FontSize="13" FontWeight="SemiBold" />
                                     </Grid>
                                     <ProgressBar x:Name="EncryptProgressBar"
                                                  Value="{Binding ProgressPercent}"
                                                  Height="6" Margin="0,10,0,10"
-                                                 Background="{StaticResource SurfaceHighlightBrush}"
+                                                 Background="{StaticResource SurfaceHoverBrush}"
                                                  Foreground="{StaticResource AccentBrush}"
                                                  BorderThickness="0" Minimum="0" Maximum="100" />
                                     <Grid>
@@ -858,10 +1027,12 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" x:Name="EncryptSpeedText"
                                                    Text="{Binding SpeedText}"
-                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
+                                                   Foreground="{StaticResource TextTertiaryBrush}"
+                                                   FontSize="12" />
                                         <TextBlock Grid.Column="1" x:Name="EncryptEtaText"
                                                    Text="{Binding EtaText}"
-                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" HorizontalAlignment="Right" />
+                                                   Foreground="{StaticResource TextTertiaryBrush}"
+                                                   FontSize="12" HorizontalAlignment="Right" />
                                     </Grid>
                                 </StackPanel>
                             </Border>
@@ -871,8 +1042,7 @@
                                     AutomationProperties.AutomationId="StartEncrypt"
                                     Content="Start Encryption"
                                     Style="{StaticResource PrimaryButtonStyle}"
-                                    Height="48"
-                                    FontSize="16"
+                                    Height="48" FontSize="16"
                                     HorizontalAlignment="Stretch"
                                     Click="StartEncrypt_Click" />
                         </StackPanel>
@@ -882,24 +1052,23 @@
                     <Border x:Name="EncryptDropOverlay"
                             Background="#20FFFFFF"
                             Visibility="Collapsed">
-                        <Border BorderBrush="#7C6BF2"
+                        <Border BorderBrush="{StaticResource AccentBrush}"
                                 BorderThickness="2"
                                 CornerRadius="12"
                                 Margin="20">
                             <StackPanel HorizontalAlignment="Center"
                                         VerticalAlignment="Center">
-                                <TextBlock Text="📁"
+                                <TextBlock Text="&#x1F4C1;"
                                            FontSize="48"
                                            HorizontalAlignment="Center"
                                            Margin="0,0,0,16" />
                                 <TextBlock Text="Drop files here to encrypt"
-                                           FontSize="18"
-                                           FontWeight="SemiBold"
+                                           FontSize="18" FontWeight="SemiBold"
                                            Foreground="White"
                                            HorizontalAlignment="Center" />
                                 <TextBlock Text="Multiple files will be packed into a ZIP"
                                            FontSize="13"
-                                           Foreground="#E0E0E8"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
                                            HorizontalAlignment="Center"
                                            Margin="0,8,0,0" />
                             </StackPanel>
@@ -908,38 +1077,48 @@
                 </Grid>
 
                 <!-- ============== DECRYPT PAGE ============== -->
-                <Grid x:Name="DecryptPage"
-                      Visibility="Collapsed">
+                <Grid x:Name="DecryptPage" Visibility="Collapsed">
+                    <Grid.RenderTransform>
+                        <TranslateTransform />
+                    </Grid.RenderTransform>
+                    <Grid.Triggers>
+                        <EventTrigger RoutedEvent="Grid.Loaded">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                        From="0" To="1" Duration="0:0:0.3">
+                                        <DoubleAnimation.EasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Grid.Triggers>
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>
-                            <!-- Backup File Selection (index or fragment) -->
-                            <Border Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,16">
+                            <!-- Backup File Selection -->
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Backup File"
-                                               FontSize="15"
-                                               FontWeight="SemiBold"
+                                               FontSize="15" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextPrimaryBrush}"
                                                Margin="0,0,0,4" />
                                     <TextBlock x:Name="DecryptFileHint"
                                                Text="{Binding FileHint}"
                                                FontSize="12"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Foreground="{StaticResource TextTertiaryBrush}"
                                                Margin="0,0,0,12" />
-
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-
                                         <TextBox x:Name="DecryptIndexPath"
                                                   Style="{StaticResource TextBoxStyle}"
                                                   Text="{Binding IndexPathDisplay, FallbackValue='No file selected...'}"
                                                   IsReadOnly="True" />
-
-                                        <Button Grid.Column="1"
-                                                Content="Browse"
+                                        <Button Grid.Column="1" Content="Browse"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Margin="8,0,0,0"
                                                 AutomationProperties.AutomationId="DecryptBrowseButton"
@@ -949,40 +1128,52 @@
                             </Border>
 
                             <!-- Decryption Key -->
-                            <Border Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,16">
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Decryption Key"
-                                               FontSize="15"
-                                               FontWeight="SemiBold"
+                                               FontSize="15" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextPrimaryBrush}"
                                                Margin="0,0,0,12" />
-                                    <PasswordBox x:Name="DecryptKeyBox"
-                                                 Height="36"
-                                                 Background="{StaticResource BackgroundBrush}"
-                                                 Foreground="{StaticResource TextPrimaryBrush}"
-                                                 BorderBrush="{StaticResource BorderBrush}"
-                                                 BorderThickness="1"
-                                                 Padding="10,0"
-                                                 FontSize="13"
-                                                 VerticalContentAlignment="Center"
-                                                 PasswordChar="●"
-                                                 PasswordChanged="DecryptKeyBox_PasswordChanged" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="36" />
+                                        </Grid.ColumnDefinitions>
+                                        <PasswordBox Grid.Column="0"
+                                                     x:Name="DecryptKeyBox"
+                                                     AutomationProperties.AutomationId="DecryptKeyBox"
+                                                     Height="36"
+                                                     Background="{StaticResource InputBackgroundBrush}"
+                                                     Foreground="{StaticResource TextPrimaryBrush}"
+                                                     BorderBrush="{StaticResource BorderBrush}"
+                                                     BorderThickness="1,1,0,1"
+                                                     Padding="10,0" FontSize="13"
+                                                     VerticalContentAlignment="Center"
+                                                     PasswordChar="&#x25CF;"
+                                                     PasswordChanged="DecryptKeyBox_PasswordChanged" />
+                                        <Button Grid.Column="1"
+                                                Width="36" Height="36"
+                                                Content="&#x1F511;"
+                                                FontSize="16"
+                                                Background="{StaticResource InputBackgroundBrush}"
+                                                Foreground="{StaticResource TextTertiaryBrush}"
+                                                BorderBrush="{StaticResource BorderBrush}"
+                                                BorderThickness="0,1,1,1"
+                                                Click="DecryptKeySelect_Click"
+                                                ToolTip="Select from FastPasswords" />
+                                    </Grid>
                                 </StackPanel>
                             </Border>
 
-                            <!-- File Info (shown after selecting index) -->
+                            <!-- File Info -->
                             <Border x:Name="DecryptFileInfoCard"
-                                    Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,16"
+                                    Style="{StaticResource CardStyle}" Margin="0,0,0,16"
                                     Visibility="{Binding ShowFileInfo, Converter={StaticResource BoolToVis}}">
                                 <StackPanel>
                                     <TextBlock Text="File Information"
-                                               FontSize="15"
-                                               FontWeight="SemiBold"
+                                               FontSize="15" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextPrimaryBrush}"
                                                Margin="0,0,0,16" />
-
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -997,67 +1188,62 @@
                                         <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,12">
                                             <TextBlock Text="Original Filename"
                                                        FontSize="12"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       Foreground="{StaticResource TextTertiaryBrush}"
                                                        Margin="0,0,0,2" />
                                             <TextBlock x:Name="InfoFileName"
-                                                         AutomationProperties.AutomationId="InfoFileName"
-                                                         Text="{Binding InfoFileName}"
-                                                         FontSize="13"
-                                                         Foreground="{StaticResource TextPrimaryBrush}" />
+                                                       AutomationProperties.AutomationId="InfoFileName"
+                                                       Text="{Binding InfoFileName}"
+                                                       FontSize="13"
+                                                       Foreground="{StaticResource TextPrimaryBrush}" />
                                         </StackPanel>
-
                                         <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,12">
                                             <TextBlock Text="Original Size"
                                                        FontSize="12"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       Foreground="{StaticResource TextTertiaryBrush}"
                                                        Margin="0,0,0,2" />
                                             <TextBlock x:Name="InfoFileSize"
-                                                         AutomationProperties.AutomationId="InfoFileSize"
-                                                         Text="{Binding InfoFileSize}"
-                                                         FontSize="13"
-                                                         Foreground="{StaticResource TextPrimaryBrush}" />
+                                                       AutomationProperties.AutomationId="InfoFileSize"
+                                                       Text="{Binding InfoFileSize}"
+                                                       FontSize="13"
+                                                       Foreground="{StaticResource TextPrimaryBrush}" />
                                         </StackPanel>
-
                                         <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,12">
                                             <TextBlock Text="Strategy"
                                                        FontSize="12"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       Foreground="{StaticResource TextTertiaryBrush}"
                                                        Margin="0,0,0,2" />
                                             <TextBlock x:Name="InfoStrategy"
-                                                         AutomationProperties.AutomationId="InfoStrategy"
-                                                         Text="{Binding InfoStrategy}"
-                                                         FontSize="13"
-                                                         Foreground="{StaticResource TextPrimaryBrush}" />
+                                                       AutomationProperties.AutomationId="InfoStrategy"
+                                                       Text="{Binding InfoStrategy}"
+                                                       FontSize="13"
+                                                       Foreground="{StaticResource TextPrimaryBrush}" />
                                         </StackPanel>
-
                                         <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,12">
                                             <TextBlock Text="Fragments"
                                                        FontSize="12"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       Foreground="{StaticResource TextTertiaryBrush}"
                                                        Margin="0,0,0,2" />
                                             <TextBlock x:Name="InfoFragmentCount"
-                                                         AutomationProperties.AutomationId="InfoFragmentCount"
-                                                         Text="{Binding InfoFragmentCount}"
-                                                         FontSize="13"
-                                                         Foreground="{StaticResource TextPrimaryBrush}" />
+                                                       AutomationProperties.AutomationId="InfoFragmentCount"
+                                                       Text="{Binding InfoFragmentCount}"
+                                                       FontSize="13"
+                                                       Foreground="{StaticResource TextPrimaryBrush}" />
                                         </StackPanel>
-
                                         <StackPanel Grid.Row="2" Grid.Column="0">
                                             <TextBlock Text="Created"
                                                        FontSize="12"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       Foreground="{StaticResource TextTertiaryBrush}"
                                                        Margin="0,0,0,2" />
                                             <TextBlock x:Name="InfoCreated"
-                                                         AutomationProperties.AutomationId="InfoCreated"
-                                                         Text="{Binding InfoCreated}"
-                                                         FontSize="13"
-                                                         Foreground="{StaticResource TextPrimaryBrush}" />
+                                                       AutomationProperties.AutomationId="InfoCreated"
+                                                       Text="{Binding InfoCreated}"
+                                                       FontSize="13"
+                                                       Foreground="{StaticResource TextPrimaryBrush}" />
                                         </StackPanel>
-
                                         <StackPanel Grid.Row="2" Grid.Column="1">
                                             <TextBlock Text="Encryption"
                                                        FontSize="12"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       Foreground="{StaticResource TextTertiaryBrush}"
                                                        Margin="0,0,0,2" />
                                             <TextBlock Text="AES-256-GCM"
                                                        FontSize="13"
@@ -1067,63 +1253,51 @@
                                 </StackPanel>
                             </Border>
 
-                            <!-- Fragment Status (shown after selecting index) -->
+                            <!-- Fragment Status -->
                             <Border x:Name="DecryptFragmentStatusCard"
-                                    Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,16"
+                                    Style="{StaticResource CardStyle}" Margin="0,0,0,16"
                                     Visibility="{Binding ShowFragmentStatus, Converter={StaticResource BoolToVis}}">
                                 <StackPanel>
-                                    <StackPanel Orientation="Horizontal"
-                                                Margin="0,0,0,12">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                                         <TextBlock Text="Fragment Status"
-                                                   FontSize="15"
-                                                   FontWeight="SemiBold"
+                                                   FontSize="15" FontWeight="SemiBold"
                                                    Foreground="{StaticResource TextPrimaryBrush}"
                                                    VerticalAlignment="Center" />
                                         <TextBlock x:Name="FragmentStatusSummary"
-                                                    Text="{Binding FragmentSummary}"
+                                                   Text="{Binding FragmentSummary}"
                                                    FontSize="12"
-                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   Foreground="{StaticResource TextTertiaryBrush}"
                                                    Margin="12,0,0,0"
                                                    VerticalAlignment="Center" />
                                     </StackPanel>
 
                                     <!-- Legend -->
-                                    <StackPanel Orientation="Horizontal"
-                                                Margin="0,0,0,12">
-                                        <StackPanel Orientation="Horizontal"
-                                                    Margin="0,0,16,0">
-                                            <Ellipse Width="8"
-                                                     Height="8"
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                                            <Ellipse Width="8" Height="8"
                                                      Fill="{StaticResource SuccessBrush}"
                                                      Margin="0,0,4,0"
                                                      VerticalAlignment="Center" />
-                                            <TextBlock Text="Available"
-                                                       FontSize="11"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                            <TextBlock Text="Available" FontSize="11"
+                                                       Foreground="{StaticResource TextTertiaryBrush}"
                                                        VerticalAlignment="Center" />
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal"
-                                                    Margin="0,0,16,0">
-                                            <Ellipse Width="8"
-                                                     Height="8"
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                                            <Ellipse Width="8" Height="8"
                                                      Fill="{StaticResource ErrorBrush}"
                                                      Margin="0,0,4,0"
                                                      VerticalAlignment="Center" />
-                                            <TextBlock Text="Missing"
-                                                       FontSize="11"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                            <TextBlock Text="Missing" FontSize="11"
+                                                       Foreground="{StaticResource TextTertiaryBrush}"
                                                        VerticalAlignment="Center" />
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal">
-                                            <Ellipse Width="8"
-                                                     Height="8"
+                                            <Ellipse Width="8" Height="8"
                                                      Fill="{StaticResource WarningBrush}"
                                                      Margin="0,0,4,0"
                                                      VerticalAlignment="Center" />
-                                            <TextBlock Text="Corrupted"
-                                                       FontSize="11"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                            <TextBlock Text="Corrupted" FontSize="11"
+                                                       Foreground="{StaticResource TextTertiaryBrush}"
                                                        VerticalAlignment="Center" />
                                         </StackPanel>
                                     </StackPanel>
@@ -1138,8 +1312,7 @@
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Width="40"
-                                                        Height="40"
+                                                <Border Width="40" Height="40"
                                                         CornerRadius="6"
                                                         Background="{Binding Brush}"
                                                         BorderBrush="{StaticResource BorderBrush}"
@@ -1158,12 +1331,11 @@
                             </Border>
 
                             <!-- Output Path -->
-                            <Border Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,20">
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,20">
                                 <StackPanel>
                                     <TextBlock Text="Output Path"
                                                FontSize="13"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Foreground="{StaticResource TextTertiaryBrush}"
                                                Margin="0,0,0,6" />
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -1174,8 +1346,7 @@
                                                   Style="{StaticResource TextBoxStyle}"
                                                   Text="{Binding OutputPath, FallbackValue='./restored'}"
                                                   IsReadOnly="True" />
-                                        <Button Grid.Column="1"
-                                                Content="Browse"
+                                        <Button Grid.Column="1" Content="Browse"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Margin="8,0,0,0"
                                                 AutomationProperties.AutomationId="DecryptOutputBrowseButton"
@@ -1184,12 +1355,13 @@
                                 </StackPanel>
                             </Border>
 
-                            <!-- Progress Section -->
+                            <!-- Progress -->
                             <Border x:Name="DecryptProgressSection"
                                     Visibility="{Binding ShowProgress, Converter={StaticResource BoolToVis}}"
                                     Background="{StaticResource SurfaceBrush}"
                                     BorderBrush="{StaticResource BorderBrush}"
-                                    BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                                    BorderThickness="1" CornerRadius="8"
+                                    Padding="16" Margin="0,0,0,16">
                                 <StackPanel>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -1199,16 +1371,18 @@
                                         <TextBlock Grid.Column="0" x:Name="DecryptStageText"
                                                    AutomationProperties.AutomationId="DecryptStageText"
                                                    Text="{Binding StageText}"
-                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="13" />
+                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   FontSize="13" />
                                         <TextBlock Grid.Column="1" x:Name="DecryptPercentText"
                                                    AutomationProperties.AutomationId="DecryptPercentText"
                                                    Text="{Binding PercentText}"
-                                                   Foreground="{StaticResource AccentBrush}" FontSize="13" FontWeight="SemiBold" />
+                                                   Foreground="{StaticResource AccentBrush}"
+                                                   FontSize="13" FontWeight="SemiBold" />
                                     </Grid>
                                     <ProgressBar x:Name="DecryptProgressBar"
                                                  Value="{Binding ProgressPercent}"
                                                  Height="6" Margin="0,10,0,10"
-                                                 Background="{StaticResource SurfaceHighlightBrush}"
+                                                 Background="{StaticResource SurfaceHoverBrush}"
                                                  Foreground="{StaticResource AccentBrush}"
                                                  BorderThickness="0" Minimum="0" Maximum="100" />
                                     <Grid>
@@ -1218,10 +1392,12 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" x:Name="DecryptSpeedText"
                                                    Text="{Binding SpeedText}"
-                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
+                                                   Foreground="{StaticResource TextTertiaryBrush}"
+                                                   FontSize="12" />
                                         <TextBlock Grid.Column="1" x:Name="DecryptEtaText"
                                                    Text="{Binding EtaText}"
-                                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" HorizontalAlignment="Right" />
+                                                   Foreground="{StaticResource TextTertiaryBrush}"
+                                                   FontSize="12" HorizontalAlignment="Right" />
                                     </Grid>
                                 </StackPanel>
                             </Border>
@@ -1231,8 +1407,7 @@
                                     AutomationProperties.AutomationId="StartDecrypt"
                                     Content="Start Decryption"
                                     Style="{StaticResource PrimaryButtonStyle}"
-                                    Height="48"
-                                    FontSize="16"
+                                    Height="48" FontSize="16"
                                     HorizontalAlignment="Stretch"
                                     IsEnabled="{Binding IsStartEnabled}"
                                     Click="StartDecrypt_Click" />
@@ -1241,37 +1416,47 @@
                 </Grid>
 
                 <!-- ============== HISTORY PAGE ============== -->
-                <Grid x:Name="HistoryPage"
-                      Visibility="Collapsed">
+                <Grid x:Name="HistoryPage" Visibility="Collapsed">
+                    <Grid.RenderTransform>
+                        <TranslateTransform />
+                    </Grid.RenderTransform>
+                    <Grid.Triggers>
+                        <EventTrigger RoutedEvent="Grid.Loaded">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                        From="0" To="1" Duration="0:0:0.3">
+                                        <DoubleAnimation.EasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Grid.Triggers>
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>
                             <!-- Backup File Selection -->
-                            <Border Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,16">
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Backup File"
-                                               FontSize="15"
-                                               FontWeight="SemiBold"
+                                               FontSize="15" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextPrimaryBrush}"
                                                Margin="0,0,0,4" />
                                     <TextBlock Text="Select .indrdrf (index) file to view version history"
                                                FontSize="12"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Foreground="{StaticResource TextTertiaryBrush}"
                                                Margin="0,0,0,12" />
-
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-
                                         <TextBox x:Name="HistoryIndexPath"
                                                   Style="{StaticResource TextBoxStyle}"
                                                   Text="{Binding IndexPathDisplay, FallbackValue='No file selected...'}"
                                                   IsReadOnly="True" />
-
-                                        <Button Grid.Column="1"
-                                                Content="Browse"
+                                        <Button Grid.Column="1" Content="Browse"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Margin="8,0,0,0"
                                                 AutomationProperties.AutomationId="HistoryBrowseBackupButton"
@@ -1281,32 +1466,26 @@
                             </Border>
 
                             <!-- Incremental Content -->
-                            <Border Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,16">
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Incremental Content (optional)"
-                                               FontSize="15"
-                                               FontWeight="SemiBold"
+                                               FontSize="15" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextPrimaryBrush}"
                                                Margin="0,0,0,4" />
                                     <TextBlock Text="Select a new file to append as the next version"
                                                FontSize="12"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               Foreground="{StaticResource TextTertiaryBrush}"
                                                Margin="0,0,0,12" />
-
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-
                                         <TextBox x:Name="HistoryIncrementalPath"
                                                   Style="{StaticResource TextBoxStyle}"
                                                   Text="{Binding IncrementalDisplay, FallbackValue=''}"
                                                   IsReadOnly="True" />
-
-                                        <Button Grid.Column="1"
-                                                Content="Browse"
+                                        <Button Grid.Column="1" Content="Browse"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Margin="8,0,0,0"
                                                 AutomationProperties.AutomationId="HistoryBrowseIncrementalButton"
@@ -1316,54 +1495,50 @@
                             </Border>
 
                             <!-- Decryption Key -->
-                            <Border Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,16">
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Decryption Key"
-                                               FontSize="15"
-                                               FontWeight="SemiBold"
+                                               FontSize="15" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextPrimaryBrush}"
                                                Margin="0,0,0,12" />
                                     <PasswordBox x:Name="HistoryKeyBox"
-                                                  Height="36"
-                                                  Background="{StaticResource BackgroundBrush}"
-                                                  Foreground="{StaticResource TextPrimaryBrush}"
-                                                  BorderBrush="{StaticResource BorderBrush}"
-                                                  BorderThickness="1"
-                                                  Padding="10,0"
-                                                  FontSize="13"
-                                                  VerticalContentAlignment="Center"
-                                                  PasswordChar="●"
-                                                  PasswordChanged="HistoryKeyBox_PasswordChanged" />
+                                                 AutomationProperties.AutomationId="HistoryKeyBox"
+                                                 Height="36"
+                                                 Background="{StaticResource InputBackgroundBrush}"
+                                                 Foreground="{StaticResource TextPrimaryBrush}"
+                                                 BorderBrush="{StaticResource BorderBrush}"
+                                                 BorderThickness="1"
+                                                 Padding="10,0" FontSize="13"
+                                                 VerticalContentAlignment="Center"
+                                                 PasswordChar="&#x25CF;"
+                                                 PasswordChanged="HistoryKeyBox_PasswordChanged" />
                                 </StackPanel>
                             </Border>
 
-                            <!-- Commit Message (shown when incremental selected) -->
+                            <!-- Commit Message -->
                             <Border x:Name="HistoryCommitCard"
-                                    Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,16"
+                                    Style="{StaticResource CardStyle}" Margin="0,0,0,16"
                                     Visibility="{Binding ShowIncrementalSection, Converter={StaticResource BoolToVis}}">
                                 <StackPanel>
                                     <TextBlock Text="Commit Message"
-                                               FontSize="15"
-                                               FontWeight="SemiBold"
+                                               FontSize="15" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextPrimaryBrush}"
                                                Margin="0,0,0,12" />
                                     <TextBox x:Name="HistoryCommitBox"
-                                              Style="{StaticResource TextBoxStyle}"
-                                              Text="{Binding CommitMessage, UpdateSourceTrigger=PropertyChanged}"
-                                              Height="36"
-                                              ToolTip="Describe what changed in this version" />
+                                             AutomationProperties.AutomationId="HistoryCommitBox"
+                                             Style="{StaticResource TextBoxStyle}"
+                                             Text="{Binding CommitMessage, UpdateSourceTrigger=PropertyChanged}"
+                                             Height="36"
+                                             ToolTip="Describe what changed in this version" />
                                 </StackPanel>
                             </Border>
 
-                            <!-- Apply Button (shown when incremental selected) -->
+                            <!-- Apply Button -->
                             <Button x:Name="HistoryApplyButton"
                                     AutomationProperties.AutomationId="HistoryApply"
                                     Content="Apply Incremental Backup"
                                     Style="{StaticResource PrimaryButtonStyle}"
-                                    Height="48"
-                                    FontSize="16"
+                                    Height="48" FontSize="16"
                                     HorizontalAlignment="Stretch"
                                     Margin="0,0,0,16"
                                     Visibility="{Binding ShowIncrementalSection, Converter={StaticResource BoolToVis}}"
@@ -1371,26 +1546,22 @@
 
                             <!-- Version History List -->
                             <Border x:Name="HistoryVersionCard"
-                                    Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,16"
+                                    Style="{StaticResource CardStyle}" Margin="0,0,0,16"
                                     Visibility="{Binding ShowVersionHistory, Converter={StaticResource BoolToVis}}">
                                 <StackPanel>
-                                    <StackPanel Orientation="Horizontal"
-                                                Margin="0,0,0,12">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                                         <TextBlock Text="Version History"
-                                                   FontSize="15"
-                                                   FontWeight="SemiBold"
+                                                   FontSize="15" FontWeight="SemiBold"
                                                    Foreground="{StaticResource TextPrimaryBrush}"
                                                    VerticalAlignment="Center" />
                                         <TextBlock x:Name="HistoryCountText"
-                                                    Text="{Binding StatusText}"
-                                                    FontSize="12"
-                                                    Foreground="{StaticResource TextSecondaryBrush}"
-                                                    Margin="12,0,0,0"
-                                                    VerticalAlignment="Center" />
+                                                   Text="{Binding StatusText}"
+                                                   FontSize="12"
+                                                   Foreground="{StaticResource TextTertiaryBrush}"
+                                                   Margin="12,0,0,0"
+                                                   VerticalAlignment="Center" />
                                     </StackPanel>
 
-                                    <!-- Version List -->
                                     <ListView x:Name="HistoryVersionList"
                                               ItemsSource="{Binding Versions}"
                                               SelectedItem="{Binding SelectedItem}"
@@ -1403,14 +1574,16 @@
                                             <Style TargetType="ListViewItem">
                                                 <Setter Property="Background" Value="Transparent" />
                                                 <Setter Property="BorderThickness" Value="0" />
-                                                <Setter Property="Padding" Value="8,6" />
+                                                <Setter Property="Padding" Value="12,8" />
                                                 <Setter Property="Cursor" Value="Hand" />
                                                 <Style.Triggers>
                                                     <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{StaticResource SurfaceHighlightBrush}" />
+                                                        <Setter Property="Background"
+                                                                Value="{StaticResource SurfaceHoverBrush}" />
                                                     </Trigger>
                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="{StaticResource SurfaceHighlightBrush}" />
+                                                        <Setter Property="Background"
+                                                                Value="{StaticResource SurfaceHoverBrush}" />
                                                     </Trigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -1423,21 +1596,19 @@
                                                         <ColumnDefinition Width="130" />
                                                         <ColumnDefinition Width="*" />
                                                     </Grid.ColumnDefinitions>
-                                                    <Ellipse Width="8"
-                                                             Height="8"
+                                                    <Ellipse Width="8" Height="8"
                                                              Fill="{StaticResource AccentBrush}"
                                                              VerticalAlignment="Center"
                                                              Margin="0,0,8,0" />
                                                     <TextBlock Grid.Column="0"
                                                                Text="{Binding Version, StringFormat='v#{0}'}"
-                                                               FontSize="13"
-                                                               FontWeight="SemiBold"
+                                                               FontSize="13" FontWeight="SemiBold"
                                                                Foreground="{StaticResource AccentBrush}"
                                                                VerticalAlignment="Center" />
                                                     <TextBlock Grid.Column="1"
                                                                Text="{Binding Timestamp}"
                                                                FontSize="12"
-                                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                                               Foreground="{StaticResource TextTertiaryBrush}"
                                                                VerticalAlignment="Center" />
                                                     <TextBlock Grid.Column="2"
                                                                Text="{Binding Message}"
@@ -1452,22 +1623,17 @@
                                 </StackPanel>
                             </Border>
 
-                            <!-- Diff Panel (side-by-side) -->
+                            <!-- Diff Panel -->
                             <Border x:Name="HistoryDiffCard"
-                                    Style="{StaticResource CardStyle}"
-                                    Margin="0,0,0,16"
+                                    Style="{StaticResource CardStyle}" Margin="0,0,0,16"
                                     Visibility="{Binding ShowDiffPanel, Converter={StaticResource BoolToVis}}">
                                 <StackPanel>
                                     <TextBlock Text="Diff Details"
-                                               FontSize="15"
-                                               FontWeight="SemiBold"
+                                               FontSize="15" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextPrimaryBrush}"
                                                Margin="0,0,0,12" />
-
                                     <Border Background="{StaticResource BackgroundBrush}"
-                                            CornerRadius="6"
-                                            Padding="0"
-                                            MaxHeight="500">
+                                            CornerRadius="6" Padding="0" MaxHeight="500">
                                         <controls:SideBySideDiffView
                                             ItemsSource="{Binding SideBySideLines}"
                                             FileTreeSource="{Binding FileTree}" />
@@ -1478,72 +1644,415 @@
                     </ScrollViewer>
                 </Grid>
 
-                <!-- Settings Page -->
+                <!-- ============== PASSWORDS PAGE ============== -->
+                <Grid x:Name="PasswordPage"
+                      Visibility="Collapsed"
+                      Margin="0">
+                    <Grid.RenderTransform>
+                        <TranslateTransform />
+                    </Grid.RenderTransform>
+                    <Grid.Triggers>
+                        <EventTrigger RoutedEvent="Grid.Loaded">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                        From="0" To="1" Duration="0:0:0.3">
+                                        <DoubleAnimation.EasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Grid.Triggers>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Header -->
+                    <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                        <TextBlock Text="FastPasswords"
+                                   FontSize="22" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   Margin="0,0,0,16" />
+
+                        <!-- Search + View Toggle -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Search -->
+                            <Grid Grid.Column="0">
+                                <TextBox x:Name="PasswordSearchBox"
+                                         Style="{StaticResource SearchBoxStyle}" />
+                                <TextBlock Text="&#x1F50D;  Search passwords..."
+                                           FontSize="13"
+                                           Foreground="{StaticResource TextTertiaryBrush}"
+                                           VerticalAlignment="Center"
+                                           Margin="32,0,0,0"
+                                           IsHitTestVisible="False">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, ElementName=PasswordSearchBox}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+
+                            <!-- View Toggle Buttons -->
+                            <ToggleButton x:Name="PasswordViewToggle"
+                                          Grid.Column="1"
+                                          Width="36" Height="36"
+                                          Style="{StaticResource FsaToggleStyle}"
+                                          Margin="8,0,0,0"
+                                          ToolTip="Toggle card view">
+                                <TextBlock Text="&#x2B1C;" FontSize="14"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+                            </ToggleButton>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Password List (default view) -->
+                    <Grid Grid.Row="2">
+                        <!-- List View -->
+                        <ListView x:Name="PasswordListView"
+                                  Grid.Row="1"
+                                  ItemsSource="{Binding Items}"
+                                  SelectedItem="{Binding SelectedItem}"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  ItemContainerStyle="{StaticResource PasswordListItemStyle}">
+                            <ListView.View>
+                                <GridView AllowsColumnReorder="False"
+                                          ColumnHeaderContainerStyle="{StaticResource GridViewColumnHeaderStyle}">
+                                    <GridViewColumn Header="NAME" Width="280"
+                                                    DisplayMemberBinding="{Binding Key}" />
+                                    <GridViewColumn Header="MODIFIED" Width="180"
+                                                    DisplayMemberBinding="{Binding Created}" />
+                                </GridView>
+                            </ListView.View>
+                            <ListView.Triggers>
+                                <EventTrigger RoutedEvent="ListView.Loaded">
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                From="0" To="1" Duration="0:0:0.4">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </EventTrigger>
+                            </ListView.Triggers>
+                        </ListView>
+
+                        <!-- Card View (hidden by default) -->
+                        <ItemsControl x:Name="PasswordCardView"
+                                      Grid.Row="1"
+                                      ItemsSource="{Binding Items}"
+                                      Visibility="Collapsed">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource PasswordCardStyle}"
+                                            Margin="0,0,12,12">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Key}"
+                                                       FontSize="15" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Margin="0,0,0,8" />
+                                            <TextBlock FontSize="12"
+                                                       Foreground="{StaticResource TextTertiaryBrush}"
+                                                       Margin="0,0,0,4">
+                                                <Run Text="&#x25CF;&#x25CF;&#x25CF;&#x25CF;&#x25CF;&#x25CF;" />
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding Created}"
+                                                       FontSize="11"
+                                                       Foreground="{StaticResource TextTertiaryBrush}"
+                                                       Margin="0,0,0,12" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Empty State -->
+                        <StackPanel x:Name="PasswordEmptyState"
+                                    Grid.Row="1"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Visibility="Collapsed">
+                            <TextBlock Text="&#x1F512;"
+                                       FontSize="48"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,16" />
+                            <TextBlock Text="No passwords yet"
+                                       FontSize="18" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,8" />
+                            <TextBlock Text="Start adding passwords to keep them safe and secure."
+                                       FontSize="13"
+                                       Foreground="{StaticResource TextTertiaryBrush}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,20" />
+                            <Button Content="+ Add Your First Password"
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    HorizontalAlignment="Center"
+                                    Command="{Binding ShowAddCommand}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Action Buttons -->
+                    <StackPanel Grid.Row="3"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                Margin="0,12,0,0">
+                        <Button Content="+ Add"
+                                AutomationProperties.AutomationId="PasswordAddButton"
+                                Command="{Binding ShowAddCommand}"
+                                Width="100" Height="36"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Margin="0,0,8,0" />
+                        <Button Content="- Delete"
+                                AutomationProperties.AutomationId="PasswordDeleteButton"
+                                Command="{Binding DeleteCommand}"
+                                Width="100" Height="36"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                    </StackPanel>
+
+                    <!-- Overlay -->
+                    <Border Grid.RowSpan="4"
+                            Visibility="{Binding OverlayVisible, Converter={StaticResource BoolToVis}}"
+                            Background="#80000000"
+                            Panel.ZIndex="100">
+                        <Border Style="{StaticResource CardStyle}"
+                                Width="500"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Padding="24">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="20" Opacity="0.5" />
+                            </Border.Effect>
+                            <StackPanel>
+                                <TextBlock Text="Add FastPassword"
+                                           FontSize="18" FontWeight="Bold"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           Margin="0,0,0,20" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="3*" />
+                                        <ColumnDefinition Width="20" />
+                                        <ColumnDefinition Width="7*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding NewKey, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource TextBoxStyle}"
+                                             Height="36" Padding="10,0" FontSize="14" />
+                                    <PasswordBox Grid.Column="2"
+                                                x:Name="PasswordOverlayBox"
+                                                Height="36" Padding="10,0" FontSize="14"
+                                                VerticalContentAlignment="Center"
+                                                Background="{StaticResource InputBackgroundBrush}"
+                                                Foreground="{StaticResource TextPrimaryBrush}"
+                                                BorderBrush="{StaticResource BorderBrush}"
+                                                BorderThickness="1" />
+                                </Grid>
+                                <StackPanel Orientation="Horizontal"
+                                            HorizontalAlignment="Right"
+                                            Margin="0,20,0,0">
+                                    <Button Content="Cancel"
+                                            Width="80" Height="36"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Margin="0,0,8,0"
+                                            Command="{Binding HideOverlayCommand}" />
+                                    <Button Content="Add"
+                                            Width="80" Height="36"
+                                            Style="{StaticResource PrimaryButtonStyle}"
+                                            Click="PasswordOverlayAdd_Click" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Border>
+                </Grid>
+
+                <!-- Key Select Overlay -->
+                <Border x:Name="KeySelectOverlay"
+                        Visibility="Collapsed"
+                        Background="#80000000"
+                        Panel.ZIndex="100">
+                    <Border Style="{StaticResource PasswordCardStyle}"
+                            Width="450" MaxHeight="400"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Center"
+                            Padding="24">
+                        <StackPanel>
+                            <TextBlock Text="Select FastPassword"
+                                       FontSize="18" FontWeight="Bold"
+                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                       Margin="0,0,0,16" />
+                            <ListView x:Name="KeySelectList"
+                                      Background="Transparent" BorderThickness="0"
+                                      MaxHeight="260"
+                                      MouseDoubleClick="KeySelectItem_MouseDoubleClick">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="12,8" Cursor="Hand">
+                                            <TextBlock Text="{Binding Key}"
+                                                       FontSize="14"
+                                                       Foreground="{StaticResource TextPrimaryBrush}" />
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                            <Button Content="Cancel"
+                                    Width="80" Height="36"
+                                    HorizontalAlignment="Right"
+                                    Margin="0,12,0,0"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Click="KeySelectOverlayClose_Click" />
+                        </StackPanel>
+                    </Border>
+                </Border>
+
+                <!-- ============== SETTINGS PAGE ============== -->
                 <Grid x:Name="SettingsPage"
                       Visibility="Collapsed"
-                      Margin="24,16,24,16">
-                    <ScrollViewer>
+                      Background="{StaticResource BackgroundBrush}"
+                      Panel.ZIndex="50">
+                    <Grid.RenderTransform>
+                        <TranslateTransform />
+                    </Grid.RenderTransform>
+                    <Grid.Triggers>
+                        <EventTrigger RoutedEvent="Grid.Loaded">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                        From="0" To="1" Duration="0:0:0.3">
+                                        <DoubleAnimation.EasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Grid.Triggers>
+                    <ScrollViewer Margin="24,16,24,16">
                         <StackPanel MaxWidth="520">
                             <TextBlock Text="Settings"
-                                       FontSize="22"
-                                       FontWeight="Bold"
+                                       FontSize="22" FontWeight="Bold"
                                        Foreground="{StaticResource TextPrimaryBrush}"
                                        Margin="0,0,0,24" />
 
-                            <!-- Default Output Path -->
-                            <TextBlock Text="Default Output Path"
-                                       FontSize="14"
-                                       FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimaryBrush}"
-                                       Margin="0,0,0,4" />
-                            <TextBlock Text="Storage directory for backup files"
-                                       FontSize="12"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                       Margin="0,0,0,8" />
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBox Text="{Binding DefaultOutputPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                         Style="{StaticResource TextBoxStyle}"
-                                         Height="36"
-                                         Padding="10,0"
-                                         FontSize="13"
-                                         VerticalContentAlignment="Center" />
-                                <Button Grid.Column="1"
-                                        Content="Browse"
-                                        Width="80"
-                                        Height="36"
-                                        Margin="8,0,0,0"
-                                        Style="{StaticResource SecondaryButtonStyle}"
-                                        Command="{Binding BrowseOutputCommand}" />
-                            </Grid>
+                            <!-- General Section -->
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="GENERAL"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextTertiaryBrush}"
+                                               Margin="0,0,0,16" />
 
-                            <!-- Close Behavior -->
-                            <TextBlock Text="Close Behavior"
-                                       FontSize="14"
-                                       FontWeight="SemiBold"
-                                       Foreground="{StaticResource TextPrimaryBrush}"
-                                       Margin="0,20,0,4" />
-                            <StackPanel Margin="0,8,0,0">
-                                <RadioButton GroupName="close" Content="Exit application"
-                                             IsChecked="{Binding CloseExit}"
-                                             Foreground="{StaticResource TextPrimaryBrush}"
-                                             FontSize="14"
-                                             Margin="0,0,0,8" />
-                                <RadioButton GroupName="close" Content="Minimize to system tray"
-                                             IsChecked="{Binding CloseTray}"
-                                             Foreground="{StaticResource TextPrimaryBrush}"
-                                             FontSize="14" />
-                            </StackPanel>
+                                    <!-- Default Output Path -->
+                                    <TextBlock Text="Default Output Path"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               Margin="0,0,0,4" />
+                                    <TextBlock Text="Storage directory for backup files"
+                                               FontSize="12"
+                                               Foreground="{StaticResource TextTertiaryBrush}"
+                                               Margin="0,0,0,8" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Text="{Binding DefaultOutputPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 AutomationProperties.AutomationId="SettingsOutputPath"
+                                                 Style="{StaticResource TextBoxStyle}"
+                                                 Height="36" Padding="10,0" FontSize="13"
+                                                 VerticalContentAlignment="Center" />
+                                        <Button Grid.Column="1"
+                                                Content="Browse"
+                                                AutomationProperties.AutomationId="SettingsBrowseButton"
+                                                Width="80" Height="36"
+                                                Margin="8,0,0,0"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Command="{Binding BrowseOutputCommand}" />
+                                    </Grid>
+
+                                    <!-- Close Behavior -->
+                                    <TextBlock Text="Close Behavior"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               Margin="0,16,0,8" />
+                                    <StackPanel Margin="0,0,0,0">
+                                        <RadioButton GroupName="close"
+                                                     Content="Exit application"
+                                                     AutomationProperties.AutomationId="SettingsExitRadio"
+                                                     IsChecked="{Binding CloseExit}"
+                                                     Foreground="{StaticResource TextPrimaryBrush}"
+                                                     FontSize="13"
+                                                     Margin="0,0,0,8" />
+                                        <RadioButton GroupName="close"
+                                                     Content="Minimize to system tray"
+                                                     AutomationProperties.AutomationId="SettingsTrayRadio"
+                                                     IsChecked="{Binding CloseTray}"
+                                                     Foreground="{StaticResource TextPrimaryBrush}"
+                                                     FontSize="13" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Appearance Section -->
+                            <Border Style="{StaticResource CardStyle}" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="APPEARANCE"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextTertiaryBrush}"
+                                               Margin="0,0,0,16" />
+
+                                    <!-- Theme -->
+                                    <TextBlock Text="Theme"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               Margin="0,0,0,8" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                        <Button Content="Dark"
+                                                Width="80" Height="32"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Margin="0,0,8,0"
+                                                IsEnabled="False" />
+                                        <Button Content="Light"
+                                                Width="80" Height="32"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                ToolTip="Coming soon" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
 
                             <!-- Save -->
                             <Button Content="Save Settings"
+                                    AutomationProperties.AutomationId="SettingsSaveButton"
                                     Style="{StaticResource PrimaryButtonStyle}"
-                                    Height="48"
-                                    FontSize="16"
-                                    Margin="0,32,0,0"
+                                    Height="48" FontSize="16"
+                                    Margin="0,8,0,24"
                                     Command="{Binding SaveCommand}" />
                         </StackPanel>
                     </ScrollViewer>

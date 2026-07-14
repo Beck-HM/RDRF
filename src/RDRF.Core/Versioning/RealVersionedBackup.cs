@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using RDRF.Core.Logging;using System.Diagnostics;
 using System.IO.Hashing;
 using System.Security.Cryptography;
 using RDRF.Core.Abstractions;
@@ -8,7 +8,7 @@ using RDRF.Core.Encryption;
 using RDRF.Core.FragmentEngine;
 using RDRF.Core.Index;
 using RDRF.Core.Integrity;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 
 namespace RDRF.Core.Versioning;
 
@@ -34,7 +34,7 @@ public static class RealVersionedBackup
     /// </summary>
     public static async Task<string> BackupAsync(
         string filePath,
-        DssaAdapter storage,
+        DSAAAdapter storage,
         byte[] password,
         string userMessage,
         string fssStrategy = "FSS3",
@@ -54,14 +54,14 @@ public static class RealVersionedBackup
             userMessage, fssStrategy, progress, ct, fragmentSize, customName, auxiliaryStrategies).ConfigureAwait(false);
     }
 
-    private static string? FindExistingIndex(DssaAdapter storage)
+    private static string? FindExistingIndex(DSAAAdapter storage)
         => storage.FindLatestIndex();
 
     /// <summary>
     /// First version: full backup via BackupOrchestrator, then record v1.
     /// </summary>
     private static async Task<string> FreshBackupAsync(
-        string filePath, DssaAdapter storage,
+        string filePath, DSAAAdapter storage,
         byte[] password, string userMessage, string fssStrategy,
         IProgress<RdrfProgressReport>? progress, CancellationToken ct,
         int fragmentSize = 0, string? customName = null,
@@ -92,7 +92,7 @@ public static class RealVersionedBackup
     /// previous version via SourceVersion. No cleanup is performed.
     /// </summary>
     private static async Task<string> IncrementalBackupAsync(
-        string filePath, DssaAdapter storage,
+        string filePath, DSAAAdapter storage,
         string prevFingerprint, byte[] password,
         string userMessage, string fssStrategy,
         IProgress<RdrfProgressReport>? progress, CancellationToken ct,
@@ -260,13 +260,13 @@ public static class RealVersionedBackup
         await storage.WriteIndexAsync(filePrefix, encryptedIndex, ct).ConfigureAwait(false);
 
         // Also read-back to verify we can decrypt
-        Debug.WriteLine($"Real incremental backup complete: v{prevVersion + 1} = {fileFingerprint}");
+        RdrfLogger.Default.Debug("",$"Real incremental backup complete: v{prevVersion + 1} = {fileFingerprint}");
 
         // Record version (no cleanup of any kind)
         AppendVersionRecord(storage, fileFingerprint, password, salt, prevVersion + 1,
             userMessage, string.Empty, null, null);
 
-        Debug.WriteLine($"Real incremental backup complete: v{prevVersion + 1} = {fileFingerprint}");
+        RdrfLogger.Default.Debug("",$"Real incremental backup complete: v{prevVersion + 1} = {fileFingerprint}");
         return fileFingerprint;
     }
 
@@ -275,7 +275,7 @@ public static class RealVersionedBackup
     /// all version records from the previous latest index. This way every
     /// index carries the complete version history.
     /// </summary>
-    private static void AppendVersionRecord(DssaAdapter storage, string fingerprint,
+    private static void AppendVersionRecord(DSAAAdapter storage, string fingerprint,
         byte[] password, byte[]? salt, int versionNumber, string message,
         string diffSummary, List<VersionRecord>? existingVersions = null,
         List<FileEntry>? fileEntries = null)

@@ -1,8 +1,8 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Core.FSS;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using Xunit;
 
 namespace RDRF.Core.Tests;
@@ -52,7 +52,7 @@ public static class EtnTestHelpers
     {
         byte[] rcCode = EncryptionLayer.GenerateRcCode(32);
         byte[] rcCodeClone = (byte[])rcCode.Clone();
-        var storage = new LocalDssaAdapter(storageDir);
+        var storage = new LocalDSAAAdapter(storageDir);
 
         string fingerprint;
         using (var engine = new RDRFEngine(rcCode, storage))
@@ -129,7 +129,7 @@ public static class EtnTestHelpers
 
     public static byte[] CorruptRcFileOnDisk(string storageDir, string fingerprint, byte[] rcCode)
     {
-        var storage = new LocalDssaAdapter(storageDir);
+        var storage = new LocalDSAAAdapter(storageDir);
         byte[] encryptedIndex = storage.ReadIndex(fingerprint);
         (byte[] aesKey, _) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, rcCode);
         byte[] encryptedRc = storage.ReadRc(fingerprint);

@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using RDRF.Core.Diff;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using Xunit;
 
 namespace RDRF.Core.Tests;
@@ -18,7 +18,7 @@ public class VersioningTests
             File.WriteAllText(testFile, "Salt based orchestrator test.");
 
             byte[] salt = RandomNumberGenerator.GetBytes(32);
-            var storage = new LocalDssaAdapter(storageDir);
+            var storage = new LocalDSAAAdapter(storageDir);
 
             using var orchestrator = new BackupOrchestrator(password, storage, salt);
             string fingerprint = await orchestrator.BackupFileAsync(testFile, "FSS1");
@@ -49,7 +49,7 @@ public class VersioningTests
             File.WriteAllText(testFile, content);
 
             string fp = await Versioning.VersionedBackup.BackupAsync(
-                testFile, new LocalDssaAdapter(storageDir), password, "Initial", "FSS1");
+                testFile, new LocalDSAAAdapter(storageDir), password, "Initial", "FSS1");
 
             string indexFile = Path.Combine(storageDir, fp + ".indrdrf");
             Assert.True(File.Exists(indexFile));
@@ -81,13 +81,13 @@ public class VersioningTests
             File.WriteAllText(testFile, v1);
 
             string fp1 = await Versioning.VersionedBackup.BackupAsync(
-                testFile, new LocalDssaAdapter(storageDir), password, "V1", "FSS1");
+                testFile, new LocalDSAAAdapter(storageDir), password, "V1", "FSS1");
 
             string v2 = "Line one.\nLine two modified.\nLine three new.\n";
             File.WriteAllText(testFile, v2);
 
             string fp2 = await Versioning.VersionedBackup.BackupAsync(
-                testFile, new LocalDssaAdapter(storageDir), password, "V2: changes", "FSS1");
+                testFile, new LocalDSAAAdapter(storageDir), password, "V2: changes", "FSS1");
 
             Assert.NotEqual(fp1, fp2);
 
@@ -136,7 +136,7 @@ public class VersioningTests
             File.WriteAllBytes(testFile, v1Base);
 
             string fp1 = await Versioning.VersionedBackup.BackupAsync(
-                testFile, new LocalDssaAdapter(storageDir), password, "V1", "FSS1",
+                testFile, new LocalDSAAAdapter(storageDir), password, "V1", "FSS1",
                 fragmentSize: fragSize);
 
             // V2: change last 512 bytes - DedupMap is still empty, all 8 fragments written
@@ -147,7 +147,7 @@ public class VersioningTests
             File.WriteAllBytes(testFile, v2Data);
 
             string fp2 = await Versioning.VersionedBackup.BackupAsync(
-                testFile, new LocalDssaAdapter(storageDir), password, "V2", "FSS1",
+                testFile, new LocalDSAAAdapter(storageDir), password, "V2", "FSS1",
                 fragmentSize: fragSize);
 
             // V3: keep first 1536 bytes (same as V2), replace last 512 AGAIN
@@ -159,11 +159,11 @@ public class VersioningTests
             File.WriteAllBytes(testFile, v3Data);
 
             string fp3 = await Versioning.VersionedBackup.BackupAsync(
-                testFile, new LocalDssaAdapter(storageDir), password, "V3", "FSS1",
+                testFile, new LocalDSAAAdapter(storageDir), password, "V3", "FSS1",
                 fragmentSize: fragSize);
 
             // Verify V2's DedupMap has entries
-            byte[] encIdx2 = new LocalDssaAdapter(storageDir).ReadIndex(fp2);
+            byte[] encIdx2 = new LocalDSAAAdapter(storageDir).ReadIndex(fp2);
             (_, byte[] cbor2) = Encryption.EncryptionLayer.DecryptIndexWithAutoDetect(encIdx2, password);
             var idx2 = Index.IndexManager.DeserializeIndex(cbor2);
             Assert.NotNull(idx2.DedupMap);
@@ -188,13 +188,13 @@ public class VersioningTests
             }
 
             // Check V3's actual index Fragments for SourceVersion
-            byte[] encIdx3 = new LocalDssaAdapter(storageDir).ReadIndex(fp3);
+            byte[] encIdx3 = new LocalDSAAAdapter(storageDir).ReadIndex(fp3);
             (_, byte[] cb3) = Encryption.EncryptionLayer.DecryptIndexWithAutoDetect(encIdx3, password);
             var ix3 = Index.IndexManager.DeserializeIndex(cb3);
             int svCount = ix3.Fragments?.Count(f => f.SourceVersion != null) ?? 0;
 
             // Also check V2's index right after AppendVersionRecord
-            byte[] encIdx2b = new LocalDssaAdapter(storageDir).ReadIndex(fp2);
+            byte[] encIdx2b = new LocalDSAAAdapter(storageDir).ReadIndex(fp2);
             (_, byte[] cb2b) = Encryption.EncryptionLayer.DecryptIndexWithAutoDetect(encIdx2b, password);
             var idx2b = Index.IndexManager.DeserializeIndex(cb2b);
             int v2mapCount = idx2b.DedupMap?.Count ?? 0;
@@ -204,7 +204,7 @@ public class VersioningTests
             Assert.True(svCount > 0, $"V3 index has {svCount} fragments with SourceVersion");
 
             // V3 index should have DedupMap
-            byte[] encIdx = new LocalDssaAdapter(storageDir).ReadIndex(fp3);
+            byte[] encIdx = new LocalDSAAAdapter(storageDir).ReadIndex(fp3);
             (_, byte[] cbor) = Encryption.EncryptionLayer.DecryptIndexWithAutoDetect(encIdx, password);
             var idx3 = Index.IndexManager.DeserializeIndex(cbor);
 
@@ -278,7 +278,7 @@ public class VersioningTests
             File.WriteAllBytes(file, content);
 
             string fp = await Versioning.VersionedBackup.BackupAsync(
-                file, new LocalDssaAdapter(dir), password, "V1", "FSS3",
+                file, new LocalDSAAAdapter(dir), password, "V1", "FSS3",
                 fragmentSize: 1024 * 1024);
 
             bool ok = Versioning.VersionedRestore.Restore(output,
@@ -312,7 +312,7 @@ public class VersioningTests
             rng.NextBytes(new Span<byte>(v1, 4, 2044));
             File.WriteAllBytes(file, v1);
             string fp1 = await Versioning.VersionedBackup.BackupAsync(
-                file, new LocalDssaAdapter(dir), password, "V1", "FSS3", fragmentSize: fragSize);
+                file, new LocalDSAAAdapter(dir), password, "V1", "FSS3", fragmentSize: fragSize);
 
             // V2: same size, all new content (populates DedupMap)
             byte[] v2 = new byte[2048];
@@ -320,7 +320,7 @@ public class VersioningTests
             rng.NextBytes(v2.AsSpan(4));
             File.WriteAllBytes(file, v2);
             string fp2 = await Versioning.VersionedBackup.BackupAsync(
-                file, new LocalDssaAdapter(dir), password, "V2", "FSS3", fragmentSize: fragSize);
+                file, new LocalDSAAAdapter(dir), password, "V2", "FSS3", fragmentSize: fragSize);
 
             // V3: keep first 1536 same as V2 (6 fragments), replace last 512
             byte[] v3 = new byte[2048];
@@ -329,7 +329,7 @@ public class VersioningTests
             rng.NextBytes(new Span<byte>(v3, 1536, 512));
             File.WriteAllBytes(file, v3);
             string fp3 = await Versioning.VersionedBackup.BackupAsync(
-                file, new LocalDssaAdapter(dir), password, "V3", "FSS3", fragmentSize: fragSize);
+                file, new LocalDSAAAdapter(dir), password, "V3", "FSS3", fragmentSize: fragSize);
 
             // V3 restore should produce correct data (streaming path with SourceVersion)
             bool ok = Versioning.VersionedRestore.Restore(outputV3,
@@ -359,7 +359,7 @@ public class VersioningTests
         File.WriteAllBytes(file, v1Raw);
 
         string fp1 = await Versioning.VersionedBackup.BackupAsync(
-            file, new LocalDssaAdapter(dir), password, "V1", strategy, fragmentSize: fragSize);
+            file, new LocalDSAAAdapter(dir), password, "V1", strategy, fragmentSize: fragSize);
 
         byte[] v2Raw = new byte[4096];
         v2Raw[0] = 0xff; v2Raw[1] = 0xd8; v2Raw[2] = 0xff; v2Raw[3] = 0xe0;
@@ -368,7 +368,7 @@ public class VersioningTests
         File.WriteAllBytes(file, v2Raw);
 
         string fp2 = await Versioning.VersionedBackup.BackupAsync(
-            file, new LocalDssaAdapter(dir), password, "V2", strategy, fragmentSize: fragSize);
+            file, new LocalDSAAAdapter(dir), password, "V2", strategy, fragmentSize: fragSize);
 
         byte[] v3Raw = new byte[4096];
         v3Raw[0] = 0xff; v3Raw[1] = 0xd8; v3Raw[2] = 0xff; v3Raw[3] = 0xe0;
@@ -377,7 +377,7 @@ public class VersioningTests
         File.WriteAllBytes(file, v3Raw);
 
         string fp3 = await Versioning.VersionedBackup.BackupAsync(
-            file, new LocalDssaAdapter(dir), password, "V3", strategy, fragmentSize: fragSize);
+            file, new LocalDSAAAdapter(dir), password, "V3", strategy, fragmentSize: fragSize);
 
         return (fp1, fp2, fp3);
     }
@@ -395,7 +395,7 @@ public class VersioningTests
                 dir, file, password, "FSS3", 256, 2048);
 
             // V3's index must have DedupMap with entries
-            byte[] enc3 = new LocalDssaAdapter(dir).ReadIndex(fp3);
+            byte[] enc3 = new LocalDSAAAdapter(dir).ReadIndex(fp3);
             (_, byte[] cb3) = Encryption.EncryptionLayer.DecryptIndexWithAutoDetect(enc3, password);
             var idx3 = Index.IndexManager.DeserializeIndex(cb3);
             Assert.NotNull(idx3.DedupMap);
@@ -439,14 +439,14 @@ public class VersioningTests
             rng.NextBytes(new Span<byte>(v1, 4, 1020));
             File.WriteAllBytes(file, v1);
             string fp1 = await Versioning.VersionedBackup.BackupAsync(
-                file, new LocalDssaAdapter(dir), password, "V1", "FSS1", fragmentSize: fragSize);
+                file, new LocalDSAAAdapter(dir), password, "V1", "FSS1", fragmentSize: fragSize);
 
             // V2: 1024 bytes, completely different content - populates DedupMap
             byte[] v2 = new byte[1024];
             rng.NextBytes(v2);
             File.WriteAllBytes(file, v2);
             string fp2 = await Versioning.VersionedBackup.BackupAsync(
-                file, new LocalDssaAdapter(dir), password, "V2", "FSS1", fragmentSize: fragSize);
+                file, new LocalDSAAAdapter(dir), password, "V2", "FSS1", fragmentSize: fragSize);
 
             // V3: 1280 bytes. First 256 = new content, last 1024 = V2's entire content.
             // Fragment 0 (0..255) = new. Fragments 1-4 (256..1279) = V2's 0-3 (identical).
@@ -456,9 +456,9 @@ public class VersioningTests
             File.WriteAllBytes(file, v3);
 
             string fp3 = await Versioning.VersionedBackup.BackupAsync(
-                file, new LocalDssaAdapter(dir), password, "V3", "FSS1", fragmentSize: fragSize);
+                file, new LocalDSAAAdapter(dir), password, "V3", "FSS1", fragmentSize: fragSize);
 
-            byte[] enc3 = new LocalDssaAdapter(dir).ReadIndex(fp3);
+            byte[] enc3 = new LocalDSAAAdapter(dir).ReadIndex(fp3);
             (_, byte[] cb3) = Encryption.EncryptionLayer.DecryptIndexWithAutoDetect(enc3, password);
             var idx3 = Index.IndexManager.DeserializeIndex(cb3);
 
@@ -501,7 +501,7 @@ public class VersioningTests
             rng.NextBytes(new Span<byte>(v1, 4, 2044));
             File.WriteAllBytes(file, v1);
             string fp1 = await Versioning.VersionedBackup.BackupAsync(
-                file, new LocalDssaAdapter(dir), password, "V1", "FSS1", fragmentSize: fragSize);
+                file, new LocalDSAAAdapter(dir), password, "V1", "FSS1", fragmentSize: fragSize);
 
             // V2: shrinks to 1024 bytes (4 fragments) - different content
             byte[] v2 = new byte[1024];
@@ -509,7 +509,7 @@ public class VersioningTests
             rng.NextBytes(v2.AsSpan(4));
             File.WriteAllBytes(file, v2);
             string fp2 = await Versioning.VersionedBackup.BackupAsync(
-                file, new LocalDssaAdapter(dir), password, "V2", "FSS1", fragmentSize: fragSize);
+                file, new LocalDSAAAdapter(dir), password, "V2", "FSS1", fragmentSize: fragSize);
 
             // V3: grows back to 1536 bytes (6 fragments). First 768 = V2's first 768
             byte[] v3 = new byte[1536];
@@ -519,9 +519,9 @@ public class VersioningTests
             File.WriteAllBytes(file, v3);
 
             string fp3 = await Versioning.VersionedBackup.BackupAsync(
-                file, new LocalDssaAdapter(dir), password, "V3", "FSS1", fragmentSize: fragSize);
+                file, new LocalDSAAAdapter(dir), password, "V3", "FSS1", fragmentSize: fragSize);
 
-            byte[] enc3 = new LocalDssaAdapter(dir).ReadIndex(fp3);
+            byte[] enc3 = new LocalDSAAAdapter(dir).ReadIndex(fp3);
             (_, byte[] cb3) = Encryption.EncryptionLayer.DecryptIndexWithAutoDetect(enc3, password);
             var idx3 = Index.IndexManager.DeserializeIndex(cb3);
 
@@ -564,7 +564,7 @@ public class VersioningTests
             rng.NextBytes(v4.AsSpan(4));
             File.WriteAllBytes(file, v4);
             string fp4 = await Versioning.VersionedBackup.BackupAsync(
-                file, new LocalDssaAdapter(dir), password, "V4", "FSS1", fragmentSize: fragSize);
+                file, new LocalDSAAAdapter(dir), password, "V4", "FSS1", fragmentSize: fragSize);
 
             // V3 index must still be readable
             string v3Idx = Path.Combine(dir, fp3 + ".indrdrf");

@@ -1,8 +1,9 @@
 using RDRF.Core;
 using RDRF.Core.Diff;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
+using RDRF.Core.Logging;
 using RDRF.Core.Versioning;
 using RDRF.Cli.Services;
 using Spectre.Console;
@@ -18,8 +19,11 @@ namespace RDRF.Cli.Commands;
 
 public class DiffCommand : Command
 {
-    public DiffCommand() : base("diff", "Show diff between two versions of a backup")
+    private readonly RdrfLogger _logger;
+
+    public DiffCommand(RdrfLogger logger) : base("diff", "Show diff between two versions of a backup")
     {
+        _logger = logger;
         var indexArg = new Argument<FileInfo>("indexFile") { Description = "Path to the .indrdrf index file" };
         var v1Arg = new Argument<int>("v1") { Description = "Version number (0 for initial)" };
         var v2Arg = new Argument<int>("v2") { Description = "Version number (use 0 for initial)" };
@@ -123,11 +127,11 @@ public class DiffCommand : Command
                 string v2Fp = v2Record.FileFingerprint;
                 string tmpV1 = Path.Combine(storageDir, $".diff_v{v1}_{Guid.NewGuid():N}.tmp");
                 string tmpV2 = Path.Combine(storageDir, $".diff_v{v2}_{Guid.NewGuid():N}.tmp");
-                var storage = new LocalDssaAdapter(storageDir);
+                var storage = new LocalDSAAAdapter(storageDir);
 
                 try
                 {
-                    using var ro = new RestoreOrchestrator(aesKey, password, storage);
+                    using var ro = new RestoreOrchestrator(aesKey, password, storage, logger: _logger);
                     bool ok1 = ro.RestoreFileFromFragments(v1Fp, tmpV1);
                     if (!ok1)
                     {

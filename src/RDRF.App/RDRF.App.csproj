@@ -12,7 +12,9 @@
     <LangVersion>latest</LangVersion>
     <ApplicationIcon>..\..\rdrf.ico</ApplicationIcon>
     <StartupObject />
-    <Version>1.0.0-pre1</Version>
+    <Version>1.4.5</Version>
+    <AssemblyVersion>1.4.5.0</AssemblyVersion>
+    <FileVersion>1.4.5.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,6 +30,10 @@
   </ItemGroup>
 
 </Project>
+
+
+
+
 
 
 

@@ -6,6 +6,7 @@ using Spectre.Console;
 using System.CommandLine;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace RDRF.Cli.Commands;
 
@@ -19,9 +20,11 @@ public class InfoCommand : Command
     {
         var indexArg = new Argument<FileInfo>("indexFile") { Description = "Path to the .indrdrf index file" };
         var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (INSECURE: visible in process list; omit for secure prompt)" };
+        var jsonOpt = new Option<bool>("--json") { Description = "Output as JSON" };
 
         Arguments.Add(indexArg);
         Options.Add(passwordOpt);
+        Options.Add(jsonOpt);
 
         SetAction(async (ParseResult parseResult) =>
         {
@@ -87,6 +90,31 @@ public class InfoCommand : Command
                     table.AddRow("CustomName", index.CustomName);
 
                 AnsiConsole.Write(table);
+
+                if (parseResult.GetValue(jsonOpt))
+                {
+                    var json = JsonSerializer.Serialize(new
+                    {
+                        fingerprint = index.FileFingerprint,
+                        originalName = index.OriginalName,
+                        fileSize = index.FileSize,
+                        fssStrategy = index.FssStrategy,
+                        fragmentCount = index.FragmentCount,
+                        originalFragmentCount = index.OriginalFragmentCount,
+                        hasEtn = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null,
+                        salt = index.Salt,
+                        customName = index.CustomName,
+                        createdAt = DateTimeOffset.FromUnixTimeSeconds(index.CreatedAt)
+                            .ToString("yyyy-MM-dd HH:mm:ss UTC"),
+                        updatedAt = index.UpdatedAt.HasValue
+                            ? DateTimeOffset.FromUnixTimeSeconds(index.UpdatedAt.Value)
+                                .ToString("yyyy-MM-dd HH:mm:ss UTC")
+                            : null,
+                        compression = index.Compression,
+                    }, new JsonSerializerOptions { WriteIndented = true });
+                    Console.WriteLine(json);
+                }
+
                 return 0;
             }
             finally

@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using RDRF.Core;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Core.Versioning;
@@ -13,7 +13,7 @@ using Idx = RDRF.Core.Index.RdrfIndex;
 public class RealVersioningTests : IDisposable
 {
     private readonly string _testDir;
-    private readonly LocalDssaAdapter _storage;
+    private readonly LocalDSAAAdapter _storage;
     private readonly byte[] _password;
     private readonly string _testFile;
 
@@ -21,7 +21,7 @@ public class RealVersioningTests : IDisposable
     {
         _testDir = Path.Combine(Path.GetTempPath(), $"rdrf_real_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_testDir);
-        _storage = new LocalDssaAdapter(_testDir);
+        _storage = new LocalDSAAAdapter(_testDir);
         _password = RandomNumberGenerator.GetBytes(32);
         _testFile = Path.Combine(_testDir, "source.bin");
     }

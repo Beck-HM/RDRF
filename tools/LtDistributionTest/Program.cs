@@ -6,7 +6,7 @@ using RDRF.Core.Encryption;
 using RDRF.Core.ETN;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
 
 string testFile;
 if (args.Length > 0 && File.Exists(args[0]))
@@ -53,7 +53,7 @@ foreach (double ratio in ratios)
         // Don't print resultDir per test, we'll aggregate
 
         // ---- Backup ----
-        var storage = new LocalDssaAdapter(resultDir);
+        var storage = new LocalDSAAAdapter(resultDir);
         string fingerprint;
         using (var engine = new RDRFEngine(rcMaster, storage))
             fingerprint = engine.BackupFile(testFile, strategy, fragmentSize: fragSize);
@@ -166,7 +166,7 @@ foreach (double ratio in ratios)
             foreach (var kv in fragCorrupt)
                 File.WriteAllBytes(Path.Combine(trialDir, $"{prefix}_{kv.Key}.rdrf"), kv.Value);
 
-            var trialStorage = new LocalDssaAdapter(trialDir);
+            var trialStorage = new LocalDSAAAdapter(trialDir);
             string outPath = Path.Combine(trialDir, "restored.bin");
             bool hasRb = is62
                 ? IndexManager.DeserializeIndex(idxCbor)?.Fss62RepairB != null

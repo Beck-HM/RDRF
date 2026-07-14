@@ -1,5 +1,7 @@
 using RDRF.Core;
-using RDRF.Core.Dssa;
+using RDRF.Core.DSAA;
+using RDRF.Core.Logging;
+using RDRF.Core.PasswordManager;
 using RDRF.Core.Versioning;
 using RDRF.Cli.Services;
 using Spectre.Console;
@@ -15,31 +17,39 @@ namespace RDRF.Cli.Commands;
 
 public class BackupCommand : Command
 {
-    public BackupCommand() : base("backup", "Backup a file or directory to RDRF storage")
+    private readonly PasswordManager _passwordManager;
+    private readonly RdrfLogger _logger;
+
+    public BackupCommand(PasswordManager passwordManager, RdrfLogger logger) : base("backup", "Backup a file or directory to RDRF storage")
     {
+        _passwordManager = passwordManager;
+        _logger = logger;
+
         var sourceArg = new Argument<FileSystemInfo>("source") { Description = "File or directory path to backup" };
         var outputOpt = new Option<DirectoryInfo?>("-o") { Description = "Storage directory (default: ./backup/ when omitted)" };
         var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (INSECURE: visible in process list; omit for secure prompt)" };
+        var fpOpt = new Option<string?>("-fp") { Description = "FastPassword key (use instead of -password)" };
         var sizeOpt = new Option<int?>("-size") { Description = "Fragment size in MB (default: 1)" };
         var nameOpt = new Option<string?>("-name") { Description = "Custom name for the backup (optional)" };
         var nextOpt = new Option<bool>("-next", "--next") { Description = "Enable versioning (creates v1, supports 'rdrf next' for increments)" };
         var nodeOpt = new Option<bool>("-node", "--node") { Description = "Versioned backup with API distribution flag (use with rdrf remote + push)" };
         var realOpt = new Option<bool>("-real", "--real") { Description = "Real incremental mode: keep all version files permanently" };
         var messageOpt = new Option<string?>("-m") { Description = "Commit message for the initial version (used with -next or -node)" };
-        var fss1 = new Option<bool>("-fss1", new[] { "--fss1" }) { Description = "FSS1 strategy - single-dash for primary, double-dash for auxiliary" };
-        var fss2 = new Option<bool>("-fss2", new[] { "--fss2" }) { Description = "FSS2 strategy - single-dash for primary, double-dash for auxiliary" };
-        var fss2r = new Option<bool>("-fss2r", new[] { "--fss2r" }) { Description = "FSS2R strategy - single-dash for primary, double-dash for auxiliary" };
-        var fss3 = new Option<bool>("-fss3", new[] { "--fss3" }) { Description = "FSS3 strategy - single-dash for primary, double-dash for auxiliary" };
-        var fss5 = new Option<bool>("-fss5", new[] { "--fss5" }) { Description = "FSS5 strategy - single-dash for primary, double-dash for auxiliary" };
-        var fss5p = new Option<bool>("-fss5+", new[] { "--fss5+" }) { Description = "FSS5+ strategy - single-dash for primary, double-dash for auxiliary" };
-        var fss61 = new Option<bool>("-fss6.1", new[] { "--fss6.1" }) { Description = "FSS6.1 strategy - ETN + LT fountain code repair" };
-        var fss62 = new Option<bool>("-fss6.2", new[] { "--fss6.2" }) { Description = "FSS6.2 strategy - ETN + Duip fountain code repair" };
+        var fss1 = new Option<bool>("-fss1", new[] { "--fss1" }) { Description = "FSS1 strategy" };
+        var fss2 = new Option<bool>("-fss2", new[] { "--fss2" }) { Description = "FSS2 strategy" };
+        var fss2r = new Option<bool>("-fss2r", new[] { "--fss2r" }) { Description = "FSS2R strategy" };
+        var fss3 = new Option<bool>("-fss3", new[] { "--fss3" }) { Description = "FSS3 strategy - Reed-Solomon encoding" };
+        var fss5 = new Option<bool>("-fss5", new[] { "--fss5" }) { Description = "FSS5 strategy" };
+        var fss5p = new Option<bool>("-fss5+", new[] { "--fss5+" }) { Description = "FSS5+ strategy" };
+        var fss61 = new Option<bool>("-fss6.1", new[] { "--fss6.1" }) { Description = "FSS6.1 strategy - ETN + LT fountain repair" };
+        var fss62 = new Option<bool>("-fss6.2", new[] { "--fss6.2" }) { Description = "FSS6.2 strategy - ETN + Duip fountain repair" };
         // FSA multi-strategy fusion is temporarily disabled. Single-strategy mode only.
         // var fsaOpt = new Option<bool>("-fsa") { Description = "Enable multi-strategy FSA fusion mode (used with multiple --fss options)" };
 
         Arguments.Add(sourceArg);
         Options.Add(outputOpt);
         Options.Add(passwordOpt);
+        Options.Add(fpOpt);
         Options.Add(sizeOpt);
         Options.Add(nameOpt);
         Options.Add(messageOpt);
@@ -47,11 +57,12 @@ public class BackupCommand : Command
         Add(fss3); Add(fss5); Add(fss5p); Add(fss61); Add(fss62);
         Add(nextOpt); Add(nodeOpt); Add(realOpt);
 
-        SetAction(async (ParseResult parseResult) =>
+        SetAction(async (ParseResult parseResult, CancellationToken ct) =>
         {
             var source = parseResult.GetValue(sourceArg);
             var outputDir = parseResult.GetValue(outputOpt);
             var pwd = parseResult.GetValue(passwordOpt);
+            var fpKey = parseResult.GetValue(fpOpt);
             var sizeMb = parseResult.GetValue(sizeOpt);
             var customName = parseResult.GetValue(nameOpt);
             bool enableNext = parseResult.GetValue(nextOpt);
@@ -86,7 +97,30 @@ public class BackupCommand : Command
             }
             strategy = selected[0];
 
-            byte[] password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
+            if (fpKey != null && pwd != null)
+            {
+                AnsiConsole.MarkupLine("[red]Error: -fp and -password cannot be used together[/]");
+                return 1;
+            }
+
+            byte[] password;
+            string? usedFpKey = null;
+            if (fpKey != null)
+            {
+                
+                string? stored = _passwordManager.GetByKey(fpKey);
+                if (stored == null)
+                {
+                    AnsiConsole.MarkupLine($"[red]Error: FastPassword '{fpKey}' not found. Use 'rdrf fp set {fpKey}' first to store it (interactive prompt).[/]");
+                    return 1;
+                }
+                password = Encoding.UTF8.GetBytes(stored);
+                usedFpKey = fpKey;
+            }
+            else
+            {
+                password = pwd != null ? Encoding.UTF8.GetBytes(pwd) : PasswordProvider.ReadInteractive();
+            }
             if (password.Length == 0)
             {
                 AnsiConsole.MarkupLine("[red]Error: password cannot be empty[/]");
@@ -112,10 +146,10 @@ public class BackupCommand : Command
                 await ProgressReporter.Run($"Backing up {nf.Name}", async prog =>
                 {
                     fp = enableNext && parseResult.GetValue(realOpt)
-                        ? await RealVersionedBackup.BackupAsync(nf.FullName, new LocalDssaAdapter(storagePath), password,
+                        ? await RealVersionedBackup.BackupAsync(nf.FullName, new LocalDSAAAdapter(storagePath), password,
                             commitMsg ?? "Initial backup", strategy, fragmentSize, customName, auxiliary, prog)
-                        : await VersionedBackup.BackupAsync(nf.FullName, new LocalDssaAdapter(storagePath), password,
-                            commitMsg ?? "Initial backup", strategy, fragmentSize, customName, auxiliary, prog);
+                        : await VersionedBackup.BackupAsync(nf.FullName, new LocalDSAAAdapter(storagePath), password,
+                            commitMsg ?? "Initial backup", strategy, fragmentSize, customName, auxiliary, prog, ct: ct);
                 });
                 var resultTable = new Table();
                 resultTable.Border(TableBorder.Rounded);
@@ -125,12 +159,22 @@ public class BackupCommand : Command
                 resultTable.AddRow("Strategy", $"{strategy} ({mode})");
                 if (enableNode)
                     resultTable.AddRow("Remote", $"rdrf remote {fp}.indrdrf -add <backends>");
+                if (fp.Length > 0 && Directory.Exists(storagePath))
+                {
+                    long fragTotal = 0; int fragCount = 0;
+                    foreach (var f in Directory.GetFiles(storagePath, $"{fp}_*.rdrf"))
+                    { fragTotal += new FileInfo(f).Length; fragCount++; }
+                    string? rcPath = Directory.GetFiles(storagePath, $"{fp}.rdrc").FirstOrDefault();
+                    long rcSize = rcPath != null ? new FileInfo(rcPath).Length : 0;
+                    resultTable.AddRow("Fragments", $"{fragCount} ({BackupHelpers.FormatSize(fragTotal)})");
+                    if (rcSize > 0)
+                        resultTable.AddRow("Repair data", BackupHelpers.FormatSize(rcSize));
+                }
                 AnsiConsole.Write(resultTable);
-                return 0;
             }
 
-            var storage = new LocalDssaAdapter(storagePath);
-            using (var engine = new RDRFEngine(password, storage))
+            var storage = new LocalDSAAAdapter(storagePath);
+            using (var engine = new RDRFEngine(password, storage, fssEngine: null, logger: _logger))
             {
                 int count = 0;
                 string? firstFp = null;
@@ -140,7 +184,8 @@ public class BackupCommand : Command
                     await ProgressReporter.Run($"Backing up {file.Name}", async progress =>
                     {
                         firstFp = await engine.BackupFileAsync(file.FullName, strategy,
-                            fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliary, progress: progress);
+                            fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliary,
+                            progress: progress, cancellationToken: ct);
                     });
                     count = 1;
                 }
@@ -162,7 +207,7 @@ public class BackupCommand : Command
                             foreach (var f in files)
                             {
                                 var fp = await engine.BackupFileAsync(f.FullName, strategy,
-                                    fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliary);
+                                    fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliary, cancellationToken: ct);
                                 firstFp ??= fp;
                                 count++;
                                 task.Value = count;
@@ -178,8 +223,39 @@ public class BackupCommand : Command
                 string fp = firstFp ?? "";
                 resultTable.AddRow("Fingerprint", fp.Length > 32 ? $"{fp[..12]}...{fp[^8..]}" : fp);
                 resultTable.AddRow("Strategy", strategy);
-                if (count > 1) resultTable.AddRow("Files", count.ToString());
+
+                // Storage statistics
+                if (firstFp != null && Directory.Exists(storagePath))
+                {
+                    long fragTotal = 0; int fragCount = 0;
+                    foreach (var f in Directory.GetFiles(storagePath, $"{firstFp}_*.rdrf"))
+                    {
+                        fragTotal += new FileInfo(f).Length;
+                        fragCount++;
+                    }
+                    string? rcPath = Directory.GetFiles(storagePath, $"{firstFp}.rdrc")
+                        .FirstOrDefault();
+                    long rcSize = rcPath != null ? new FileInfo(rcPath).Length : 0;
+                    long idxSize = new FileInfo(Path.Combine(storagePath, firstFp + ".indrdrf")).Length;
+
+                    resultTable.AddRow("Fragments", $"{fragCount} ({BackupHelpers.FormatSize(fragTotal)})");
+                    if (rcSize > 0)
+                        resultTable.AddRow("Repair data", BackupHelpers.FormatSize(rcSize));
+                    resultTable.AddRow("Index", BackupHelpers.FormatSize(idxSize));
+                }
+
                 AnsiConsole.Write(resultTable);
+
+                // Attach index hash for FastPassword
+                if (usedFpKey != null && firstFp != null)
+                {
+                    string indexPath = Path.Combine(storagePath, firstFp + ".indrdrf");
+                    if (File.Exists(indexPath))
+                    {
+                        string indexHash = HashHelper.ComputeSha256Hex(indexPath);
+                        _passwordManager.AttachHash(usedFpKey, indexHash);
+                    }
+                }
             }
 
             return 0;
@@ -189,6 +265,17 @@ public class BackupCommand : Command
                 CryptographicOperations.ZeroMemory(password);
             }
         });
+    }
+}
+
+internal static class BackupHelpers
+{
+    public static string FormatSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        if (bytes < 1024L * 1024 * 1024) return $"{bytes / (1024.0 * 1024):F1} MB";
+        return $"{bytes / (1024.0 * 1024 * 1024):F2} GB";
     }
 }
 

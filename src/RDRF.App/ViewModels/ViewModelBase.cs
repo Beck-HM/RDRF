@@ -1,11 +1,9 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows;
 
 namespace RDRF.App.ViewModels;
 
-/// <summary>
-/// MVVM base class with INotifyPropertyChanged and SetProperty helper.
-/// </summary>
 public abstract class ViewModelBase : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -23,6 +21,14 @@ public abstract class ViewModelBase : INotifyPropertyChanged
         field = value;
         OnPropertyChanged(propertyName);
         return true;
+    }
+
+    protected static void Dispatch(Action action)
+    {
+        if (Application.Current?.Dispatcher != null && !Application.Current.Dispatcher.CheckAccess())
+            Application.Current.Dispatcher.Invoke(action);
+        else
+            action();
     }
 }
 
