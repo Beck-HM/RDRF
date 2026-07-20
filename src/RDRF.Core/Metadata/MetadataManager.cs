@@ -1,4 +1,5 @@
-using RDRF.Core.Logging;using System.Diagnostics;
+using RDRF.Core.Logging;
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace RDRF.Core.Metadata;

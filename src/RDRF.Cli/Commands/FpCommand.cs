@@ -2,6 +2,7 @@ using RDRF.Cli.Services;
 using RDRF.Core.PasswordManager;
 using Spectre.Console;
 using System.CommandLine;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace RDRF.Cli.Commands;
@@ -19,21 +20,31 @@ public class FpCommand : Command
         setCmd.SetAction((ParseResult parseResult) =>
         {
             var key = parseResult.GetValue(keyArg);
-            string value = Encoding.UTF8.GetString(PasswordProvider.ReadInteractive("Enter password: "));
-            if (string.IsNullOrEmpty(value))
+            byte[] value = PasswordProvider.ReadInteractive("Enter password: ");
+            if (value.Length == 0)
             {
                 AnsiConsole.MarkupLine("[red]Password cannot be empty.[/]");
                 return 1;
             }
-            string confirm = Encoding.UTF8.GetString(PasswordProvider.ReadInteractive("Confirm password: "));
-            if (value != confirm)
+            byte[] confirm = PasswordProvider.ReadInteractive("Confirm password: ");
+            if (!value.AsSpan().SequenceEqual(confirm.AsSpan()))
             {
+                CryptographicOperations.ZeroMemory(value);
+                CryptographicOperations.ZeroMemory(confirm);
                 AnsiConsole.MarkupLine("[red]Passwords do not match.[/]");
                 return 1;
             }
-            passwordManager.Set(key, value);
-            AnsiConsole.MarkupLine($"[green]FastPassword '{key}' stored.[/]");
-            return 0;
+            CryptographicOperations.ZeroMemory(confirm);
+            try
+            {
+                passwordManager.Set(key, value);
+                AnsiConsole.MarkupLine($"[green]FastPassword '{key}' stored.[/]");
+                return 0;
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(value);
+            }
         });
 
         var listCmd = new Command("list", "List all FastPassword keys");

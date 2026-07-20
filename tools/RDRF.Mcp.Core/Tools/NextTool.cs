@@ -38,10 +38,9 @@ public class NextTool : IMcpTool
         if (!File.Exists(filePath)) throw new FileNotFoundException($"File not found: {filePath}");
         if (!Directory.Exists(storageDir)) throw new DirectoryNotFoundException($"Storage directory not found: {storageDir}");
 
-        bool realMode = args.GetValueOrDefault("real") is bool real && real;
-        string fp = realMode
-            ? await RealVersionedBackup.BackupAsync(filePath, new LocalDSAAAdapter(storageDir), password, message)
-            : await VersionedBackup.BackupAsync(filePath, new LocalDSAAAdapter(storageDir), password, message);
+        bool gcMode = args.GetValueOrDefault("gc") is bool gc && gc;
+        string fp = await VersionedBackup.BackupAsync(filePath, new LocalDSAAAdapter(storageDir), password, message,
+            gcMode: gcMode);
 
         var result = new Dictionary<string, object?>
         {

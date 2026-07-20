@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -79,25 +80,15 @@ internal class PasswordStore
             return;
         }
 
-        try
-        {
-            byte[] encrypted = File.ReadAllBytes(_filePath);
-            byte[] plaintext = Decrypt(encrypted);
-            var doc = JsonSerializer.Deserialize<StoreDocument>(plaintext)
-                ?? new StoreDocument();
+        byte[] encrypted = File.ReadAllBytes(_filePath);
+        byte[] plaintext = Decrypt(encrypted);
+        var doc = JsonSerializer.Deserialize<StoreDocument>(plaintext)
+            ?? new StoreDocument();
 
-            _keys = doc.Keys ?? new List<PasswordEntry>();
-            _backups = doc.Backups ?? new List<BackupEntry>();
-            _byKey = _keys.ToDictionary(e => e.Key, e => e);
-            _byHash = _backups.ToDictionary(e => e.IndexHash, e => e);
-        }
-        catch
-        {
-            _keys = new List<PasswordEntry>();
-            _backups = new List<BackupEntry>();
-            _byKey = new Dictionary<string, PasswordEntry>();
-            _byHash = new Dictionary<string, BackupEntry>();
-        }
+        _keys = doc.Keys ?? new List<PasswordEntry>();
+        _backups = doc.Backups ?? new List<BackupEntry>();
+        _byKey = BuildDictionarySafe(_keys, e => e.Key, "Duplicate key in password store");
+        _byHash = BuildDictionarySafe(_backups, e => e.IndexHash, "Duplicate index hash in password store");
     }
 
     private void Save()
@@ -110,7 +101,17 @@ internal class PasswordStore
         byte[] plaintext = JsonSerializer.SerializeToUtf8Bytes(doc, new JsonSerializerOptions { WriteIndented = true });
         byte[] encrypted = Encrypt(plaintext);
         Directory.CreateDirectory(_dir);
-        File.WriteAllBytes(_filePath, encrypted);
+        string tmp = Path.Combine(_dir, Path.GetRandomFileName());
+        try
+        {
+            File.WriteAllBytes(tmp, encrypted);
+            File.Move(tmp, _filePath, overwrite: true);
+        }
+        catch
+        {
+            try { File.Delete(tmp); } catch { }
+            throw;
+        }
     }
 
     private byte[] Encrypt(byte[] plaintext)
@@ -151,5 +152,19 @@ internal class PasswordStore
     {
         public List<PasswordEntry>? Keys { get; set; }
         public List<BackupEntry>? Backups { get; set; }
+    }
+
+    private static Dictionary<string, T> BuildDictionarySafe<T>(List<T> items, Func<T, string> keySelector, string errorContext)
+    {
+        var dict = new Dictionary<string, T>();
+        foreach (var item in items)
+        {
+            string key = keySelector(item);
+            if (!dict.TryAdd(key, item))
+            {
+                Debug.WriteLine($"[PasswordStore] {errorContext}: '{key}'");
+            }
+        }
+        return dict;
     }
 }

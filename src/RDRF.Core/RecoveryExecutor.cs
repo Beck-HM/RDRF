@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using RDRF.Core.Abstractions;
-using RDRF.Core.Logging;using RDRF.Core.FSS;
+using RDRF.Core.Logging;
+using RDRF.Core.FSS;
 using RDRF.Core.Index;
 using RDRF.Core.Integrity;
 

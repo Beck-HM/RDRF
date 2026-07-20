@@ -6,8 +6,25 @@ namespace RDRF.Core;
 public static class Constants
 {
     // Fragment Configuration
-    public const int DefaultFragmentSize = 1024 * 1024; // 1MB
+    public const int DefaultFragmentSize = 1024 * 1024; // 1MB (legacy default, used when file size unknown)
+    public const int MinFragmentSize = 256 * 1024;      // 256 KB
+    public const int MaxFragmentSize = 64 * 1024 * 1024; // 64 MB
+    public const int TargetFragmentCount = 50;           // aim for ~50 fragments
     public const int MaxSingleEncryptSize = 1024 * 1024 * 1024; // 1 GB per call (AES-CTR single-call safety)
+
+    /// <summary>
+    /// Computes an adaptive fragment size based on the source file size.
+    /// If the caller provides a user-specified size (e.g., from CLI -size), that value is used directly.
+    /// Otherwise, the fragment size is chosen to produce approximately <see cref="TargetFragmentCount"/> fragments,
+    /// clamped between <see cref="MinFragmentSize"/> and <see cref="MaxFragmentSize"/>.
+    /// </summary>
+    public static int ComputeFragmentSize(long fileSize, int? userOverride = null)
+    {
+        if (userOverride > 0)
+            return userOverride.Value;
+        int computed = (int)(fileSize / TargetFragmentCount);
+        return Math.Max(MinFragmentSize, Math.Min(MaxFragmentSize, computed));
+    }
 
     // AES Encryption Parameters
     public const int NonceLength = 12;
@@ -51,9 +68,20 @@ public static class Constants
 
     // Compression
     public const string CompressionLz4 = "lz4";
+    public const string CompressionLz4Hc = "lz4hc";
+    public const string CompressionZstd = "zstd";
+    public const string CompressionGzip = "gzip";
+    public const string CompressionBrotli = "brotli";
+    public const string CompressionLzma = "lzma2";
+    public const string CompressionLzo = "lzo";
+    public const string CompressionXpressHuff = "xpress_huff";
+    public const string CompressionLzms = "lzms";
+    public const string CompressionCkc = "ckc";
+    public const string CompressionXz = "xz";
 
     // Parallelism
-    public static readonly int DefaultParallelism = Math.Max(1, Environment.ProcessorCount / 2);
+    /// <summary>CPU-bound parallel width for backup/restore fragment work.</summary>
+    public static readonly int DefaultParallelism = Math.Max(2, Environment.ProcessorCount);
 
     public static readonly HashSet<string> FssLevels = new()
     {

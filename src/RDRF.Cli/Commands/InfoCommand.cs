@@ -74,7 +74,7 @@ public class InfoCommand : Command
                 table.AddRow("Strategy", index.FssStrategy);
                 table.AddRow("Fragments", $"{index.FragmentCount} (original: {index.OriginalFragmentCount})");
 
-                string? fss6 = (index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null)
+                string? fss6 = index.HasFss6EtnData
                     ? "with FSS6/ETN" : null;
                 table.AddRow("ETN", fss6 ?? "no");
 
@@ -101,7 +101,7 @@ public class InfoCommand : Command
                         fssStrategy = index.FssStrategy,
                         fragmentCount = index.FragmentCount,
                         originalFragmentCount = index.OriginalFragmentCount,
-                        hasEtn = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null,
+                        hasEtn = index.HasFss6EtnData,
                         salt = index.Salt,
                         customName = index.CustomName,
                         createdAt = DateTimeOffset.FromUnixTimeSeconds(index.CreatedAt)

@@ -26,6 +26,7 @@ public class ReachCommand : Command
         var nextOpt = new Option<bool>("-next") { Description = "Create incremental versioned backup" };
         var checkOpt = new Option<bool>("-check") { Description = "Show version history" };
         var diffOpt = new Option<bool>("-diff") { Description = "Compare two backups side by side" };
+        var passwordOpt = new Option<string?>("-password") { Description = "Password as plain text (INSECURE)" };
 
         Arguments.Add(pathArg);
         Options.Add(outputOpt);
@@ -36,6 +37,7 @@ public class ReachCommand : Command
         Options.Add(nextOpt);
         Options.Add(checkOpt);
         Options.Add(diffOpt);
+        Options.Add(passwordOpt);
 
         SetAction((ParseResult parseResult) =>
         {
@@ -79,37 +81,68 @@ public class ReachCommand : Command
                 return $"{displayName,-50} {f.LastWriteTime:yyyy-MM-dd}  {size,8}";
             }
 
-            // Phase 2: Selection
+            // Phase 2: Selection (interactive prompt, or non-TTY auto-pick)
             if (modeDiff)
             {
+                if (!AnsiConsole.Profile.Capabilities.Interactive)
+                {
+                    AnsiConsole.MarkupLine("[red]Error: reach -diff requires an interactive terminal.[/]");
+                    return 1;
+                }
                 return RunDiffMode(files, FormatFileInfo, dir.FullName, recursive);
             }
 
-            var choices = files.Select(FormatFileInfo).ToList();
-            choices.Add("--- Exit ---");
+            FileInfo chosenFile;
+            if (!AnsiConsole.Profile.Capabilities.Interactive)
+            {
+                // Non-interactive (scripts/CI): use newest backup; require an action flag.
+                bool hasMode = modeVerify || modeInfo || modeStatus || modeNext || modeCheck;
+                if (!hasMode)
+                {
+                    AnsiConsole.MarkupLine("[red]Error: non-interactive reach requires one of -info/-status/-verify/-check/-next.[/]");
+                    AnsiConsole.MarkupLine($"[grey]Found {files.Length} backup(s); newest: {files[0].Name}[/]");
+                    return 1;
+                }
+                chosenFile = files[0];
+                AnsiConsole.MarkupLine($"[grey]Non-interactive: using newest {chosenFile.Name}[/]\n");
+            }
+            else
+            {
+                var choices = files.Select(FormatFileInfo).ToList();
+                choices.Add("--- Exit ---");
 
-            var prompt = new SelectionPrompt<string>()
-                .Title("[cyan]Select a backup:[/]")
-                .PageSize(12)
-                .HighlightStyle(new Style(Color.Cyan1))
-                .AddChoices(choices);
+                var prompt = new SelectionPrompt<string>()
+                    .Title("[cyan]Select a backup:[/]")
+                    .PageSize(12)
+                    .HighlightStyle(new Style(Color.Cyan1))
+                    .AddChoices(choices);
 
-            string selected = AnsiConsole.Prompt(prompt);
-            if (selected.Contains("Exit"))
-                return 0;
+                string selected = AnsiConsole.Prompt(prompt);
+                if (selected.Contains("Exit"))
+                    return 0;
 
-            int idx = choices.IndexOf(selected);
-            var chosenFile = files[idx];
+                int idx = choices.IndexOf(selected);
+                chosenFile = files[idx];
+            }
+
             string storageDir = chosenFile.DirectoryName!;
             string fingerprint = Path.GetFileNameWithoutExtension(chosenFile.Name);
 
             AnsiConsole.MarkupLine($"[green]Selected:[/] {chosenFile.Name}\n");
 
-            // Password needed for all modes except -info
+            // Encrypted index requires password for all modes (including -info).
             byte[]? password = null;
-            if (!modeInfo)
             {
-                password = PasswordProvider.ReadInteractive();
+                var pwd = parseResult.GetValue(passwordOpt);
+                if (pwd != null)
+                    password = Encoding.UTF8.GetBytes(pwd);
+                else if (AnsiConsole.Profile.Capabilities.Interactive)
+                    password = PasswordProvider.ReadInteractive();
+                else
+                {
+                    AnsiConsole.MarkupLine("[red]Error: -password required in non-interactive mode.[/]");
+                    return 1;
+                }
                 if (password.Length == 0)
                 {
                     AnsiConsole.MarkupLine("[red]Password cannot be empty.[/]");
@@ -120,7 +153,7 @@ public class ReachCommand : Command
             try
             {
                 return modeVerify ? RunVerify(fingerprint, password!, storageDir)
-                     : modeInfo ? RunInfo(chosenFile.FullName, storageDir)
+                     : modeInfo ? RunInfo(chosenFile.FullName, storageDir, password!)
                      : modeStatus ? RunStatus(fingerprint, password!, storageDir)
                      : modeNext ? RunNext(chosenFile, fingerprint, password!, storageDir, logger)
                      : modeCheck ? RunCheck(chosenFile.FullName, password!)
@@ -133,13 +166,13 @@ public class ReachCommand : Command
         });
     }
 
-    private static int RunInfo(string indexFile, string storageDir)
+    private static int RunInfo(string indexFile, string storageDir, byte[] password)
     {
         try
         {
             byte[] data = File.ReadAllBytes(indexFile);
             var storage = new LocalDSAAAdapter(storageDir);
-            (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(data, Array.Empty<byte>());
+            (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(data, password);
             var index = IndexManager.DeserializeIndex(cbor);
             string prefix = index.CustomName ?? index.FileFingerprint;
             int fragCount = index.FragmentCount;
@@ -151,7 +184,7 @@ public class ReachCommand : Command
                     fragTotal += new FileInfo(Path.Combine(storageDir, fname)).Length;
             }
             bool hasRc = storage.RcExists(prefix);
-            bool hasEtn = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
+            bool hasEtn = index.HasFss6EtnData;
 
             var table = new Table();
             table.Border(TableBorder.Rounded);
@@ -162,7 +195,7 @@ public class ReachCommand : Command
             table.AddRow("Fingerprint", index.FileFingerprint);
             table.AddRow("Strategy", index.FssStrategy + (hasEtn ? " + FSS6" : ""));
             table.AddRow("Fragments", fragCount.ToString());
-            table.AddRow("Fragment data", FormatBytes(fragTotal));
+            table.AddRow("Fragment data", FileSizeFormatter.FormatBytes(fragTotal));
             table.AddRow("RC file", hasRc ? "Yes" : "No");
             if (index.VersionNumber > 0)
                 table.AddRow("Versions", index.VersionNumber.ToString());
@@ -175,14 +208,40 @@ public class ReachCommand : Command
         catch { AnsiConsole.MarkupLine("[red]Error: could not read index file[/]"); return 1; }
     }
 
+    /// <summary>
+    /// fragment_hashes are post-FSS, pre-compress, pre-trailer. Strip trailers then decompress before hashing.
+    /// </summary>
+    private static byte[] PayloadForFragmentHash(byte[] decryptedBody, RdrfIndex index)
+    {
+        byte[] body = decryptedBody;
+        var (raw62, _, _, _, _) = RDRF.Core.FSS.Fss62RepairTrailer.Parse(body);
+        body = raw62;
+        var (raw61, _, _, _, _) = RDRF.Core.FSS.Fss61RepairTrailer.Parse(body);
+        body = raw61;
+        body = RDRF.Core.ETN.EtnTrailer.Parse(body).RawData;
+
+        if (!string.IsNullOrEmpty(index.Compression))
+        {
+            bool isCkc = string.Equals(index.Compression, "ckc", StringComparison.OrdinalIgnoreCase);
+            if (isCkc)
+            {
+                var ckc = new RDRF.Core.Compression.Ckc.CkcAlgorithm();
+                if (ckc.CanHandle(body))
+                    body = ckc.Decompress(body);
+            }
+            else
+            {
+                body = RDRF.Core.Compression.Compressor.Decompress(body, index.Compression);
+            }
+        }
+        return body;
+    }
+
     private static int RunVerify(string fingerprint, byte[] password, string storageDir)
     {
-        var storage = new LocalDSAAAdapter(storageDir);
-        byte[] encryptedIndex = storage.ReadIndex(fingerprint);
         try
         {
-            (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
-            var index = IndexManager.DeserializeIndex(cbor);
+            (var storage, byte[] aesKey, var index) = OpenAndDecryptIndex(fingerprint, password, storageDir);
             string prefix = index.CustomName ?? fingerprint;
             int ok = 0, bad = 0, missing = 0;
 
@@ -190,11 +249,16 @@ public class ReachCommand : Command
             {
                 string fname = RDRF.Core.FragmentEngine.Frags.FragmentFilename(prefix, i);
                 if (!storage.FragmentExists(fname)) { missing++; continue; }
-                byte[] encrypted = storage.ReadFragment(fname);
-                byte[] decrypted = EncryptionLayer.DecryptAndStripFragment(encrypted, aesKey);
-                string actual = IntegrityChecker.HashBytes(decrypted);
-                string expected = index.FragmentHashes.Count > i ? index.FragmentHashes[i] : "";
-                if (IntegrityChecker.VerifyHash(actual, expected)) ok++; else bad++;
+                try
+                {
+                    byte[] encrypted = storage.ReadFragment(fname);
+                    byte[] decrypted = EncryptionLayer.DecryptAndStripFragment(encrypted, aesKey);
+                    byte[] body = PayloadForFragmentHash(decrypted, index);
+                    string actual = IntegrityChecker.HashBytes(body);
+                    string expected = index.FragmentHashes.Count > i ? index.FragmentHashes[i] : "";
+                    if (IntegrityChecker.VerifyHash(actual, expected)) ok++; else bad++;
+                }
+                catch { bad++; }
             }
 
             if (bad == 0 && missing == 0)
@@ -208,14 +272,11 @@ public class ReachCommand : Command
 
     private static int RunStatus(string fingerprint, byte[] password, string storageDir)
     {
-        var storage = new LocalDSAAAdapter(storageDir);
-        byte[] encryptedIndex = storage.ReadIndex(fingerprint);
         try
         {
-            (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
-            var index = IndexManager.DeserializeIndex(cbor);
+            (var storage, byte[] aesKey, var index) = OpenAndDecryptIndex(fingerprint, password, storageDir);
             string prefix = index.CustomName ?? fingerprint;
-            bool hasEtn = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
+            bool hasEtn = index.HasFss6EtnData;
 
             bool indexOk = storage.IndexExists(prefix);
             bool rcOk = storage.RcExists(prefix);
@@ -250,14 +311,15 @@ public class ReachCommand : Command
                 {
                     byte[] encrypted = storage.ReadFragment(fname);
                     byte[] decrypted = EncryptionLayer.DecryptAndStripFragment(encrypted, aesKey);
-                    string actual = IntegrityChecker.HashBytes(decrypted);
+                    byte[] body = PayloadForFragmentHash(decrypted, index);
+                    string actual = IntegrityChecker.HashBytes(body);
                     string expected = index.FragmentHashes.Count > i ? index.FragmentHashes[i] : "";
                     bool match = IntegrityChecker.VerifyHash(actual, expected);
-                    string size = FormatBytes(decrypted.Length);
+                    string size = FileSizeFormatter.FormatBytes(body.Length);
                     if (match) { fragTable.AddRow(i.ToString(), "[green]OK[/]", size); ok++; }
                     else { fragTable.AddRow(i.ToString(), "[red]CORRUPTED[/]", size); bad++; }
                 }
-                catch { fragTable.AddRow(i.ToString(), "[yellow]ENCRYPTED[/]", "-"); }
+                catch { fragTable.AddRow(i.ToString(), "[yellow]ERROR[/]", "-"); bad++; }
             }
             AnsiConsole.Write(new Panel(fragTable).Header($"Fragments ({index.FragmentCount})").BorderColor(Color.Grey));
             AnsiConsole.WriteLine();
@@ -267,14 +329,24 @@ public class ReachCommand : Command
         catch { AnsiConsole.MarkupLine("[red]Wrong password or corrupted index[/]"); return 1; }
     }
 
+    private static (LocalDSAAAdapter storage, byte[] aesKey, RdrfIndex index) OpenAndDecryptIndex(
+        string fingerprint, byte[] password, string storageDir)
+    {
+        var storage = new LocalDSAAAdapter(storageDir);
+        byte[] encryptedIndex = storage.ReadIndex(fingerprint);
+        (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
+        var index = IndexManager.DeserializeIndex(cbor);
+        return (storage, aesKey, index);
+    }
+
     private static int RunNext(FileInfo chosenFile, string fingerprint, byte[] password, string storageDir, RdrfLogger logger)
     {
         string message = AnsiConsole.Prompt(new TextPrompt<string>("Commit message:"));
         try
         {
             var storage = new LocalDSAAAdapter(storageDir);
-            string fp = VersionedBackup.BackupAsync(chosenFile.FullName, storage, password,
-                message, ct: CancellationToken.None).GetAwaiter().GetResult();
+            string fp = Task.Run(() => VersionedBackup.BackupAsync(chosenFile.FullName, storage, password,
+                message, ct: CancellationToken.None)).GetAwaiter().GetResult();
             AnsiConsole.MarkupLine($"[green]Versioned backup created:[/] {fp}");
             return 0;
         }
@@ -435,18 +507,10 @@ public class ReachCommand : Command
         {
             AnsiConsole.MarkupLine($"\n[green]Restored to:[/] {outputPath}");
             long size = new FileInfo(outputPath).Length;
-            AnsiConsole.MarkupLine($"[green]Size:[/] {FormatBytes(size)}");
+            AnsiConsole.MarkupLine($"[green]Size:[/] {FileSizeFormatter.FormatBytes(size)}");
         }
         else
             AnsiConsole.MarkupLine("\n[red]Restore failed.[/]");
         return 0;
-    }
-
-    private static string FormatBytes(long bytes)
-    {
-        if (bytes >= 1024L * 1024 * 1024) return $"{bytes / (1024.0 * 1024 * 1024):F2} GB";
-        if (bytes >= 1024 * 1024) return $"{bytes / (1024.0 * 1024):F1} MB";
-        if (bytes >= 1024) return $"{bytes / 1024.0:F1} KB";
-        return $"{bytes} B";
     }
 }

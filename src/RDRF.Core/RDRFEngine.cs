@@ -14,11 +14,12 @@ namespace RDRF.Core;
 /// Call chain:
 ///   External caller -> RDRFEngine.BackupFile/BackupFileAsync
 ///     -> BackupOrchestrator.BackupFile/BackupFileAsync
-///       -> stream read -> fragment -> LZ4 -> FSS encode -> AES-CTR encrypt -> write
+///       -> stream read -> fragment -> FSS encode -> (compress) -> ETN/fountain (FSS6.x)
+///       -> AES-CTR encrypt with embedded index -> write
 ///
 ///   External caller -> RDRFEngine.RestoreFile/RestoreFileAsync
 ///     -> RestoreOrchestrator.RestoreFile/RestoreFileAsync
-///       -> read -> AES-CTR decrypt -> FSS decode -> LZ4 decompress -> merge
+///       -> read -> AES-CTR decrypt -> strip trailers / decompress -> FSS decode -> merge
 ///
 /// Two constructors provide flexibility:
 ///   (byte[] rcCode, ...) - derives the AES key from rcCode via DeriveKeyLegacy.
@@ -70,17 +71,17 @@ public class RDRFEngine : IDisposable
     // -- Backup --
 
     /// <summary>
-    /// Synchronous backup. Reads the file, splits into fragments, compresses
-    /// with LZ4, FSS-encodes, AES-CTR encrypts, and writes to storage.
+    /// Synchronous backup. Reads the file, splits into fragments, FSS-encodes,
+    /// optionally compresses, AES-CTR encrypts, and writes to storage.
     /// </summary>
     /// <param name="filePath">Path to the source file.</param>
     /// <param name="fssStrategy">FSS strategy (FSS1..FSS6.2).</param>
     /// <param name="auxiliaryStrategies">Auxiliary strategies for FSA fusion (currently disabled).</param>
     /// <param name="originalFilename">Original filename to store in the index (for display).</param>
-    /// <param name="fragmentSize">Fragment size in bytes (default 1 MB).</param>
+    /// <param name="fragmentSize">Fragment size in bytes (default adaptive ~fileSize/50).</param>
     /// <param name="customName">Custom prefix for fragment files (defaults to fingerprint).</param>
     /// <param name="progress">Progress reporter.</param>
-    /// <returns>The file fingerprint (XxHash128 of raw content, hex).</returns>
+    /// <returns>The file fingerprint (SHA-256 of raw content, lowercase hex).</returns>
     public string BackupFile(
         string filePath,
         string fssStrategy = "FSS1",
@@ -88,8 +89,10 @@ public class RDRFEngine : IDisposable
         string? originalFilename = null,
         int fragmentSize = 0,
         string? customName = null,
-        IProgress<RdrfProgressReport>? progress = null)
-        => _backup.BackupFileAsync(filePath, fssStrategy, auxiliaryStrategies, originalFilename, fragmentSize, customName, progress).GetAwaiter().GetResult();
+        IProgress<RdrfProgressReport>? progress = null,
+        string? compressionMethod = null,
+        string? compressionOptions = null)
+        => Task.Run(() => _backup.BackupFileAsync(filePath, fssStrategy, auxiliaryStrategies, originalFilename, fragmentSize, customName, progress, compressionMethod: compressionMethod, compressionOptions: compressionOptions)).GetAwaiter().GetResult();
 
     /// <summary>
     /// Synchronous backup accepting a FileInfo instead of a path string.
@@ -161,8 +164,10 @@ public class RDRFEngine : IDisposable
         int fragmentSize = 0,
         string? customName = null,
         IProgress<RdrfProgressReport>? progress = null,
-        CancellationToken cancellationToken = default)
-        => _backup.BackupFileAsync(filePath, fssStrategy, auxiliaryStrategies, originalFilename, fragmentSize, customName, progress, cancellationToken);
+        CancellationToken cancellationToken = default,
+        string? compressionMethod = null,
+        string? compressionOptions = null)
+        => _backup.BackupFileAsync(filePath, fssStrategy, auxiliaryStrategies, originalFilename, fragmentSize, customName, progress, cancellationToken, compressionMethod, compressionOptions);
 
     // -- Fragment-Based Restore --
 

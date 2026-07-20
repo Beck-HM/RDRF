@@ -11,6 +11,7 @@ public static class StorageConfig
     public static void RegisterBuiltinFactories()
     {
         _factories.TryAdd("native", new NativeBackendConfigFactory());
+        _factories.TryAdd("rdrf", new RdrfBackendFactory());
     }
 
     private sealed class YamlRoot

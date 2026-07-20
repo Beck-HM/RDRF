@@ -16,7 +16,12 @@ public class RemoveBackendCommand : Command
 {
     public RemoveBackendCommand() : base("remove", "Remove a backend configuration, delete a remote version, or clean local fragments")
     {
-        var indexArg = new Argument<FileInfo?>("indexFile") { Description = "Index file (use with -v or -clean)" };
+        // Optional: backend-only modes (-node) need no index path.
+        var indexArg = new Argument<FileInfo?>("indexFile")
+        {
+            Description = "Index file (use with -v or -clean); omit for -node",
+            Arity = ArgumentArity.ZeroOrOne,
+        };
         var versionOpt = new Option<int>("-v") { Description = "Version number to delete from backends" };
         var nameOpt = new Option<string?>("-name") { Description = "Backend name to remove" };
         var nodeOpt = new Option<bool>("-node") { Description = "Remove a backend from configuration" };
@@ -64,20 +69,21 @@ public class RemoveBackendCommand : Command
                     byte[] encryptedIndex = File.ReadAllBytes(indexFile.FullName);
                     (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
                     var idx = IndexManager.DeserializeIndex(cbor);
-                    string fingerprint = idx.FileFingerprint;
+                    // Fragments/RC use CustomName when set, else content fingerprint.
+                    string prefix = idx.CustomName ?? idx.FileFingerprint;
                     string dir = indexFile.DirectoryName!;
                     int deletedCount = 0;
 
                     AnsiConsole.Status().Start("Cleaning local files...", ctx =>
                     {
-                        var rcFiles = Directory.GetFiles(dir, fingerprint + ".rdrc");
+                        var rcFiles = Directory.GetFiles(dir, prefix + ".rdrc");
                         foreach (var f in rcFiles)
                         {
                             File.Delete(f);
                             deletedCount++;
                             ctx.Status($"Deleting {Path.GetFileName(f)}...");
                         }
-                        var fragmentFiles = Directory.GetFiles(dir, fingerprint + "_*.rdrf");
+                        var fragmentFiles = Directory.GetFiles(dir, prefix + "_*.rdrf");
                         foreach (var f in fragmentFiles)
                         {
                             File.Delete(f);
@@ -148,7 +154,7 @@ public class RemoveBackendCommand : Command
                     {
                         try
                         {
-                            backend.DeleteAsync(rec.RemotePath).GetAwaiter().GetResult();
+                            Task.Run(() => backend.DeleteAsync(rec.RemotePath)).GetAwaiter().GetResult();
                             remoteDeleted++;
                         }
                         catch (Exception ex)

@@ -1,4 +1,3 @@
-using Spectre.Console;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -9,32 +8,36 @@ public static class PasswordProvider
 {
     public static byte[] ReadInteractive(string prompt = "Password:")
     {
-        if (!Console.IsInputRedirected)
+        if (Console.IsInputRedirected)
         {
-            string pw = AnsiConsole.Prompt(
-                new TextPrompt<string>(prompt).Secret());
-            byte[] result = Encoding.UTF8.GetBytes(pw);
-            ZeroString(pw);
-            return result;
+            Console.Error.WriteLine("Error: stdin is redirected. Use -password <plaintext> to provide the password.");
+            return [];
         }
-        AnsiConsole.MarkupLine("[red]Error: stdin is redirected. Use -password <plaintext> to provide the password (INSECURE).[/]");
-        return [];
-    }
 
-    private static unsafe void ZeroString(string s)
-    {
-        if (string.IsNullOrEmpty(s)) return;
-        fixed (char* p = s)
+        Console.Write(prompt);
+        var buf = new char[128];
+        int len = 0;
+        while (len < buf.Length)
         {
-            for (int i = 0; i < s.Length; i++)
-                p[i] = '\0';
+            var key = Console.ReadKey(intercept: true);
+            if (key.Key == ConsoleKey.Enter) break;
+            if (key.Key == ConsoleKey.Backspace && len > 0) { len--; continue; }
+            if (!char.IsControl(key.KeyChar)) buf[len++] = key.KeyChar;
         }
+        Console.WriteLine();
+
+        if (len == 0) return [];
+
+        var result = new byte[Encoding.UTF8.GetMaxByteCount(len)];
+        int bytesWritten = Encoding.UTF8.GetBytes(buf, 0, len, result, 0);
+        CryptographicOperations.ZeroMemory(MemoryMarshal.Cast<char, byte>(buf.AsSpan(0, len)));
+        if (bytesWritten < result.Length)
+        {
+            var trimmed = new byte[bytesWritten];
+            Buffer.BlockCopy(result, 0, trimmed, 0, bytesWritten);
+            CryptographicOperations.ZeroMemory(result);
+            return trimmed;
+        }
+        return result;
     }
 }
-
-
-
-
-
-
-

@@ -36,7 +36,7 @@ public class VerifyTool : IMcpTool
         (byte[] aesKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
         var index = IndexManager.DeserializeIndex(cbor);
 
-        if (index.Fss6FragmentBlockMaps == null && index.Fss6RcBlockMap == null)
+        if (!index.HasFss6EtnData)
             throw new InvalidOperationException("Backup does not contain FSS6/ETN data");
 
         string storageDir = Path.GetDirectoryName(indexPath)!;

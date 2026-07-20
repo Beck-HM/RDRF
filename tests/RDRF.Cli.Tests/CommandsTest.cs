@@ -1,9 +1,27 @@
+using RDRF.Core.Logging;
+using RDRF.Core.PasswordManager;
 using Xunit;
 
 namespace RDRF.Cli.Tests;
 
 public class CommandsTest
 {
+    private static readonly PasswordManager _pm = new();
+    private static readonly RdrfLogger _log = new();
+
+    private static System.CommandLine.Command CreateCommand(Type commandType)
+    {
+        if (commandType == typeof(Commands.BackupCommand))
+            return new Commands.BackupCommand(_pm, _log);
+        if (commandType == typeof(Commands.RestoreCommand))
+            return new Commands.RestoreCommand(_pm, _log);
+        if (commandType == typeof(Commands.DiffCommand))
+            return new Commands.DiffCommand(_log);
+        if (commandType == typeof(Commands.ListCommand))
+            return new Commands.ListCommand(_pm);
+        return (System.CommandLine.Command)Activator.CreateInstance(commandType)!;
+    }
+
     [Theory]
     [InlineData("backup", typeof(Commands.BackupCommand))]
     [InlineData("res", typeof(Commands.RestoreCommand))]
@@ -22,7 +40,7 @@ public class CommandsTest
     [InlineData("pull", typeof(Commands.PullCommand))]
     public void Command_CanBeInstantiated(string expectedName, Type commandType)
     {
-        var cmd = (System.CommandLine.Command)Activator.CreateInstance(commandType)!;
+        var cmd = CreateCommand(commandType);
         Assert.NotNull(cmd);
         Assert.Equal(expectedName, cmd.Name);
     }
@@ -40,7 +58,7 @@ public class CommandsTest
     [InlineData(typeof(Commands.PullCommand), "indexFile")]
     public void Command_HasRequiredArguments(Type commandType, string argName)
     {
-        var cmd = (System.CommandLine.Command)Activator.CreateInstance(commandType)!;
+        var cmd = CreateCommand(commandType);
         Assert.Contains(cmd.Arguments, a => a.Name == argName);
     }
 
@@ -71,7 +89,7 @@ public class CommandsTest
     [InlineData(typeof(Commands.PullCommand), "pull", false)]
     public void Parse_Command(Type commandType, string args, bool expectSuccess)
     {
-        var cmd = (System.CommandLine.Command)Activator.CreateInstance(commandType)!;
+        var cmd = CreateCommand(commandType);
         var root = new System.CommandLine.RootCommand();
         root.Add(cmd);
         var result = root.Parse(args);

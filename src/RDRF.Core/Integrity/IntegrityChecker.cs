@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
-using System.Text;
 
 namespace RDRF.Core.Integrity;
 
@@ -12,8 +11,18 @@ public static class IntegrityChecker
 {
     public static string HashBytes(byte[] data)
     {
-        byte[] hash = SHA256.HashData(data);
-        return BytesToHex(hash);
+        // Stackalloc digest + hex avoids intermediate string builder per byte.
+        Span<byte> digest = stackalloc byte[32];
+        SHA256.HashData(data, digest);
+        return BytesToHex(digest);
+    }
+
+    /// <summary>SHA256 hex of a span (no extra array copy of source).</summary>
+    public static string HashBytes(ReadOnlySpan<byte> data)
+    {
+        Span<byte> digest = stackalloc byte[32];
+        SHA256.HashData(data, digest);
+        return BytesToHex(digest);
     }
 
     public static string HashFile(string filePath)
@@ -37,16 +46,9 @@ public static class IntegrityChecker
     {
         if (string.IsNullOrEmpty(actualHash) || string.IsNullOrEmpty(expectedHash)) return false;
         if (actualHash.Length != expectedHash.Length) return false;
-        return HexSpanEquals(actualHash.AsSpan(), expectedHash.AsSpan());
-    }
-
-    private static bool HexSpanEquals(ReadOnlySpan<char> a, ReadOnlySpan<char> b)
-    {
-        if (a.Length != b.Length) return false;
-        for (int i = 0; i < a.Length; i++)
-            if (char.ToLowerInvariant(a[i]) != char.ToLowerInvariant(b[i]))
-                return false;
-        return true;
+        byte[] aBytes = ConvertHexToBytes(actualHash);
+        byte[] bBytes = ConvertHexToBytes(expectedHash);
+        return CryptographicOperations.FixedTimeEquals(aBytes, bBytes);
     }
 
     public static bool VerifyFragment(byte[] fragmentData, string expectedHash)
@@ -79,12 +81,21 @@ public static class IntegrityChecker
         return bytes;
     }
 
-    private static string BytesToHex(byte[] bytes)
+    private static string BytesToHex(byte[] bytes) => BytesToHex(bytes.AsSpan());
+
+    private static string BytesToHex(ReadOnlySpan<byte> bytes)
     {
-        StringBuilder sb = new StringBuilder(bytes.Length * 2);
-        foreach (byte b in bytes)
-            sb.Append(b.ToString("x2"));
-        return sb.ToString();
+        // Lowercase hex without StringBuilder per-nibble format calls.
+        Span<char> chars = stackalloc char[bytes.Length * 2];
+        for (int i = 0; i < bytes.Length; i++)
+        {
+            byte b = bytes[i];
+            chars[i * 2] = ToHexNibble(b >> 4);
+            chars[i * 2 + 1] = ToHexNibble(b & 0xF);
+        }
+        return new string(chars);
     }
+
+    private static char ToHexNibble(int v) => (char)(v < 10 ? '0' + v : 'a' + (v - 10));
 }
 

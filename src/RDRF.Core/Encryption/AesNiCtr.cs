@@ -27,6 +27,18 @@ public static class AesNiCtr
     {
         if (src.Length > 68_719_476_736) // 64 GiB = max safe CTR before counter wraps
             throw new ArgumentOutOfRangeException(nameof(src), "Data exceeds 64 GiB CTR safety limit.");
+
+        // GPU path for large payloads (>1MB): massive parallelism from 1000+ CUDA cores
+        if (src.Length > 1_048_576 && RDRF.Core.Device.GpuContext.IsAvailable)
+        {
+            byte[] tmp = src.ToArray();
+            if (RDRF.Core.Device.GpuCrypto.EncryptCtrBatch(tmp, aesKey, nonce))
+            {
+                tmp.CopyTo(dst);
+                return;
+            }
+        }
+
         var counter = BuildCounter(nonce);
         if (Aes.IsSupported)
         {
@@ -41,38 +53,41 @@ public static class AesNiCtr
 
     public static void CtrCryptStream(Stream input, Stream output, byte[] aesKey, byte[] nonce, int bufferSize = 81920)
     {
+        const long MaxCtrBytes = 68_719_476_736; // 64 GiB = max safe CTR before counter wraps
+        long totalProcessed = 0;
+
         if (Aes.IsSupported)
         {
             var rk = ExpandKey256(aesKey);
             var counter = BuildCounter(nonce);
             const int KeyBlockLen = 4096; // 256 AES blocks x 16 bytes
             byte[] buffer = new byte[bufferSize];
+            byte[] keyBlockArr = new byte[KeyBlockLen];
 
             while (true)
             {
                 int bytesRead = input.Read(buffer, 0, buffer.Length);
                 if (bytesRead == 0) break;
 
-                Span<byte> keyBlock = stackalloc byte[KeyBlockLen];
+                totalProcessed += bytesRead;
+                if (totalProcessed > MaxCtrBytes)
+                    throw new RdrfException(ErrorCode.FileTooLarge, "CtrCryptStream exceeded 64 GiB CTR safety limit.");
+
                 try
                 {
                     int offset = 0;
                     while (offset < bytesRead)
                     {
                         int chunk = Math.Min(KeyBlockLen, bytesRead - offset);
-                        for (int k = 0; k < chunk; k += 16)
-                        {
-                            AesEncryptBlock(counter, rk).CopyTo(keyBlock.Slice(k, 16));
-                            counter = IncrementCounter(counter);
-                        }
-                        XorSpan(buffer.AsSpan(offset, chunk), keyBlock.Slice(0, chunk));
+                        GenerateKeystreamBatched(keyBlockArr.AsSpan(0, chunk), rk, ref counter);
+                        XorSpan(buffer.AsSpan(offset, chunk), keyBlockArr.AsSpan(0, chunk));
                         offset += chunk;
                     }
                     output.Write(buffer, 0, bytesRead);
                 }
                 finally
                 {
-                    SCryptography.CryptographicOperations.ZeroMemory(keyBlock);
+                    SCryptography.CryptographicOperations.ZeroMemory(keyBlockArr.AsSpan());
                 }
             }
         }
@@ -105,7 +120,7 @@ public static class AesNiCtr
             byte[] keystream = ArrayPool<byte>.Shared.Rent(bufSize);
             try
             {
-                Span<byte> ctr = stackalloc byte[16];
+                Span<byte> ctr = new byte[16];
                 MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref counter, 1)).CopyTo(ctr);
 
                 var countSpan = counters.AsSpan(0, bufSize);
@@ -300,6 +315,66 @@ public static class AesNiCtr
             int remain = src.Length - i;
             for (int j = 0; j < remain; j++)
                 dst[i + j] = (byte)(src[i + j] ^ keystream.GetElement(j));
+        }
+    }
+
+    // -- Batched keystream generation (8-block interleaved) --
+
+    private static void GenerateKeystreamBatched(Span<byte> dst, Vector128<byte>[] rk, ref Vector128<byte> counter)
+    {
+        int i = 0;
+        const int B = 8;
+
+        for (; i + B * 16 <= dst.Length; i += B * 16)
+        {
+            var c0 = counter; counter = IncrementCounter(counter);
+            var c1 = counter; counter = IncrementCounter(counter);
+            var c2 = counter; counter = IncrementCounter(counter);
+            var c3 = counter; counter = IncrementCounter(counter);
+            var c4 = counter; counter = IncrementCounter(counter);
+            var c5 = counter; counter = IncrementCounter(counter);
+            var c6 = counter; counter = IncrementCounter(counter);
+            var c7 = counter; counter = IncrementCounter(counter);
+
+            var s0 = Vector128.Xor(c0, rk[0]); var s1 = Vector128.Xor(c1, rk[0]);
+            var s2 = Vector128.Xor(c2, rk[0]); var s3 = Vector128.Xor(c3, rk[0]);
+            var s4 = Vector128.Xor(c4, rk[0]); var s5 = Vector128.Xor(c5, rk[0]);
+            var s6 = Vector128.Xor(c6, rk[0]); var s7 = Vector128.Xor(c7, rk[0]);
+
+            for (int r = 1; r <= 13; r++)
+            {
+                var rk_r = rk[r];
+                s0 = Aes.Encrypt(s0, rk_r); s1 = Aes.Encrypt(s1, rk_r);
+                s2 = Aes.Encrypt(s2, rk_r); s3 = Aes.Encrypt(s3, rk_r);
+                s4 = Aes.Encrypt(s4, rk_r); s5 = Aes.Encrypt(s5, rk_r);
+                s6 = Aes.Encrypt(s6, rk_r); s7 = Aes.Encrypt(s7, rk_r);
+            }
+
+            s0 = Aes.EncryptLast(s0, rk[14]); s1 = Aes.EncryptLast(s1, rk[14]);
+            s2 = Aes.EncryptLast(s2, rk[14]); s3 = Aes.EncryptLast(s3, rk[14]);
+            s4 = Aes.EncryptLast(s4, rk[14]); s5 = Aes.EncryptLast(s5, rk[14]);
+            s6 = Aes.EncryptLast(s6, rk[14]); s7 = Aes.EncryptLast(s7, rk[14]);
+
+            s0.CopyTo(dst.Slice(i, 16)); s1.CopyTo(dst.Slice(i + 16, 16));
+            s2.CopyTo(dst.Slice(i + 32, 16)); s3.CopyTo(dst.Slice(i + 48, 16));
+            s4.CopyTo(dst.Slice(i + 64, 16)); s5.CopyTo(dst.Slice(i + 80, 16));
+            s6.CopyTo(dst.Slice(i + 96, 16)); s7.CopyTo(dst.Slice(i + 112, 16));
+        }
+
+        // Remaining full blocks (1-7)
+        for (; i + 16 <= dst.Length; i += 16)
+        {
+            AesEncryptBlock(counter, rk).CopyTo(dst.Slice(i, 16));
+            counter = IncrementCounter(counter);
+        }
+
+        // Tail bytes: generate last block, copy partial
+        if (i < dst.Length)
+        {
+            var tailKs = AesEncryptBlock(counter, rk);
+            counter = IncrementCounter(counter);
+            var ksSpan = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref tailKs, 1));
+            ksSpan.Slice(0, dst.Length - i).CopyTo(dst.Slice(i));
         }
     }
 

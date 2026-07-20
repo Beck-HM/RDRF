@@ -44,7 +44,7 @@ public class InfoTool : IMcpTool
             ["createdAt"] = DateTimeOffset.FromUnixTimeSeconds(index.CreatedAt).ToString("O"),
             ["versionNumber"] = index.VersionNumber,
             ["versionCount"] = index.Versions?.Count ?? 0,
-            ["hasEtn"] = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null,
+            ["hasEtn"] = index.HasFss6EtnData,
         };
         return Task.FromResult(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
     }

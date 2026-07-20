@@ -4,6 +4,7 @@ using RDRF.Core;
 using RDRF.Core.Encryption;
 using RDRF.Core.FragmentEngine;
 using RDRF.Core.Index;
+using RDRF.Core.Integrity;
 using RDRF.Core.Versioning;
 
 namespace RDRF.Core.DSAA;
@@ -20,7 +21,7 @@ public static class PullService
     {
         if (password.Length == 0)
         {
-            Debug.WriteLine("Error: password cannot be empty");
+            Console.WriteLine("Error: password cannot be empty");
             return 1;
         }
 
@@ -40,15 +41,15 @@ public static class PullService
         {
             if (allVersions.Count == 0)
             {
-                Debug.WriteLine("No version history found in index.");
+                Console.WriteLine("No version history found in index.");
                 return 0;
             }
-            Debug.WriteLine($"Project: {currentFingerprint}");
+            Console.WriteLine($"Project: {currentFingerprint}");
             foreach (var vr in allVersions)
             {
                 var records = mgmt.Lookup(vr.FileFingerprint, vr.Version);
                 int fragCount = records.Count(r => r.ContentType == "fragment");
-                Debug.WriteLine($"  v{vr.Version}: {fragCount} fragment(s)");
+                Console.WriteLine($"  v{vr.Version}: {fragCount} fragment(s)");
             }
             return 0;
         }
@@ -59,7 +60,7 @@ public static class PullService
         {
             if (!int.TryParse(versionArg, out targetVersion))
             {
-                Debug.WriteLine("Error: -v must be a version number or 'list'");
+                Console.WriteLine("Error: -v must be a version number or 'list'");
                 return 1;
             }
         }
@@ -67,7 +68,7 @@ public static class PullService
         {
             if (allVersions.Count == 0)
             {
-                Debug.WriteLine("Error: no version history in index.");
+                Console.WriteLine("Error: no version history in index.");
                 return 1;
             }
             targetVersion = allVersions.Last().Version;
@@ -76,7 +77,7 @@ public static class PullService
         var targetVr = allVersions.FirstOrDefault(v => v.Version == targetVersion);
         if (targetVr == null)
         {
-            Debug.WriteLine($"Error: version {targetVersion} not found in index history");
+            Console.WriteLine($"Error: version {targetVersion} not found in index history");
             return 1;
         }
 
@@ -89,7 +90,7 @@ public static class PullService
 
         var factories = PluginLoader.Load(pluginsDir);
         if (factories.Count == 0 && !dryRun)
-            Debug.WriteLine("Warning: no plugins found in " + pluginsDir);
+            Console.WriteLine("Warning: no plugins found in " + pluginsDir);
 
         foreach (var cfg in configs)
         {
@@ -97,7 +98,7 @@ public static class PullService
                 f.Type.Equals(cfg.Type, StringComparison.OrdinalIgnoreCase));
             if (factory == null)
             {
-                Debug.WriteLine($"  No plugin found for backend type '{cfg.Type}' (backend '{cfg.Name}')");
+                Console.WriteLine($"  No plugin found for backend type '{cfg.Type}' (backend '{cfg.Name}')");
                 continue;
             }
 
@@ -113,20 +114,20 @@ public static class PullService
         var locations = mgmt.Lookup(lookupFingerprint, targetVersion);
         if (locations.Count == 0)
         {
-            Debug.WriteLine($"Error: no fragments found for version {targetVersion}");
+            Console.WriteLine($"Error: no fragments found for version {targetVersion}");
             return 1;
         }
 
         if (dryRun)
         {
-            Debug.WriteLine($"Project: {currentFingerprint} v{targetVersion}");
+            Console.WriteLine($"Project: {currentFingerprint} v{targetVersion}");
             int rcCount = locations.Count(l => l.ContentType == "rc");
             int fragCount = locations.Count - rcCount;
-            Debug.WriteLine($"Would download {fragCount} fragment(s)" + (rcCount > 0 ? " + RC" : ""));
+            Console.WriteLine($"Would download {fragCount} fragment(s)" + (rcCount > 0 ? " + RC" : ""));
             foreach (var loc in locations.OrderBy(l => l.FragmentIndex))
             {
                 string label = loc.ContentType == "rc" ? "RC" : $"Fragment {loc.FragmentIndex}";
-                Debug.WriteLine($"  {label} from {loc.BackendName} ({loc.FileSize:N0} bytes)");
+                Console.WriteLine($"  {label} from {loc.BackendName} ({loc.FileSize:N0} bytes)");
             }
             return 0;
         }
@@ -146,7 +147,7 @@ public static class PullService
                 {
                     if (!backends.TryGetValue(loc.BackendName, out var backend))
                     {
-                        Debug.WriteLine($"  Backend '{loc.BackendName}' not available");
+                        Console.WriteLine($"  Backend '{loc.BackendName}' not available");
                         Interlocked.Increment(ref errors);
                         return;
                     }
@@ -156,25 +157,19 @@ public static class PullService
                         : Frags.FragmentFilename(lookupPrefix, loc.FragmentIndex);
                     string localPath = Path.Combine(storageDir, localName);
 
-                    // Skip if local file already exists with matching hash
+                    // Skip if local file already exists with matching hash (stream hash — no full load)
                     if (File.Exists(localPath) && !string.IsNullOrEmpty(loc.FileHash))
                     {
-                        var localHash = Convert.ToHexString(
-                            System.Security.Cryptography.SHA256.HashData(
-                                File.ReadAllBytes(localPath))).ToLowerInvariant();
-                        if (localHash == loc.FileHash)
+                        string localHash = await IntegrityChecker.HashFileAsync(localPath).ConfigureAwait(false);
+                        if (string.Equals(localHash, loc.FileHash, StringComparison.OrdinalIgnoreCase))
                         {
                             Interlocked.Increment(ref downloaded);
                             return;
                         }
                     }
 
-                    await using var stream = await backend.OpenReadAsync(loc.RemotePath);
-                    using var ms = new MemoryStream();
-                    await stream.CopyToAsync(ms);
-                    byte[] data = ms.ToArray();
-
-                    await File.WriteAllBytesAsync(localPath, data);
+                    // Stream remote → local file (no intermediate MemoryStream of full object)
+                    await CopyRemoteToLocalAsync(backend, loc.RemotePath, localPath).ConfigureAwait(false);
 
                     Interlocked.Increment(ref downloaded);
                     progress?.Report(new RdrfProgressReport
@@ -185,7 +180,7 @@ public static class PullService
                 catch (Exception ex)
                 {
                     string label = loc.ContentType == "rc" ? "RC" : $"Fragment {loc.FragmentIndex}";
-                    Debug.WriteLine($"  {label} error: {ex.Message}");
+                    Console.WriteLine($"  {label} error: {ex.Message}");
                     Interlocked.Increment(ref errors);
                 }
                 finally
@@ -201,7 +196,7 @@ public static class PullService
             {
                 if (!backends.TryGetValue(loc.BackendName, out var backend))
                 {
-                    Debug.WriteLine($"  Backend '{loc.BackendName}' not available");
+                    Console.WriteLine($"  Backend '{loc.BackendName}' not available");
                     errors++;
                     continue;
                 }
@@ -213,13 +208,10 @@ public static class PullService
                         : Frags.FragmentFilename(lookupPrefix, loc.FragmentIndex);
                     string localPath = Path.Combine(storageDir, localName);
 
-                    // Skip if local file already exists with matching hash
                     if (File.Exists(localPath) && !string.IsNullOrEmpty(loc.FileHash))
                     {
-                        var localHash = Convert.ToHexString(
-                            System.Security.Cryptography.SHA256.HashData(
-                                File.ReadAllBytes(localPath))).ToLowerInvariant();
-                        if (localHash == loc.FileHash)
+                        string localHash = await IntegrityChecker.HashFileAsync(localPath).ConfigureAwait(false);
+                        if (string.Equals(localHash, loc.FileHash, StringComparison.OrdinalIgnoreCase))
                         {
                             downloaded++;
                             progress?.Report(new RdrfProgressReport
@@ -230,12 +222,7 @@ public static class PullService
                         }
                     }
 
-                    await using var stream = await backend.OpenReadAsync(loc.RemotePath);
-                    using var ms = new MemoryStream();
-                    await stream.CopyToAsync(ms);
-                    byte[] data = ms.ToArray();
-
-                    await File.WriteAllBytesAsync(localPath, data);
+                    await CopyRemoteToLocalAsync(backend, loc.RemotePath, localPath).ConfigureAwait(false);
 
                     downloaded++;
                     progress?.Report(new RdrfProgressReport
@@ -246,14 +233,40 @@ public static class PullService
                 catch (Exception ex)
                 {
                     string label = loc.ContentType == "rc" ? "RC" : $"Fragment {loc.FragmentIndex}";
-                    Debug.WriteLine($"  {label} error: {ex.Message}");
+                    Console.WriteLine($"  {label} error: {ex.Message}");
                     errors++;
                 }
             }
         }
 
-        Debug.WriteLine($"Done: {downloaded} file(s) downloaded, {errors} error(s)");
+        Console.WriteLine($"Done: {downloaded} file(s) downloaded, {errors} error(s)");
         return errors > 0 ? 1 : 0;
+    }
+
+    /// <summary>
+    /// Stream remote object to a local path via temp file + atomic move (no full-buffer MemoryStream).
+    /// </summary>
+    private static async Task CopyRemoteToLocalAsync(IStorageBackend backend, string remotePath, string localPath)
+    {
+        string? dir = Path.GetDirectoryName(localPath);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+        string tmp = localPath + ".part";
+        try
+        {
+            await using (var remote = await backend.OpenReadAsync(remotePath).ConfigureAwait(false))
+            await using (var local = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None,
+                256 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                await remote.CopyToAsync(local).ConfigureAwait(false);
+            }
+            File.Move(tmp, localPath, overwrite: true);
+        }
+        catch
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* ignore */ }
+            throw;
+        }
     }
 }
 

@@ -329,6 +329,32 @@ public static class EtnPrecision
         return IndexManager.SerializeIndex(index);
     }
 
+    /// <summary>
+    /// Minimal index for embedding in every fragment header: drop ETN maps, repair
+    /// blobs, version history and dedup map. Standalone .indrdrf keeps full data.
+    /// Restore-from-fragments still has strategy, sizes, hashes, compression, name.
+    /// </summary>
+    internal static byte[] StripForEmbeddedHeader(byte[] indexBytes)
+    {
+        var index = IndexManager.DeserializeIndex(indexBytes);
+        if (index == null) return indexBytes;
+        index.Fss6FragmentBlockMaps = null;
+        index.Fss6FragmentBlockMapsFlat = null;
+        index.Fss6Fragment2B = null;
+        index.Fss6RcBlockMap = null;
+        index.Fss6RcBlockMapFlat = null;
+        index.Fss6Rc2B = null;
+        index.Fss61RepairB = null;
+        index.Fss61RepairC = null;
+        index.Fss62RepairB = null;
+        index.Fss62RepairC = null;
+        index.Versions = null;
+        index.DedupMap = null;
+        index.RawFragmentHashes = null;
+        index.Adler32Sums = null;
+        return IndexManager.SerializeIndex(index);
+    }
+
     private static List<byte[]> SplitFlat(byte[] flat, int hashLen)
     {
         int count = flat.Length / hashLen;

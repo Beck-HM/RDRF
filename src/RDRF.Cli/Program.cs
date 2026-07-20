@@ -36,6 +36,9 @@ class Program
         services.AddTransient<FpCommand>();
         services.AddTransient<ConfigCommand>();
         services.AddTransient<ReachCommand>();
+        services.AddTransient<RescueCommand>();
+        services.AddTransient<EtiCommand>();
+        services.AddTransient<ServerCommand>();
 
         using var provider = services.BuildServiceProvider();
 
@@ -48,10 +51,12 @@ class Program
         {
             var ver = typeof(Program).Assembly.GetName().Version;
             Console.WriteLine($"rdrf version {ver}");
+            Console.WriteLine("FSS flags: -fss1..-fss5 -fss5+ -fss6 -fss61|-fss62 (aliases --fss6.1/--fss6.2)");
             return 0;
         }
 
-        var root = new RootCommand("RDRF - Redundant Distributed Recovery File");
+        var root = new RootCommand(
+            "RDRF - Redundant Distributed Recovery File. Backup: rdrf backup <file> -fss61 -password <p> [-c lz4]");
         root.Subcommands.Add(provider.GetRequiredService<BackupCommand>());
         root.Subcommands.Add(provider.GetRequiredService<RestoreCommand>());
         root.Subcommands.Add(provider.GetRequiredService<InfoCommand>());
@@ -70,6 +75,9 @@ class Program
         root.Subcommands.Add(provider.GetRequiredService<FpCommand>());
         root.Subcommands.Add(provider.GetRequiredService<ConfigCommand>());
         root.Subcommands.Add(provider.GetRequiredService<ReachCommand>());
+        root.Subcommands.Add(provider.GetRequiredService<RescueCommand>());
+        root.Subcommands.Add(provider.GetRequiredService<EtiCommand>());
+        root.Subcommands.Add(provider.GetRequiredService<ServerCommand>());
 
         var parseResult = root.Parse(args);
         return await parseResult.InvokeAsync();

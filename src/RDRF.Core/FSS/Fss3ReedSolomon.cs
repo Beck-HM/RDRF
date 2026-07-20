@@ -13,6 +13,8 @@ public class Fss3ReedSolomon : IFssStrategy
 
     public string Level => Constants.FssLevel3;
 
+    private static int MatrixIdx(int f, int r, int B) => (f * B + r) * SubBlockSize;
+
     public List<byte[]> Encode(List<byte[]> fragments)
     {
         int K = fragments.Count;
@@ -23,58 +25,63 @@ public class Fss3ReedSolomon : IFssStrategy
         var rsRow = new ReedSolomon(K, 1);
         var rsCol = new ReedSolomon(B, P);
 
-        // Build data matrix: K columns x B rows, each subBlock is 16 bytes
-        byte[][][] matrix = new byte[K][][];
+        byte[] matrix = new byte[K * B * SubBlockSize];
         for (int f = 0; f < K; f++)
         {
-            matrix[f] = new byte[B][];
+            var frag = fragments[f];
             for (int r = 0; r < B; r++)
             {
                 int off = r * SubBlockSize;
-                if (off < fragments[f].Length)
+                if (off < frag.Length)
                 {
-                    int len = Math.Min(SubBlockSize, fragments[f].Length - off);
-                    matrix[f][r] = new byte[SubBlockSize];
-                    Buffer.BlockCopy(fragments[f], off, matrix[f][r], 0, len);
-                }
-                else
-                {
-                    matrix[f][r] = new byte[SubBlockSize];
+                    int len = Math.Min(SubBlockSize, frag.Length - off);
+                    frag.AsSpan(off, len).CopyTo(matrix.AsSpan(MatrixIdx(f, r, B), len));
                 }
             }
         }
 
-        // Row RS: each row across all K fragments
-        var rowParity = new byte[B][];
-        for (int r = 0; r < B; r++)
+        // Row RS → pack parity into rowFrag.
+        // Systematic RS does not modify data shards.
+        var po = new ParallelOptions { MaxDegreeOfParallelism = Constants.DefaultParallelism };
+        byte[] rowFrag;
+        if (RDRF.Core.Device.GpuContext.IsAvailable)
         {
-            var shards = new byte[K + 1][];
-            for (int f = 0; f < K; f++)
-                shards[f] = matrix[f][r];
-            shards[K] = new byte[SubBlockSize];
-            rsRow.Encode(shards);
-            rowParity[r] = shards[K];
+            rowFrag = RDRF.Core.Device.GpuFss3.RowEncode(matrix, K, B, SubBlockSize);
+        }
+        else
+        {
+            rowFrag = new byte[B * SubBlockSize];
+            Parallel.For(0, B, po, r =>
+            {
+                var shards = new byte[K + 1][];
+                for (int f = 0; f < K; f++)
+                {
+                    shards[f] = new byte[SubBlockSize];
+                    matrix.AsSpan(MatrixIdx(f, r, B), SubBlockSize).CopyTo(shards[f]);
+                }
+                shards[K] = new byte[SubBlockSize];
+                rsRow.Encode(shards);
+                Buffer.BlockCopy(shards[K], 0, rowFrag, r * SubBlockSize, SubBlockSize);
+            });
         }
 
-        // Pack row parity into 1 fragment
-        byte[] rowFrag = new byte[B * SubBlockSize];
-        for (int r = 0; r < B; r++)
-            Buffer.BlockCopy(rowParity[r], 0, rowFrag, r * SubBlockSize, SubBlockSize);
-
-        // Column RS: each fragment's B subBlocks
+        // Column RS: keep only parity blocks (no data copy-back into matrix).
         var colParity = new byte[K][][];
-        for (int f = 0; f < K; f++)
+        Parallel.For(0, K, po, f =>
         {
             var shards = new byte[B + P][];
             for (int r = 0; r < B; r++)
-                shards[r] = matrix[f][r];
+            {
+                shards[r] = new byte[SubBlockSize];
+                matrix.AsSpan(MatrixIdx(f, r, B), SubBlockSize).CopyTo(shards[r]);
+            }
             for (int p = 0; p < P; p++)
                 shards[B + p] = new byte[SubBlockSize];
             rsCol.Encode(shards);
             colParity[f] = new byte[P][];
             for (int p = 0; p < P; p++)
                 colParity[f][p] = shards[B + p];
-        }
+        });
 
         // Pack column parity into fragments
         int totalColBlocks = K * P;
@@ -114,11 +121,11 @@ public class Fss3ReedSolomon : IFssStrategy
 
         var rsRow = new ReedSolomon(K, 1);
 
-        // Build initial matrix: zero for missing, data for available
-        byte[][][] matrix = new byte[K][][];
+        // Build initial matrix as flat array: zero for missing, data for available
+        int matrixLen = K * B * SubBlockSize;
+        byte[] matrix = new byte[matrixLen];
         for (int f = 0; f < K; f++)
         {
-            matrix[f] = new byte[B][];
             if (available.TryGetValue(f, out var frag))
             {
                 for (int r = 0; r < B; r++)
@@ -127,19 +134,9 @@ public class Fss3ReedSolomon : IFssStrategy
                     if (off < frag.Length)
                     {
                         int len = Math.Min(SubBlockSize, frag.Length - off);
-                        matrix[f][r] = new byte[SubBlockSize];
-                        Buffer.BlockCopy(frag, off, matrix[f][r], 0, len);
-                    }
-                    else
-                    {
-                        matrix[f][r] = new byte[SubBlockSize];
+                        frag.AsSpan(off, len).CopyTo(matrix.AsSpan(MatrixIdx(f, r, B), len));
                     }
                 }
-            }
-            else
-            {
-                for (int r = 0; r < B; r++)
-                    matrix[f][r] = new byte[SubBlockSize];
             }
         }
 
@@ -186,10 +183,11 @@ public class Fss3ReedSolomon : IFssStrategy
             Parallel.For(0, B, r =>
             {
                 var shards = new byte[K + 1][];
-                var erasures = new List<int>();
+                List<int> erasures = [];
                 for (int f = 0; f < K; f++)
                 {
-                    shards[f] = matrix[f][r];
+                    shards[f] = new byte[SubBlockSize];
+                    matrix.AsSpan(MatrixIdx(f, r, B), SubBlockSize).CopyTo(shards[f]);
                     if (dataMissing.Contains(f))
                         erasures.Add(f);
                 }
@@ -201,9 +199,7 @@ public class Fss3ReedSolomon : IFssStrategy
                     var decodeShards = new byte[K + 1][];
                     for (int f = 0; f <= K; f++)
                     {
-                        if (f < K && available.ContainsKey(f))
-                            decodeShards[f] = shards[f];
-                        else if (f == K && rowFrag != null)
+                        if ((f < K && available.ContainsKey(f)) || (f == K && rowFrag != null))
                             decodeShards[f] = shards[f];
                         else
                             decodeShards[f] = new byte[SubBlockSize];
@@ -213,7 +209,7 @@ public class Fss3ReedSolomon : IFssStrategy
                     var rowMissing = new List<int>();
                     foreach (int m in dataMissing)
                     {
-                        if (m < K && (m >= B || r < B))
+                        if (m < K)
                             rowMissing.Add(m);
                     }
                     if (rowMissing.Count > 0)
@@ -221,7 +217,7 @@ public class Fss3ReedSolomon : IFssStrategy
                         if (rs.Decode(decodeShards, rowMissing))
                         {
                             foreach (int m in rowMissing)
-                                Buffer.BlockCopy(decodeShards[m], 0, matrix[m][r], 0, SubBlockSize);
+                                decodeShards[m].CopyTo(matrix.AsSpan(MatrixIdx(m, r, B), SubBlockSize));
                         }
                     }
                 }
@@ -232,14 +228,16 @@ public class Fss3ReedSolomon : IFssStrategy
         var rsCol = new ReedSolomon(B, P);
         Parallel.ForEach(dataMissing, f =>
         {
-            if (colParity[f][0] != null)
+            if (f < colParity.Length && colParity[f][0] != null)
             {
                 var shards = new byte[B + P][];
                 var erasures = new List<int>();
                 for (int r = 0; r < B; r++)
                 {
-                    shards[r] = matrix[f][r];
-                    if (IsZeroBlock(matrix[f][r]))
+                    shards[r] = new byte[SubBlockSize];
+                    var src = matrix.AsSpan(MatrixIdx(f, r, B), SubBlockSize);
+                    src.CopyTo(shards[r]);
+                    if (IsZeroBlockSpan(src))
                         erasures.Add(r);
                 }
                 for (int p = 0; p < P; p++)
@@ -249,7 +247,7 @@ public class Fss3ReedSolomon : IFssStrategy
                 {
                     rsCol.Decode(shards, erasures);
                     foreach (int r in erasures)
-                        Buffer.BlockCopy(shards[r], 0, matrix[f][r], 0, SubBlockSize);
+                        shards[r].CopyTo(matrix.AsSpan(MatrixIdx(f, r, B), SubBlockSize));
                 }
             }
         });
@@ -264,7 +262,7 @@ public class Fss3ReedSolomon : IFssStrategy
             {
                 int off = r * SubBlockSize;
                 int len = Math.Min(SubBlockSize, recovered.Length - off);
-                Buffer.BlockCopy(matrix[idx][r], 0, recovered, off, len);
+                matrix.AsSpan(MatrixIdx(idx, r, B), len).CopyTo(recovered.AsSpan(off, len));
             }
             if (originalSizes != null && idx < originalSizes.Count && originalSizes[idx] > 0
                 && originalSizes[idx] < recovered.Length)
@@ -305,6 +303,13 @@ public class Fss3ReedSolomon : IFssStrategy
             return trimmed;
         }
         return encodedFragment;
+    }
+
+    private static bool IsZeroBlockSpan(ReadOnlySpan<byte> block)
+    {
+        for (int i = 0; i < block.Length; i++)
+            if (block[i] != 0) return false;
+        return true;
     }
 
     private static bool IsZeroBlock(byte[] block)

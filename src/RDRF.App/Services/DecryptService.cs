@@ -170,7 +170,7 @@ public class DecryptService : IDecryptService
 
     private static BackupLoadResult ToResult(RdrfIndex index)
     {
-        bool hasFss6 = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
+        bool hasFss6 = index.HasFss6EtnData;
         return new BackupLoadResult
         {
             Fingerprint = index.FileFingerprint,

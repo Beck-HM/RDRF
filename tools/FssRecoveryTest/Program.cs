@@ -7,6 +7,7 @@ using RDRF.Core.Index;
 using RDRF.Core.DSAA;
 using RDRF.Core.Versioning;
 using RDRF.Core.FragmentEngine;
+using RDRF.Core.Compression;
 
 var allStrategies = new[] { "FSS1", "FSS2", "FSS2R", "FSS3", "FSS5", "FSS5+", "FSS6", "FSS6.1", "FSS6.2" };
 string[] validNames = allStrategies;
@@ -84,7 +85,7 @@ Directory.CreateDirectory(resultDir);
 
 var csv = new List<string>
 {
-    "strategy,test_type,loss_pct,trial,frags_total,frags_lost,recovered,sha256_match,time_ms,notes"
+    "strategy,test_type,loss_pct,trial,frags_total,frags_lost,blocks_corrupted,recovered,sha256_match,time_ms,notes"
 };
 var summaryRows = new List<SummaryRow>();
 
@@ -127,7 +128,7 @@ if (flagParity)
 
     // streaming path (baseline)
     string os = Path.Combine(d, "stream.bin"); extraSw.Restart();
-    using (var ro = new RestoreOrchestrator(r(), s)) ro.RestoreFileAsync(fp, os).GetAwaiter().GetResult();
+    using (var ro = new RestoreOrchestrator(r(), r(), s)) ro.RestoreFileAsync(fp, os).GetAwaiter().GetResult();
     long st = extraSw.ElapsedMilliseconds; bool sOK = File.Exists(os) && VerifySha(os, SHA256.HashData(File.ReadAllBytes(testFile)));
 
     // dictionary path: delete fragment 0 to force dictionary fallback
@@ -139,7 +140,7 @@ if (flagParity)
     // RC file
     string rcp = Path.Combine(d, $"{pf}.rdrc"); if (File.Exists(rcp)) File.WriteAllBytes(Path.Combine(dd, $"{pf}.rdrc"), File.ReadAllBytes(rcp));
     string od = Path.Combine(d, "dict.bin"); extraSw.Restart();
-    using (var ro = new RestoreOrchestrator(r(), new LocalDSAAAdapter(dd))) ro.RestoreFileAsync(fp, od).GetAwaiter().GetResult();
+    using (var ro = new RestoreOrchestrator(r(), r(), new LocalDSAAAdapter(dd))) ro.RestoreFileAsync(fp, od).GetAwaiter().GetResult();
     long dt = extraSw.ElapsedMilliseconds; bool dOK = File.Exists(od) && VerifySha(od, SHA256.HashData(File.ReadAllBytes(testFile)));
     bool ok = sOK && dOK;
     csv.Add($"\"parity\",stream_vs_dict,0,0,{tf},{tf - 1},{sOK},{dOK},{Math.Max(st,dt)},\"stream={st}ms dict={dt}ms\"");
@@ -161,7 +162,7 @@ if (flagBoundary)
         string prefix = idx.CustomName ?? fp;
         string f0 = Path.Combine(d, Frags.FragmentFilename(prefix, 0)); if (File.Exists(f0)) File.Delete(f0);
         string op = Path.Combine(d, "restored.bin"); extraSw.Restart();
-        bool rec; using (var ro = new RestoreOrchestrator(r(), s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
+        bool rec; using (var ro = new RestoreOrchestrator(r(), r(), s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
         long t = extraSw.ElapsedMilliseconds; bool sha = rec && File.Exists(op) && VerifySha(op, originalHash);
         csv.Add($"\"{strat}\",boundary_frag0,1.9,0,{idx.FragmentCount},1,{rec},{sha},{t:F0},\"frag0_recovery\"");
         Console.WriteLine($"  Boundary {strat}: {(rec && sha ? "PASS" : "FAIL")} ({t}ms)");
@@ -174,9 +175,9 @@ if (flagVersioning)
     var d = Path.Combine(resultDir, "versioning"); Directory.CreateDirectory(d);
     var s = new LocalDSAAAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32);
     string vf = Path.Combine(d, "version_test.txt"); File.WriteAllText(vf, "v1 content");
-    string fp = VersionedBackup.BackupAsync(vf, d, pw, "initial", "FSS3", fragmentSize: 65536).GetAwaiter().GetResult();
+    string fp = VersionedBackup.BackupAsync(vf, s, pw, "initial", "FSS3", fragmentSize: 65536).GetAwaiter().GetResult();
     File.WriteAllText(vf, "v2 content modified");
-    string fp2 = VersionedBackup.BackupAsync(vf, d, pw, "modified", "FSS3", fragmentSize: 65536).GetAwaiter().GetResult();
+    string fp2 = VersionedBackup.BackupAsync(vf, s, pw, "modified", "FSS3", fragmentSize: 65536).GetAwaiter().GetResult();
     bool oldGone = !File.Exists(Path.Combine(d, fp + Constants.IndexFileSuffix));
     bool newExists = File.Exists(Path.Combine(d, fp2 + Constants.IndexFileSuffix));
     // also check no stale fragment files from old fingerprint
@@ -216,7 +217,7 @@ if (flagIncompressible)
     var s = new LocalDSAAAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
     string fp; using (var e = new RDRFEngine(pw, s)) fp = e.BackupFile(rf, "FSS1", fragmentSize: fragSize);
     string op = Path.Combine(d, "restored.bin"); extraSw.Restart();
-    bool rec; using (var ro = new RestoreOrchestrator(r(), s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
+    bool rec; using (var ro = new RestoreOrchestrator(r(), r(), s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
     long t = extraSw.ElapsedMilliseconds; bool sha = rec && File.Exists(op) && VerifySha(op, SHA256.HashData(rand));
     csv.Add($"\"incompressible\",random_10mb,0,0,0,0,{rec},{sha},{t:F0},\"\"");
     Console.WriteLine($"  Incompressible: {(rec && sha ? "PASS" : "FAIL")} ({t}ms)");
@@ -238,7 +239,7 @@ if (flagStress)
     {
         string op = Path.Combine(d, $"restored_{Guid.NewGuid():N}.bin");
         bool ok = false;
-        try { using (var ro = new RestoreOrchestrator(r(), s)) ok = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult(); }
+        try { using (var ro = new RestoreOrchestrator(r(), r(), s)) ok = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult(); }
         catch { }
         if (ok && File.Exists(op) && VerifySha(op, tinyHash)) Interlocked.Increment(ref passed);
         else Interlocked.Increment(ref failed);
@@ -258,7 +259,7 @@ if (flagTiny)
         byte[] h = SHA256.HashData(data);
         string fp; using (var e = new RDRFEngine(pw, s)) fp = e.BackupFile(tf, "FSS1", fragmentSize: fragSize);
         string op = Path.Combine(d, "restored.bin"); extraSw.Restart();
-        bool rec; using (var ro = new RestoreOrchestrator(r(), s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
+        bool rec; using (var ro = new RestoreOrchestrator(r(), r(), s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
         long t = extraSw.ElapsedMilliseconds; bool sha = rec && File.Exists(op) && VerifySha(op, h);
         csv.Add($"\"tiny_{name}\",size_test,0,0,0,0,{rec},{sha},{t:F0},\"\"");
         Console.WriteLine($"  Tiny {name}: {(rec && sha ? "PASS" : "FAIL")} ({t}ms)");
@@ -279,7 +280,7 @@ if (flagUnicode)
     byte[] ei = s.ReadIndex(fp); var (_, cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(ei, r()); var idx = IndexManager.DeserializeIndex(cbor);
     bool nameOk = idx.OriginalName == "test_file_unicode_support.mp4";
     string op = Path.Combine(d, "restored.bin"); extraSw.Restart();
-    bool rec; using (var ro = new RestoreOrchestrator(r(), s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
+    bool rec; using (var ro = new RestoreOrchestrator(r(), r(), s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
     long t = extraSw.ElapsedMilliseconds; bool sha = rec && File.Exists(op) && VerifySha(op, originalHash);
     csv.Add($"\"unicode\",filename,0,0,0,0,{rec},{sha && nameOk},{t:F0},\"name_ok={nameOk}\"");
     Console.WriteLine($"  Unicode filename: {(rec && sha && nameOk ? "PASS" : "FAIL")} ({t}ms)");
@@ -310,7 +311,7 @@ if (flagMany)
     var s = new LocalDSAAAdapter(d); var pw = EncryptionLayer.GenerateRcCode(32); byte[] r() => (byte[])pw.Clone();
     string fp; using (var e = new RDRFEngine(pw, s)) fp = e.BackupFile(testFile, "FSS1", fragmentSize: 4096);
     string op = Path.Combine(d, "restored.bin"); extraSw.Restart();
-    bool rec; using (var ro = new RestoreOrchestrator(r(), s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
+    bool rec; using (var ro = new RestoreOrchestrator(r(), r(), s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
     long t = extraSw.ElapsedMilliseconds; bool sha = rec && File.Exists(op) && VerifySha(op, originalHash);
     csv.Add($"\"many\",fragSize_4k,0,0,0,0,{rec},{sha},{t:F0},\"fragSize=4096\"");
     Console.WriteLine($"  Many fragments (4096): {(rec && sha ? "PASS" : "FAIL")} ({t}ms)");
@@ -366,7 +367,7 @@ if (flagCustomName)
         byte[] ei = s.ReadIndex(cn); var (_, cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(ei, r()); var idx = IndexManager.DeserializeIndex(cbor);
         nameOk = idx.CustomName == cn;
         string op = Path.Combine(d, "restored.bin"); extraSw.Restart();
-        bool customRec; using (var ro = new RestoreOrchestrator(r(), s)) customRec = ro.RestoreFileAsync(fp, op, filePrefix: cn).GetAwaiter().GetResult();
+        bool customRec; using (var ro = new RestoreOrchestrator(r(), r(), s)) customRec = ro.RestoreFileAsync(fp, op, filePrefix: cn).GetAwaiter().GetResult();
         t = extraSw.ElapsedMilliseconds; sha = customRec && File.Exists(op) && VerifySha(op, originalHash);
         cnExist = idx.CustomName == cn;
     }
@@ -396,7 +397,7 @@ if (flagZeroMem)
     bool pwIntact = pw.AsSpan().SequenceEqual(pwBefore.AsSpan());
     // Restore with the original pw (should succeed)
     string op = Path.Combine(d, "restored.bin");
-    bool rec; using (var ro = new RestoreOrchestrator(pw, s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
+    bool rec; using (var ro = new RestoreOrchestrator(pw, pw, s)) rec = ro.RestoreFileAsync(fp, op).GetAwaiter().GetResult();
     bool sha = rec && File.Exists(op) && VerifySha(op, originalHash);
     csv.Add($"\"zeromem\",key_safety,0,0,0,0,{pwIntact},{rec},{0},\"pw_intact={pwIntact}\"");
     Console.WriteLine($"  ZeroMem: {(pwIntact && rec && sha ? "PASS" : "FAIL")} (pw_intact={pwIntact} recoverable={rec})");
@@ -438,14 +439,14 @@ foreach (string strategy in strategies)
     bool baselineOk = false;
     extraSw.Restart();
     string baseOut = Path.Combine(testRoot, "baseline_restored.bin");
-    using (var restore = new RestoreOrchestrator(rcClone(), storage))
+    using (var restore = new RestoreOrchestrator(rcClone(), rcClone(), storage))
         baselineOk = restore.RestoreFileAsync(fingerprint, baseOut).GetAwaiter().GetResult();
-    double baseTime = sw.Elapsed.TotalMilliseconds;
+    double baseTime = extraSw.ElapsedMilliseconds;
 
     bool baseShaOk = VerifySha(baseOut, originalHash);
     if (File.Exists(baseOut)) File.Delete(baseOut);
 
-    csv.Add($"\"{strategy}\",baseline,0,0,{totalFrags},0,{baselineOk},{baseShaOk},{baseTime:F0},\"baseline\"");
+    csv.Add($"\"{strategy}\",baseline,0,0,{totalFrags},0,0,{baselineOk},{baseShaOk},{baseTime:F0},\"baseline\"");
     Console.WriteLine($"  Baseline: {(baselineOk && baseShaOk ? "PASS" : "FAIL")} ({baseTime:F0}ms)");
 
     if (!baselineOk || !baseShaOk)
@@ -487,12 +488,24 @@ foreach (string strategy in strategies)
         // -- Block corruption incremental (FSS6.1/6.2 only) --
         // -- Block corruption incremental (FSS6.1/6.2 only) --
         const int blockSize = 256;
-        var decodedFrags = new (byte[] fragData, byte[] embeddedIdx, byte[]? salt)[totalFrags];
+        var decodedFrags = new (byte[] fragData, byte[] embeddedIdx, byte[]? salt, byte[]? repairTrailer)[totalFrags];
         var cleanFrags = new byte[totalFrags][];
         for (int i = 0; i < totalFrags; i++)
         {
-            var (ei, fd, s) = RDRFEngine.DecryptFragment(allFragBytes[i], aesKey);
-            decodedFrags[i] = (fd ?? Array.Empty<byte>(), ei ?? Array.Empty<byte>(), s);
+            var (ei, fd, s) = FragmentFileHeader.DecryptWithEmbeddedIndex(allFragBytes[i], aesKey);
+            byte[] decompressed = fd ?? Array.Empty<byte>();
+            byte[]? trailerBytes = null;
+            if (!string.IsNullOrEmpty(index.Compression))
+            {
+                var (rawData, _, _, _, _) = Fss61RepairTrailer.Parse(decompressed);
+                if (rawData.Length < decompressed.Length)
+                {
+                    trailerBytes = new byte[decompressed.Length - rawData.Length];
+                    Buffer.BlockCopy(decompressed, rawData.Length, trailerBytes, 0, trailerBytes.Length);
+                }
+                decompressed = Compressor.Decompress(rawData, index.Compression);
+            }
+            decodedFrags[i] = (decompressed, ei ?? Array.Empty<byte>(), s, trailerBytes);
             cleanFrags[i] = (byte[])decodedFrags[i].fragData.Clone();
         }
 
@@ -550,8 +563,21 @@ foreach (string strategy in strategies)
                 {
                     if (needsReEnc[i])
                     {
+                        byte[] dataToEncrypt = decodedFrags[i].fragData;
+                        if (!string.IsNullOrEmpty(index.Compression))
+                        {
+                            dataToEncrypt = Compressor.AlwaysCompress(dataToEncrypt, index.Compression);
+                            if (decodedFrags[i].repairTrailer != null)
+                            {
+                                var merged = new byte[dataToEncrypt.Length + decodedFrags[i].repairTrailer.Length];
+                                Buffer.BlockCopy(dataToEncrypt, 0, merged, 0, dataToEncrypt.Length);
+                                Buffer.BlockCopy(decodedFrags[i].repairTrailer, 0, merged,
+                                    dataToEncrypt.Length, decodedFrags[i].repairTrailer.Length);
+                                dataToEncrypt = merged;
+                            }
+                        }
                         byte[] reEnc = FragmentFileHeader.EncryptWithEmbeddedIndex(
-                            decodedFrags[i].fragData, decodedFrags[i].embeddedIdx,
+                            dataToEncrypt, decodedFrags[i].embeddedIdx,
                             aesKey, decodedFrags[i].salt);
                         File.WriteAllBytes(Path.Combine(td, $"{prefix}_{i}.rdrf"), reEnc);
                     }
@@ -567,17 +593,17 @@ foreach (string strategy in strategies)
                 bool r = false;
                 try
                 {
-                    using (var ro = new RestoreOrchestrator(rcClone(), ts))
+                    using (var ro = new RestoreOrchestrator(rcClone(), rcClone(), ts))
                         r = ro.RestoreFileAsync(fingerprint, outPath).GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"  BlockCorrupt trial {lossPct}/{trial}: {ex.GetType().Name}: {ex.Message}");
                 }
-                double t = sw.Elapsed.TotalMilliseconds;
+                double t = extraSw.Elapsed.TotalMilliseconds;
                 bool sha = r && File.Exists(outPath) && VerifySha(outPath, originalHash);
                 double actualPct = (double)blocksToCorrupt / totalBlocks * 100;
-                csv.Add($"\"{strategy}\",incremental,{actualPct:F1},{trial},{totalFrags},{blocksToCorrupt},{r},{sha},{t:F0},\"block_corrupt\"");
+                csv.Add($"\"{strategy}\",block_corrupt,{actualPct:F1},{trial},{totalFrags},0,{blocksToCorrupt},{r},{sha},{t:F0},\"block_corrupt\"");
                 incResults.Add((actualPct, trial, r && sha));
             }
         }
@@ -621,16 +647,16 @@ foreach (string strategy in strategies)
 
             extraSw.Restart();
             bool recovered;
-            using (var r = new RestoreOrchestrator(rcClone(), trialStorage))
+            using (var r = new RestoreOrchestrator(rcClone(), rcClone(), trialStorage))
                 recovered = r.RestoreFileAsync(fingerprint, trialOut).GetAwaiter().GetResult();
-            double t = sw.Elapsed.TotalMilliseconds;
+            double t = extraSw.ElapsedMilliseconds;
 
             bool shaOk = false;
             if (recovered && File.Exists(trialOut))
                 shaOk = VerifySha(trialOut, originalHash);
 
             double actualPct = (double)fragsToDelete / totalFrags * 100;
-            csv.Add($"\"{strategy}\",incremental,{actualPct:F1},{trial},{totalFrags},{fragsToDelete},{recovered},{shaOk},{t:F0},\"\"");
+            csv.Add($"\"{strategy}\",incremental,{actualPct:F1},{trial},{totalFrags},{fragsToDelete},0,{recovered},{shaOk},{t:F0},\"\"");
             incResults.Add((actualPct, trial, recovered && shaOk));
         }
     }
@@ -655,21 +681,116 @@ foreach (string strategy in strategies)
         bool r = false;
         try
         {
-            using (var ro = new RestoreOrchestrator(rcClone(), ts))
+            using (var ro = new RestoreOrchestrator(rcClone(), rcClone(), ts))
                 r = ro.RestoreFileAsync(fingerprint, outPath).GetAwaiter().GetResult();
         }
         catch
         {
             // expected when all fragments are deleted
         }
-        double t = sw.Elapsed.TotalMilliseconds;
+        double t = extraSw.ElapsedMilliseconds;
         bool sha = r && File.Exists(outPath) && VerifySha(outPath, originalHash);
         bool ok = r && sha;
-        csv.Add($"\"{strategy}\",greedy,{(double)toDel.Count/totalFrags*100:F1},{i},{totalFrags},{toDel.Count},{r},{sha},{t:F0},\"greedy_try_{i}\"");
+        csv.Add($"\"{strategy}\",greedy,{(double)toDel.Count/totalFrags*100:F1},{i},{totalFrags},{toDel.Count},0,{r},{sha},{t:F0},\"greedy_try_{i}\"");
         if (ok) { greedyKept.Add(i); }
     }
     double greedyStrength = (double)greedyKept.Count / totalFrags * 100;
     Console.WriteLine($"  Greedy: max deleted {greedyKept.Count}/{totalFrags} = {greedyStrength:F1}%");
+
+    double blockRecoveryPct = 0;
+
+    // --- Block-level greed test (FSS6.1/6.2 only) ---
+    if (strategy is "FSS6.1" or "FSS6.2")
+    {
+        var blockGreedyDir = Path.Combine(testRoot, "block_greedy");
+        Directory.CreateDirectory(blockGreedyDir);
+        const int blkSize = 256;
+        var blkDecodedFrags = new (byte[] fragData, byte[] embeddedIdx, byte[]? salt)[totalFrags];
+        var blkCleanFrags = new byte[totalFrags][];
+        for (int fi = 0; fi < totalFrags; fi++)
+        {
+            var (ei, fd, s) = FragmentFileHeader.DecryptWithEmbeddedIndex(allFragBytes[fi], aesKey);
+            byte[] d = fd ?? Array.Empty<byte>();
+            if (!string.IsNullOrEmpty(index.Compression))
+                d = Compressor.Decompress(d, index.Compression);
+            blkDecodedFrags[fi] = (d, ei ?? Array.Empty<byte>(), s);
+            blkCleanFrags[fi] = (byte[])blkDecodedFrags[fi].fragData.Clone();
+        }
+        int totalBlk = blkDecodedFrags.Sum(f => (f.fragData.Length + blkSize - 1) / blkSize);
+        var blkFragOffsets = new int[totalFrags + 1];
+        int cumBlk = 0;
+        for (int fi = 0; fi < totalFrags; fi++)
+        {
+            blkFragOffsets[fi] = cumBlk;
+            cumBlk += blkDecodedFrags[fi].fragData.Length > 0
+                ? (blkDecodedFrags[fi].fragData.Length + blkSize - 1) / blkSize : 0;
+        }
+        blkFragOffsets[totalFrags] = cumBlk;
+
+        var blkRand = new Random(42);
+        int[] blockPcts = { 5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90 };
+        var allBlockIds = Enumerable.Range(0, totalBlk).OrderBy(_ => blkRand.Next()).ToArray();
+        foreach (int bp in blockPcts)
+        {
+            int bi = (int)((long)totalBlk * bp / 100);
+            bi = Math.Max(1, Math.Min(bi, totalBlk));
+
+            for (int fj = 0; fj < totalFrags; fj++)
+                Buffer.BlockCopy(blkCleanFrags[fj], 0, blkDecodedFrags[fj].fragData, 0, blkCleanFrags[fj].Length);
+
+            for (int bk = 0; bk < bi; bk++)
+            {
+                int bkId = allBlockIds[bk];
+                int fi = 0;
+                while (bkId >= blkFragOffsets[fi + 1]) fi++;
+                int localBlk = bkId - blkFragOffsets[fi];
+                int start = localBlk * blkSize;
+                int end = Math.Min(start + blkSize, blkDecodedFrags[fi].fragData.Length);
+                if (start < end)
+                    blkDecodedFrags[fi].fragData[start] ^= 0xFF;
+            }
+
+            var bDir = Path.Combine(blockGreedyDir, $"pct_{bp}");
+            Directory.CreateDirectory(bDir);
+            File.WriteAllBytes(Path.Combine(bDir, $"{prefix}.indrdrf"), idxBytes);
+            for (int fi2 = 0; fi2 < totalFrags; fi2++)
+            {
+                byte[] dataToEnc = blkDecodedFrags[fi2].fragData;
+                if (!string.IsNullOrEmpty(index.Compression))
+                    dataToEnc = Compressor.AlwaysCompress(dataToEnc, index.Compression);
+                byte[] reEnc = FragmentFileHeader.EncryptWithEmbeddedIndex(
+                    dataToEnc, blkDecodedFrags[fi2].embeddedIdx, aesKey, blkDecodedFrags[fi2].salt);
+                File.WriteAllBytes(Path.Combine(bDir, $"{prefix}_{fi2}.rdrf"), reEnc);
+            }
+            string rcSrcB = Path.Combine(testRoot, $"{prefix}.rdrc");
+            if (File.Exists(rcSrcB))
+                File.WriteAllBytes(Path.Combine(bDir, $"{prefix}.rdrc"), File.ReadAllBytes(rcSrcB));
+
+            var bTs = new LocalDSAAAdapter(bDir);
+            string bOut = Path.Combine(bDir, "restored.bin");
+            extraSw.Restart();
+            bool bR = false;
+            try
+            {
+                using (var ro = new RestoreOrchestrator(rcClone(), rcClone(), bTs))
+                    bR = ro.RestoreFileAsync(fingerprint, bOut).GetAwaiter().GetResult();
+            }
+            catch { }
+            double bT = extraSw.ElapsedMilliseconds;
+            bool bSha = bR && File.Exists(bOut) && VerifySha(bOut, originalHash);
+            csv.Add($"\"{strategy}\",block_greedy,{bp:F1},0,{totalFrags},0,{bi},{bR},{bSha},{bT:F0},\"block_greedy_{bp}pct\"");
+            incResults.Add((bp, 0, bR && bSha));
+        }
+        Console.WriteLine($"  Block Greedy: {blockPcts.Length} corruption levels tested");
+
+        blockRecoveryPct = 0;
+        foreach (var inc in incResults)
+        {
+            if (inc.ok && inc.lossPct > blockRecoveryPct)
+                blockRecoveryPct = inc.lossPct;
+        }
+        Console.WriteLine($"  Block Recovery: max {blockRecoveryPct:F1}% blocks survived");
+    }
 
     // --- Custom tests (phase 2): strategy-specific targeted patterns ---
     var customResults = new List<(string name, double lossPct, bool ok)>();
@@ -686,10 +807,10 @@ foreach (string strategy in strategies)
         var eTs = new LocalDSAAAdapter(eDir);
         extraSw.Restart();
         bool eR;
-        using (var ro = new RestoreOrchestrator(rcClone(), eTs))
+        using (var ro = new RestoreOrchestrator(rcClone(), rcClone(), eTs))
             eR = ro.RestoreFileAsync(fingerprint, Path.Combine(eDir, "restored.bin")).GetAwaiter().GetResult();
         bool eSha = eR && VerifySha(Path.Combine(eDir, "restored.bin"), originalHash);
-        csv.Add($"\"{strategy}\",custom_even,{(double)eDel/totalFrags*100:F1},0,{totalFrags},{eDel},{eR},{eSha},{sw.Elapsed.TotalMilliseconds:F0},\"delete_even\"");
+        csv.Add($"\"{strategy}\",custom_even,{(double)eDel/totalFrags*100:F1},0,{totalFrags},{eDel},0,{eR},{eSha},{extraSw.ElapsedMilliseconds:F0},\"delete_even\"");
         customResults.Add(("even", (double)eDel / totalFrags * 100, eR && eSha));
 
         // Odd indices
@@ -702,10 +823,10 @@ foreach (string strategy in strategies)
         var oTs = new LocalDSAAAdapter(oDir);
         extraSw.Restart();
         bool oR;
-        using (var ro = new RestoreOrchestrator(rcClone(), oTs))
+        using (var ro = new RestoreOrchestrator(rcClone(), rcClone(), oTs))
             oR = ro.RestoreFileAsync(fingerprint, Path.Combine(oDir, "restored.bin")).GetAwaiter().GetResult();
         bool oSha = oR && VerifySha(Path.Combine(oDir, "restored.bin"), originalHash);
-        csv.Add($"\"{strategy}\",custom_odd,{(double)oDel/totalFrags*100:F1},0,{totalFrags},{oDel},{oR},{oSha},{sw.Elapsed.TotalMilliseconds:F0},\"delete_odd\"");
+        csv.Add($"\"{strategy}\",custom_odd,{(double)oDel/totalFrags*100:F1},0,{totalFrags},{oDel},0,{oR},{oSha},{extraSw.ElapsedMilliseconds:F0},\"delete_odd\"");
         customResults.Add(("odd", (double)oDel / totalFrags * 100, oR && oSha));
     }
 
@@ -718,11 +839,11 @@ foreach (string strategy in strategies)
         var sTs = new LocalDSAAAdapter(sDir);
         extraSw.Restart();
         bool sR;
-        using (var ro = new RestoreOrchestrator(rcClone(), sTs))
+        using (var ro = new RestoreOrchestrator(rcClone(), rcClone(), sTs))
             sR = ro.RestoreFileAsync(fingerprint, Path.Combine(sDir, "restored.bin")).GetAwaiter().GetResult();
         bool sSha = sR && VerifySha(Path.Combine(sDir, "restored.bin"), originalHash);
         int sDel = totalFrags - 1;
-        csv.Add($"\"{strategy}\",custom_one_survivor,{(double)sDel/totalFrags*100:F1},0,{totalFrags},{sDel},{sR},{sSha},{sw.Elapsed.TotalMilliseconds:F0},\"keep_one\"");
+        csv.Add($"\"{strategy}\",custom_one_survivor,{(double)sDel/totalFrags*100:F1},0,{totalFrags},{sDel},0,{sR},{sSha},{extraSw.ElapsedMilliseconds:F0},\"keep_one\"");
         customResults.Add(("keep_one", (double)sDel / totalFrags * 100, sR && sSha));
     }
 
@@ -764,10 +885,10 @@ foreach (string strategy in strategies)
         var bcTs = new LocalDSAAAdapter(bcDir);
         extraSw.Restart();
         bool bcR;
-        using (var r = new RestoreOrchestrator(rcClone(), bcTs))
+        using (var r = new RestoreOrchestrator(rcClone(), rcClone(), bcTs))
             bcR = r.RestoreFileAsync(fingerprint, Path.Combine(bcDir, "restored.bin")).GetAwaiter().GetResult();
         bool bcSha = bcR && VerifySha(Path.Combine(bcDir, "restored.bin"), originalHash);
-        csv.Add($"\"{strategy}\",custom_block_corrupt,0,0,{totalFrags},0,{bcR},{bcSha},{sw.Elapsed.TotalMilliseconds:F0},\"block_corrupted_repaired\"");
+        csv.Add($"\"{strategy}\",custom_block_corrupt,0,0,{totalFrags},0,2,{bcR},{bcSha},{extraSw.ElapsedMilliseconds:F0},\"block_corrupted_repaired\"");
         customResults.Add(("block_corrupt", 0, bcR && bcSha));
     }
 
@@ -785,10 +906,10 @@ foreach (string strategy in strategies)
         var ts1 = new LocalDSAAAdapter(td1Dir);
         extraSw.Restart();
         bool r1;
-        using (var r = new RestoreOrchestrator(rcClone(), ts1))
+        using (var r = new RestoreOrchestrator(rcClone(), rcClone(), ts1))
             r1 = r.RestoreFileAsync(fingerprint, Path.Combine(td1Dir, "restored.bin")).GetAwaiter().GetResult();
         bool sha1 = r1 && VerifySha(Path.Combine(td1Dir, "restored.bin"), originalHash);
-        csv.Add($"\"{strategy}\",targeted,{1.0/totalFrags*100:F1},0,{totalFrags},1,{r1},{sha1},{sw.Elapsed.TotalMilliseconds:F0},\"exact_max_1_lost\"");
+        csv.Add($"\"{strategy}\",targeted,{1.0/totalFrags*100:F1},0,{totalFrags},1,0,{r1},{sha1},{extraSw.ElapsedMilliseconds:F0},\"exact_max_1_lost\"");
         targetResults.Add(("exact_max_1_lost", 1.0/totalFrags*100, r1 && sha1));
 
         // Delete exactly 2 fragments (beyond theoretical max)
@@ -799,9 +920,10 @@ foreach (string strategy in strategies)
         File.Delete(Path.Combine(td2Dir, $"{prefix}_1.rdrf"));
         var ts2 = new LocalDSAAAdapter(td2Dir);
         bool r2;
-        using (var r = new RestoreOrchestrator(rcClone(), ts2))
+        extraSw.Restart();
+        using (var r = new RestoreOrchestrator(rcClone(), rcClone(), ts2))
             r2 = r.RestoreFileAsync(fingerprint, Path.Combine(td2Dir, "restored.bin")).GetAwaiter().GetResult();
-        csv.Add($"\"{strategy}\",targeted,{2.0/totalFrags*100:F1},0,{totalFrags},2,{r2},false,{sw.Elapsed.TotalMilliseconds:F0},\"beyond_max_2_lost\"");
+        csv.Add($"\"{strategy}\",targeted,{2.0/totalFrags*100:F1},0,{totalFrags},2,0,{r2},false,{extraSw.ElapsedMilliseconds:F0},\"beyond_max_2_lost\"");
         targetResults.Add(("beyond_max_2_lost", 2.0/totalFrags*100, r2));
     }
 
@@ -815,10 +937,11 @@ foreach (string strategy in strategies)
         File.Delete(Path.Combine(tDir, $"{prefix}_1.rdrf"));
         var ts = new LocalDSAAAdapter(tDir);
         bool ro;
-        using (var r = new RestoreOrchestrator(rcClone(), ts))
+        extraSw.Restart();
+        using (var r = new RestoreOrchestrator(rcClone(), rcClone(), ts))
             ro = r.RestoreFileAsync(fingerprint, Path.Combine(tDir, "restored.bin")).GetAwaiter().GetResult();
         double lp = 2.0 / totalFrags * 100;
-        csv.Add($"\"{strategy}\",targeted,{lp:F1},0,{totalFrags},2,{ro},{ro && VerifySha(Path.Combine(tDir, "restored.bin"), originalHash)},{sw.Elapsed.TotalMilliseconds:F0},\"adjacent_pair\"");
+        csv.Add($"\"{strategy}\",targeted,{lp:F1},0,{totalFrags},2,0,{ro},{ro && VerifySha(Path.Combine(tDir, "restored.bin"), originalHash)},{extraSw.ElapsedMilliseconds:F0},\"adjacent_pair\"");
         targetResults.Add(("adjacent_pair", lp, ro));
     }
 
@@ -837,11 +960,11 @@ foreach (string strategy in strategies)
         var ts = new LocalDSAAAdapter(tDir);
         bool ro;
         extraSw.Restart();
-        using (var r = new RestoreOrchestrator(rcClone(), ts))
+        using (var r = new RestoreOrchestrator(rcClone(), rcClone(), ts))
             ro = r.RestoreFileAsync(fingerprint, Path.Combine(tDir, "restored.bin")).GetAwaiter().GetResult();
         double lp2 = (double)deleted / totalFrags * 100;
         bool sh = ro && File.Exists(Path.Combine(tDir, "restored.bin")) && VerifySha(Path.Combine(tDir, "restored.bin"), originalHash);
-        csv.Add($"\"{strategy}\",targeted,{lp2:F1},0,{totalFrags},{deleted},{ro},{sh},{sw.Elapsed.TotalMilliseconds:F0},\"every_other\"");
+        csv.Add($"\"{strategy}\",targeted,{lp2:F1},0,{totalFrags},{deleted},0,{ro},{sh},{extraSw.ElapsedMilliseconds:F0},\"every_other\"");
         targetResults.Add(("every_other", lp2, ro && sh));
     }
 
@@ -870,10 +993,10 @@ foreach (string strategy in strategies)
         var ts = new LocalDSAAAdapter(tDir);
         bool ro;
         extraSw.Restart();
-        using (var r = new RestoreOrchestrator(rcClone(), ts))
+        using (var r = new RestoreOrchestrator(rcClone(), rcClone(), ts))
             ro = r.RestoreFileAsync(fingerprint, Path.Combine(tDir, "restored.bin")).GetAwaiter().GetResult();
         double lp3 = (double)toKill.Count / totalFrags * 100;
-        csv.Add($"\"{strategy}\",targeted,{lp3:F1},0,{totalFrags},{toKill.Count},{ro},false,{sw.Elapsed.TotalMilliseconds:F0},\"step_pattern_3copies_killed\"");
+        csv.Add($"\"{strategy}\",targeted,{lp3:F1},0,{totalFrags},{toKill.Count},0,{ro},false,{extraSw.ElapsedMilliseconds:F0},\"step_pattern_3copies_killed\"");
         targetResults.Add(("step_pattern_kill", lp3, ro));
     }
 
@@ -887,9 +1010,9 @@ foreach (string strategy in strategies)
         var ts = new LocalDSAAAdapter(tDir);
         bool ro;
         extraSw.Restart();
-        using (var r = new RestoreOrchestrator(rcClone(), ts))
+        using (var r = new RestoreOrchestrator(rcClone(), rcClone(), ts))
             ro = r.RestoreFileAsync(fingerprint, Path.Combine(tDir, "restored.bin")).GetAwaiter().GetResult();
-        csv.Add($"\"{strategy}\",targeted,{1.0/totalFrags*100:F1},0,{totalFrags},1,{ro},false,{sw.Elapsed.TotalMilliseconds:F0},\"no_redundancy_1_lost\"");
+        csv.Add($"\"{strategy}\",targeted,{1.0/totalFrags*100:F1},0,{totalFrags},1,0,{ro},false,{extraSw.ElapsedMilliseconds:F0},\"no_redundancy_1_lost\"");
         targetResults.Add(("no_redundancy", 1.0/totalFrags*100, !ro));
     }
 
@@ -926,6 +1049,7 @@ foreach (string strategy in strategies)
         MaxSurvived = maxSurvivedPct,
         MinFailed = maxFailedPct,
         GreedyStrength = greedyStrength,
+        BlockRecoveryPct = blockRecoveryPct,
         BackupMs = backupTime
     });
 
@@ -957,8 +1081,7 @@ foreach (var row in summaryRows)
         ? $"{row.MaxSurvived:F1}% >="
         : $"{row.MaxSurvived:F1}% !";
 
-    string greedyStr = row.GreedyStrength == 0 ? "0%" : $"{row.GreedyStrength:F1}%";
-
+    string greedyStr;
     string note = row.Strategy switch
     {
         "FSS1" => "no consecutive",
@@ -972,6 +1095,14 @@ foreach (var row in summaryRows)
         "FSS6.2" => "ETN + Duip repair",
         _ => ""
     };
+
+    if (row.Strategy is "FSS6.1" or "FSS6.2")
+        greedyStr = $"{row.BlockRecoveryPct:F1}%";
+    else
+        greedyStr = row.GreedyStrength == 0 ? "0%" : $"{row.GreedyStrength:F1}%";
+
+    if (row.Strategy is "FSS6.1" or "FSS6.2")
+        note = $"{note} (block: {row.BlockRecoveryPct:F1}%)";
 
     Console.WriteLine(
         $"| {row.Strategy,-7} | {row.TotalFrags,4} | {baselineStr,-8} | {theoStr,-12} | {row.MaxSurvived,11:F1}% | {row.MinFailed,10:F1}% | {greedyStr,8} | {note,-20} |");
@@ -1023,6 +1154,7 @@ record SummaryRow
     public double MaxSurvived { get; init; }
     public double MinFailed { get; init; }
     public double GreedyStrength { get; init; }
+    public double BlockRecoveryPct { get; init; }
     public double BackupMs { get; init; }
 }
 

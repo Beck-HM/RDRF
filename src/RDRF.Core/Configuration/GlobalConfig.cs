@@ -1,23 +1,34 @@
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace RDRF.Core.Configuration;
 
-public class GlobalConfig
+public class GlobalConfigService
 {
-    private static readonly string ConfigPath = Path.Combine(RdrfConfig.RootDir, "config");
-    private static GlobalConfigData? _cached;
+    internal static GlobalConfigService? _instance;
+    internal static void SetInstance(GlobalConfigService instance) { _instance ??= instance; }
+    internal static GlobalConfigService Instance => _instance ?? throw new InvalidOperationException("GlobalConfigService not initialized.");
+    internal static bool IsInitialized => _instance != null;
 
-    public static string LogLevel { get; set; } = "Information";
-    public static bool AutoFp { get; set; }
-    public static string DefaultStorage { get; set; } = "";
+    private readonly string _configPath;
+    private GlobalConfigData? _cached;
 
-    public static void Load()
+    public string LogLevel { get; set; } = "Information";
+    public bool AutoFp { get; set; }
+    public string DefaultStorage { get; set; } = "";
+
+    public GlobalConfigService(RdrfConfigService rdrf)
+    {
+        _configPath = Path.Combine(rdrf.RootDir, "config");
+    }
+
+    public void Load()
     {
         try
         {
-            if (File.Exists(ConfigPath))
+            if (File.Exists(_configPath))
             {
-                string json = File.ReadAllText(ConfigPath);
+                string json = File.ReadAllText(_configPath);
                 var data = JsonSerializer.Deserialize<GlobalConfigData>(json);
                 if (data != null)
                 {
@@ -28,10 +39,10 @@ public class GlobalConfig
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { Debug.WriteLine($"[GlobalConfig] Failed to load config: {ex.Message}"); }
     }
 
-    public static void Save()
+    public void Save()
     {
         try
         {
@@ -42,11 +53,11 @@ public class GlobalConfig
                 DefaultStorage = DefaultStorage,
             };
             string json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
-            Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
-            File.WriteAllText(ConfigPath, json);
+            Directory.CreateDirectory(Path.GetDirectoryName(_configPath)!);
+            File.WriteAllText(_configPath, json);
             _cached = data;
         }
-        catch { }
+        catch (Exception ex) { Debug.WriteLine($"[GlobalConfig] Failed to save config: {ex.Message}"); }
     }
 
     private class GlobalConfigData
@@ -55,6 +66,43 @@ public class GlobalConfig
         public bool AutoFp { get; set; }
         public string? DefaultStorage { get; set; }
     }
+}
+
+/// <summary>
+/// Static facade for backward compatibility. Delegates to the singleton service instance.
+/// New code should inject GlobalConfigService via DI.
+/// </summary>
+public static class GlobalConfig
+{
+    private static void EnsureInitialized()
+    {
+        if (GlobalConfigService._instance == null)
+        {
+            if (!RdrfConfigService.IsInitialized)
+                RdrfConfig.EnsureInitialized();
+            var rdrf = RdrfConfigService.Instance;
+            var svc = new GlobalConfigService(rdrf);
+            GlobalConfigService.SetInstance(svc);
+        }
+    }
+
+    public static string LogLevel
+    {
+        get { EnsureInitialized(); return GlobalConfigService.Instance.LogLevel; }
+        set { EnsureInitialized(); GlobalConfigService.Instance.LogLevel = value; }
+    }
+    public static bool AutoFp
+    {
+        get { EnsureInitialized(); return GlobalConfigService.Instance.AutoFp; }
+        set { EnsureInitialized(); GlobalConfigService.Instance.AutoFp = value; }
+    }
+    public static string DefaultStorage
+    {
+        get { EnsureInitialized(); return GlobalConfigService.Instance.DefaultStorage; }
+        set { EnsureInitialized(); GlobalConfigService.Instance.DefaultStorage = value; }
+    }
+    public static void Load() { EnsureInitialized(); GlobalConfigService.Instance.Load(); }
+    public static void Save() { EnsureInitialized(); GlobalConfigService.Instance.Save(); }
 }
 
 public class GlobalConfigCommand

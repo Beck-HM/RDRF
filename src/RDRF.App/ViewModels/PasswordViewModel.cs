@@ -117,17 +117,17 @@ public class PasswordViewModel : ViewModelBase
 
     public string? GetPassword(string key) => _manager.GetByKey(key);
 
+    public Func<string, string, bool>? ShowConfirmDialog { get; set; }
+
     private void DeleteSelected()
     {
         if (SelectedItem == null) return;
-        var key = SelectedItem.Key;
-        var result = System.Windows.MessageBox.Show(
-            $"Delete FastPassword '{key}'?",
-            "Confirm Delete",
-            System.Windows.MessageBoxButton.YesNo,
-            System.Windows.MessageBoxImage.Warning);
-        if (result != System.Windows.MessageBoxResult.Yes) return;
-        _manager.Delete(key);
+        if (ShowConfirmDialog != null)
+        {
+            if (!ShowConfirmDialog("Confirm Delete", $"Delete FastPassword '{SelectedItem.Key}'?"))
+                return;
+        }
+        _manager.Delete(SelectedItem.Key);
         Refresh();
     }
 }

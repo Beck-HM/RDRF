@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace RDRF.Core.DSAA;
 
 public abstract class DSAAAdapter
@@ -11,9 +13,13 @@ public abstract class DSAAAdapter
     public abstract byte[] ReadIndex(string fileFingerprint);
     public abstract void WriteIndex(string fileFingerprint, byte[] data);
     public abstract bool IndexExists(string fileFingerprint);
+    public virtual void DeleteIndex(string fileFingerprint)
+        => DeleteFragment(fileFingerprint + Constants.IndexFileSuffix);
     public abstract byte[] ReadRc(string fileFingerprint);
     public abstract void WriteRc(string fileFingerprint, byte[] data);
     public abstract bool RcExists(string fileFingerprint);
+    public virtual void DeleteRc(string fileFingerprint)
+        => DeleteFragment(fileFingerprint + Constants.RcFileSuffix);
 
     // -- Asynchronous API (defaults fall back to sync) --
     public virtual Task<byte[]> ReadFragmentAsync(string filename, CancellationToken ct = default)
@@ -39,9 +45,51 @@ public abstract class DSAAAdapter
     public virtual string? FindLatestIndex() => null;
 
     public virtual Stream OpenReadFragment(string filename)
-        => throw new NotSupportedException();
+        => new MemoryStream(ReadFragment(filename));
+
     public virtual Stream OpenWriteFragment(string filename)
-        => throw new NotSupportedException();
+        => new WriteBackMemoryStream(data => WriteFragment(filename, data));
+
+    /// <summary>
+    /// Open fragment for sequential read (async-friendly FileStream on local).
+    /// Caller must dispose the stream.
+    /// </summary>
+    public virtual Task<Stream> OpenReadFragmentAsync(string filename, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(OpenReadFragment(filename));
+    }
+
+    /// <summary>
+    /// Write a fragment via a producer that streams into a temp file then atomic-moves.
+    /// Default: buffer producer into MemoryStream then WriteFragment.
+    /// </summary>
+    public virtual async Task WriteFragmentViaStreamAsync(
+        string filename, Func<Stream, CancellationToken, Task> producer, CancellationToken ct = default)
+    {
+        await using var ms = new MemoryStream();
+        await producer(ms, ct).ConfigureAwait(false);
+        await WriteFragmentAsync(filename, ms.ToArray(), ct).ConfigureAwait(false);
+    }
+}
+
+internal sealed class WriteBackMemoryStream : MemoryStream
+{
+    private readonly Action<byte[]> _onClose;
+
+    public WriteBackMemoryStream(Action<byte[]> onClose)
+    {
+        _onClose = onClose;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _onClose(ToArray());
+        }
+        base.Dispose(disposing);
+    }
 }
 
 /// <summary>
@@ -90,7 +138,7 @@ public class LocalDSAAAdapter : DSAAAdapter
         }
         catch
         {
-            try { File.Delete(tmp); } catch { /* best-effort cleanup */ }
+            try { File.Delete(tmp); } catch (Exception ex) { Debug.WriteLine($"[LocalDSAAAdapter] Cleanup failed: {ex.Message}"); }
             throw;
         }
     }
@@ -100,9 +148,6 @@ public class LocalDSAAAdapter : DSAAAdapter
 
     public override async Task<byte[]> ReadFragmentAsync(string filename, CancellationToken ct = default)
         => await File.ReadAllBytesAsync(ResolvePath(_basePath, filename), ct).ConfigureAwait(false);
-
-    public override async Task WriteFragmentAsync(string filename, byte[] data, CancellationToken ct = default)
-        => await File.WriteAllBytesAsync(ResolvePath(_basePath, filename), data, ct).ConfigureAwait(false);
 
     public override Task<bool> FragmentExistsAsync(string filename, CancellationToken ct = default)
     {
@@ -130,7 +175,20 @@ public class LocalDSAAAdapter : DSAAAdapter
         => File.ReadAllBytes(ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix));
 
     public override void WriteIndex(string fileFingerprint, byte[] data)
-        => File.WriteAllBytes(ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix), data);
+    {
+        string path = ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix);
+        string tmp = Path.Combine(_basePath, Path.GetRandomFileName());
+        try
+        {
+            File.WriteAllBytes(tmp, data);
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch
+        {
+            try { File.Delete(tmp); } catch (Exception ex) { Debug.WriteLine($"[LocalDSAAAdapter] Cleanup failed: {ex.Message}"); }
+            throw;
+        }
+    }
 
     public override bool IndexExists(string fileFingerprint)
         => File.Exists(ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix));
@@ -139,7 +197,20 @@ public class LocalDSAAAdapter : DSAAAdapter
         => await File.ReadAllBytesAsync(ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix), ct).ConfigureAwait(false);
 
     public override async Task WriteIndexAsync(string fileFingerprint, byte[] data, CancellationToken ct = default)
-        => await File.WriteAllBytesAsync(ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix), data, ct).ConfigureAwait(false);
+    {
+        string path = ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix);
+        string tmp = Path.Combine(_basePath, Path.GetRandomFileName());
+        try
+        {
+            await File.WriteAllBytesAsync(tmp, data, ct).ConfigureAwait(false);
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch
+        {
+            try { File.Delete(tmp); } catch (Exception ex) { Debug.WriteLine($"[LocalDSAAAdapter] Cleanup failed: {ex.Message}"); }
+            throw;
+        }
+    }
 
     public override Task<bool> IndexExistsAsync(string fileFingerprint, CancellationToken ct = default)
     {
@@ -153,18 +224,96 @@ public class LocalDSAAAdapter : DSAAAdapter
         => File.ReadAllBytes(ResolvePath(_basePath, fileFingerprint + Constants.RcFileSuffix));
 
     public override void WriteRc(string fileFingerprint, byte[] data)
-        => File.WriteAllBytes(ResolvePath(_basePath, fileFingerprint + Constants.RcFileSuffix), data);
+    {
+        string path = ResolvePath(_basePath, fileFingerprint + Constants.RcFileSuffix);
+        string tmp = Path.Combine(_basePath, Path.GetRandomFileName());
+        try
+        {
+            File.WriteAllBytes(tmp, data);
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch
+        {
+            try { File.Delete(tmp); } catch { }
+            throw;
+        }
+    }
 
     public override bool RcExists(string fileFingerprint)
         => File.Exists(ResolvePath(_basePath, fileFingerprint + Constants.RcFileSuffix));
 
+    public override void DeleteIndex(string fileFingerprint)
+    {
+        string path = ResolvePath(_basePath, fileFingerprint + Constants.IndexFileSuffix);
+        if (File.Exists(path)) File.Delete(path);
+    }
+
+    public override void DeleteRc(string fileFingerprint)
+    {
+        string path = ResolvePath(_basePath, fileFingerprint + Constants.RcFileSuffix);
+        if (File.Exists(path)) File.Delete(path);
+    }
+
     // -- Stream-based overrides --
 
     public override Stream OpenReadFragment(string filename)
-        => File.OpenRead(ResolvePath(_basePath, filename));
+        => new FileStream(ResolvePath(_basePath, filename), FileMode.Open, FileAccess.Read, FileShare.Read,
+            256 * 1024, FileOptions.SequentialScan);
 
     public override Stream OpenWriteFragment(string filename)
         => File.OpenWrite(ResolvePath(_basePath, filename));
+
+    public override Task<Stream> OpenReadFragmentAsync(string filename, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        Stream s = new FileStream(ResolvePath(_basePath, filename), FileMode.Open, FileAccess.Read, FileShare.Read,
+            256 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        return Task.FromResult(s);
+    }
+
+    public override async Task WriteFragmentViaStreamAsync(
+        string filename, Func<Stream, CancellationToken, Task> producer, CancellationToken ct = default)
+    {
+        string path = ResolvePath(_basePath, filename);
+        string tmp = Path.Combine(_basePath, Path.GetRandomFileName());
+        try
+        {
+            await using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None,
+                256 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                await producer(fs, ct).ConfigureAwait(false);
+                await fs.FlushAsync(ct).ConfigureAwait(false);
+            }
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch (Exception ex) { Debug.WriteLine($"[LocalDSAAAdapter] Cleanup failed: {ex.Message}"); }
+            throw;
+        }
+    }
+
+    public override async Task WriteFragmentAsync(string filename, byte[] data, CancellationToken ct = default)
+    {
+        // Stream write via FileStream (same atomic tmp+move; avoids WriteAllBytes intermediate copies).
+        string path = ResolvePath(_basePath, filename);
+        string tmp = Path.Combine(_basePath, Path.GetRandomFileName());
+        try
+        {
+            await using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None,
+                256 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                await fs.WriteAsync(data.AsMemory(0, data.Length), ct).ConfigureAwait(false);
+                await fs.FlushAsync(ct).ConfigureAwait(false);
+            }
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch (Exception ex) { Debug.WriteLine($"[LocalDSAAAdapter] Cleanup failed: {ex.Message}"); }
+            throw;
+        }
+    }
 
     public override string? FindLatestIndex()
     {

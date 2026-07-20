@@ -24,6 +24,6 @@ public class ReachCommandTests
     [Fact]
     public void Command_HasOutputOption()
     {
-        Assert.NotNull(_command.Options.FirstOrDefault(o => o.Name == "o"));
+        Assert.NotNull(_command.Options.FirstOrDefault(o => o.Name == "-o"));
     }
 }

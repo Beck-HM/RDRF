@@ -1,5 +1,6 @@
 using System.Buffers;
-using RDRF.Core.Logging;using System.Diagnostics;
+using RDRF.Core.Logging;
+using System.Diagnostics;
 using RDRF.Core.Abstractions;
 using RDRF.Core.DSAA;
 using RDRF.Core.ETN;
@@ -15,13 +16,13 @@ public static class FssRepairService
 {
     // -- FSS6.1 Generation (backup) --
 
-    public static (Fss61RepairData? A, Fss61RepairData? B, Fss61RepairData? C)
-        Generate61(byte[] indexBytes, List<byte[]> fragments, byte[] rcBytes, int bs)
+    public static async Task<(Fss61RepairData? A, Fss61RepairData? B, Fss61RepairData? C)>
+        Generate61Async(byte[] indexBytes, List<byte[]> fragments, byte[] rcBytes, int bs)
     {
         var tA = Task.Run(() => GenLt(indexBytes, bs));
         var tB = Task.Run(() => GenLt(fragments, bs));
         var tC = Task.Run(() => GenLt(rcBytes, bs));
-        Task.WaitAll(tA, tB, tC);
+        await Task.WhenAll(tA, tB, tC).ConfigureAwait(false);
         return (tA.Result, tB.Result, tC.Result);
     }
 
@@ -33,15 +34,20 @@ public static class FssRepairService
             fragments[i] = Fss61RepairTrailer.Build(fragments[i], fp, fp, a, c);
     }
 
+    // Sync wrapper for callers that can't await
+    public static (Fss61RepairData? A, Fss61RepairData? B, Fss61RepairData? C)
+        Generate61(byte[] indexBytes, List<byte[]> fragments, byte[] rcBytes, int bs)
+        => Generate61Async(indexBytes, fragments, rcBytes, bs).GetAwaiter().GetResult();
+
     // -- FSS6.2 Generation (backup) --
 
-    public static (Fss62RepairData? A, Fss62RepairData? B, Fss62RepairData? C)
-        Generate62(byte[] indexBytes, List<byte[]> fragments, byte[] rcBytes, int bs)
+    public static async Task<(Fss62RepairData? A, Fss62RepairData? B, Fss62RepairData? C)>
+        Generate62Async(byte[] indexBytes, List<byte[]> fragments, byte[] rcBytes, int bs)
     {
         var tA = Task.Run(() => GenDuip(indexBytes, bs));
         var tB = Task.Run(() => GenDuip(fragments, bs));
         var tC = Task.Run(() => GenDuip(rcBytes, bs));
-        Task.WaitAll(tA, tB, tC);
+        await Task.WhenAll(tA, tB, tC).ConfigureAwait(false);
         return (tA.Result, tB.Result, tC.Result);
     }
 
@@ -52,6 +58,11 @@ public static class FssRepairService
         for (int i = 0; i < fragments.Count; i++)
             fragments[i] = Fss62RepairTrailer.Build(fragments[i], fp, fp, a, c);
     }
+
+    // Sync wrapper for callers that can't await
+    public static (Fss62RepairData? A, Fss62RepairData? B, Fss62RepairData? C)
+        Generate62(byte[] indexBytes, List<byte[]> fragments, byte[] rcBytes, int bs)
+        => Generate62Async(indexBytes, fragments, rcBytes, bs).GetAwaiter().GetResult();
 
     // -- FSS6.1 Repair (restore) --
 
@@ -71,15 +82,20 @@ public static class FssRepairService
 
     internal static byte[][] SplitToBlocks(byte[] data, int blockSize)
     {
+        if (blockSize <= 0) throw new ArgumentOutOfRangeException(nameof(blockSize));
         int count = (data.Length + blockSize - 1) / blockSize;
+        if (count == 0) return Array.Empty<byte[]>();
         var blocks = new byte[count][];
-        for (int i = 0; i < count; i++)
-            blocks[i] = new byte[blockSize];
         for (int i = 0; i < count; i++)
         {
             int off = i * blockSize;
             int len = Math.Min(blockSize, data.Length - off);
-            Buffer.BlockCopy(data, off, blocks[i], 0, len);
+            // Fountain XOR needs fixed blockSize; pad last block with zeros (same as before).
+            // Allocate exact blockSize once per block (avoid zero-then-copy double pass).
+            byte[] block = new byte[blockSize];
+            if (len > 0)
+                Buffer.BlockCopy(data, off, block, 0, len);
+            blocks[i] = block;
         }
         return blocks;
     }
@@ -113,10 +129,20 @@ public static class FssRepairService
 
     private static Fss61RepairData? GenLt(List<byte[]> fragments, int bs)
     {
+        const int MaxBlocks = 60000;
         int totalBlocks = 0;
         foreach (var frag in fragments)
             totalBlocks += (frag.Length + bs - 1) / bs;
         if (totalBlocks <= 0) return null;
+
+        // If block count exceeds limit, increase block size to stay within bounds
+        while (totalBlocks > MaxBlocks && bs < 16384)
+        {
+            bs *= 2;
+            totalBlocks = 0;
+            foreach (var frag in fragments)
+                totalBlocks += (frag.Length + bs - 1) / bs;
+        }
 
         var all = new byte[totalBlocks][];
         int idx = 0;
@@ -155,10 +181,20 @@ public static class FssRepairService
 
     private static Fss62RepairData? GenDuip(List<byte[]> fragments, int bs)
     {
+        const int MaxBlocks = 60000;
         int totalBlocks = 0;
         foreach (var frag in fragments)
             totalBlocks += (frag.Length + bs - 1) / bs;
         if (totalBlocks <= 0) return null;
+
+        // Match GenLt: grow block size so block count stays bounded (large backups).
+        while (totalBlocks > MaxBlocks && bs < 16384)
+        {
+            bs *= 2;
+            totalBlocks = 0;
+            foreach (var frag in fragments)
+                totalBlocks += (frag.Length + bs - 1) / bs;
+        }
 
         var all = new byte[totalBlocks][];
         int idx = 0;
@@ -380,7 +416,7 @@ internal static class RepairRunner
         for (int fi = 0; fi < sorted.Count; fi++)
         {
             var rawData = parseRaw(sorted[fi].Value);
-            cvResult.CorruptedFragmentBlocks.TryGetValue(fi, out var badBlocks);
+            cvResult.CorruptedFragmentBlocks.TryGetValue(sorted[fi].Key, out var badBlocks);
             for (int off = 0; off < rawData.Length; off += blockSize)
             {
                 int len = Math.Min(blockSize, rawData.Length - off);
@@ -398,7 +434,7 @@ internal static class RepairRunner
         {
             byte[] frag = sorted[fi].Value;
             int rawLen = rawLengths[fi];
-            cvResult.CorruptedFragmentBlocks.TryGetValue(fi, out var badBlocks);
+            cvResult.CorruptedFragmentBlocks.TryGetValue(sorted[fi].Key, out var badBlocks);
             for (int off = 0; off < rawLen; off += blockSize)
             {
                 int localIdx = off / blockSize;

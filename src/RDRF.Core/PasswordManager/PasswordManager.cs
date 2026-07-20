@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using RDRF.Core.Configuration;
@@ -31,6 +32,18 @@ public class PasswordManager
         });
     }
 
+    public void Set(string key, byte[] value)
+    {
+        EnsureStore();
+        string encoded = Convert.ToBase64String(EncryptValueBytes(value));
+        _store!.UpsertKey(new PasswordEntry
+        {
+            Key = key,
+            Value = encoded,
+            CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+        });
+    }
+
     public string? GetByKey(string key)
     {
         EnsureStore();
@@ -40,7 +53,11 @@ public class PasswordManager
         {
             return DecryptValue(Convert.FromBase64String(entry.Value));
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[PasswordManager] Failed to decrypt value for key '{key}': {ex.Message}");
+            return null;
+        }
     }
 
     public void AttachHash(string key, string indexHash)
@@ -101,6 +118,21 @@ public class PasswordManager
     {
         byte[] key = DeriveValueKey();
         byte[] plaintext = Encoding.UTF8.GetBytes(value);
+        try
+        {
+            return EncryptBytes(key, plaintext);
+        }
+        finally { CryptographicOperations.ZeroMemory(plaintext); }
+    }
+
+    private byte[] EncryptValueBytes(byte[] value)
+    {
+        byte[] key = DeriveValueKey();
+        return EncryptBytes(key, value);
+    }
+
+    private static byte[] EncryptBytes(byte[] key, byte[] plaintext)
+    {
         byte[] nonce = RandomNumberGenerator.GetBytes(12);
         byte[] ciphertext = new byte[plaintext.Length];
         byte[] tag = new byte[16];

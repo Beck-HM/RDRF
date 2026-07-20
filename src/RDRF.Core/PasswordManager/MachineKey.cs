@@ -14,6 +14,9 @@ internal static partial class MachineKey
         if (_cached != null) return _cached;
 
         string machineId = GetMachineId();
+        if (machineId.Contains("FALLBACK", StringComparison.OrdinalIgnoreCase))
+            throw new PlatformNotSupportedException("MachineKey: failed to obtain machine identifier. Cannot derive encryption key.");
+
         byte[] key = SHA256.HashData(Encoding.UTF8.GetBytes(machineId + "RDRF_PW_V1"));
         _cached = key;
         return key;
@@ -36,9 +39,11 @@ internal static partial class MachineKey
             {
                 using var regKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
                     @"SOFTWARE\Microsoft\Cryptography");
-                return regKey?.GetValue("MachineGuid")?.ToString() ?? "WIN_FALLBACK";
+                var result = regKey?.GetValue("MachineGuid")?.ToString();
+                if (!string.IsNullOrEmpty(result)) return result;
             }
-            catch { return "WIN_FALLBACK"; }
+            catch { }
+            return "WIN_FALLBACK";
         }
 
         if (OperatingSystem.IsLinux())
@@ -46,9 +51,14 @@ internal static partial class MachineKey
             try
             {
                 string path = "/etc/machine-id";
-                return File.Exists(path) ? File.ReadAllText(path).Trim() : "LINUX_FALLBACK";
+                if (File.Exists(path))
+                {
+                    string result = File.ReadAllText(path).Trim();
+                    if (!string.IsNullOrEmpty(result)) return result;
+                }
             }
-            catch { return "LINUX_FALLBACK"; }
+            catch { }
+            return "LINUX_FALLBACK";
         }
 
         if (OperatingSystem.IsMacOS())

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using RDRF.Core.DSAA.Abi;
 using RDRF.Core.Logging;
@@ -100,7 +101,7 @@ public static class NativePluginLoader
                             continue; // .NET assembly, skip
                     }
                 }
-                catch { /* best effort */ }
+                catch (Exception ex) { Debug.WriteLine($"[NativePluginLoader] PE header check failed: {ex.Message}"); }
                 files.Add(f);
             }
         }

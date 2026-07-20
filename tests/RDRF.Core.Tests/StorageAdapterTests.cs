@@ -116,6 +116,26 @@ public class StorageAdapterTests : IDisposable
         Assert.Equal(data, read);
     }
 
+    [Fact]
+    public async Task WriteFragmentAsync_IsAtomic()
+    {
+        var data = new byte[4096];
+        new Random(42).NextBytes(data);
+
+        await _adapter.WriteFragmentAsync("atomic_test.rdrf", data);
+
+        Assert.True(_adapter.FragmentExists("atomic_test.rdrf"));
+        var read = await _adapter.ReadFragmentAsync("atomic_test.rdrf");
+        Assert.Equal(data, read);
+    }
+
+    [Fact]
+    public async Task ReadFragmentAsync_Nonexistent_ShouldReturnEmptyOrThrow()
+    {
+        await Assert.ThrowsAsync<FileNotFoundException>(() =>
+            _adapter.ReadFragmentAsync("nonexistent_frag.rdrf"));
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_testDir, recursive: true); } catch { }

@@ -59,7 +59,7 @@ public class VerifyCommand : Command
                     return 1;
                 }
 
-                if (index.Fss6FragmentBlockMaps == null && index.Fss6RcBlockMap == null)
+                if (!index.HasFss6EtnData)
                 {
                     AnsiConsole.MarkupLine("[red]Error: backup does not contain FSS6/ETN data - verification requires FSS6[/]");
                     return 1;

@@ -22,6 +22,7 @@ public static class RestoreFragmentReader
         int decryptErrors = 0;
 
         var sourceKeys = new Dictionary<string, byte[]>();
+        var sourcePrefixes = new Dictionary<string, string>();
         if (index?.Fragments != null)
         {
             for (int i = 0; i < fragmentCount && i < index.Fragments.Count; i++)
@@ -30,15 +31,19 @@ public static class RestoreFragmentReader
                 if (sv != null && !sourceKeys.ContainsKey(sv))
                 {
                     byte[] srcIdx = await storage.ReadIndexAsync(sv, ct).ConfigureAwait(false);
-                    byte[] salt = srcIdx.AsSpan(0, RDRF.Core.Constants.SaltPrefixLength).ToArray();
-                    sourceKeys[sv] = encryption.DeriveKey(rcCode, salt);
+                    // Auto-detect PBKDF2+salt vs legacy SHA256 key (do not assume salt prefix).
+                    (byte[] srcKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(srcIdx, rcCode);
+                    sourceKeys[sv] = srcKey;
+                    var srcIndex = indexManager.DeserializeIndex(cbor);
+                    sourcePrefixes[sv] = srcIndex.CustomName ?? sv;
                 }
             }
         }
 
+        int concurrency = Math.Max(Constants.DefaultParallelism, Math.Min(fragmentCount, 32));
         await Parallel.ForEachAsync(
             Enumerable.Range(0, fragmentCount),
-            new ParallelOptions { MaxDegreeOfParallelism = RDRF.Core.Constants.DefaultParallelism },
+            new ParallelOptions { MaxDegreeOfParallelism = concurrency },
             async (i, ct2) =>
             {
                 ct2.ThrowIfCancellationRequested();
@@ -51,7 +56,7 @@ public static class RestoreFragmentReader
                     if (index?.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
                     {
                         sourceFp = index.Fragments[i].SourceVersion;
-                        sourcePrefix = sourceFp;
+                        sourcePrefix = sourcePrefixes.TryGetValue(sourceFp, out var sp) ? sp : sourceFp;
                         if (sourceKeys.TryGetValue(sourceFp, out var cachedKey))
                             key = cachedKey;
                     }
@@ -61,9 +66,20 @@ public static class RestoreFragmentReader
                         sourceIdx = index.Fragments[i].SourceIndex.Value;
 
                     string fname = Frags.FragmentFilename(sourcePrefix, sourceIdx);
-                    byte[] encrypted = await storage.ReadFragmentAsync(fname, ct2)
-                        .ConfigureAwait(false);
-                    byte[] raw = encryption.DecryptAndStripFragment(encrypted, key);
+                    byte[] raw;
+                    try
+                    {
+                        await using var stream = await storage.OpenReadFragmentAsync(fname, ct2)
+                            .ConfigureAwait(false);
+                        raw = await EncryptionLayer.DecryptAndStripFragmentFromStreamAsync(stream, key, ct2)
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is not CryptographicException and not OperationCanceledException)
+                    {
+                        byte[] encrypted = await storage.ReadFragmentAsync(fname, ct2)
+                            .ConfigureAwait(false);
+                        raw = encryption.DecryptAndStripFragment(encrypted, key);
+                    }
                     result[i] = raw;
                 }
                 catch (CryptographicException)

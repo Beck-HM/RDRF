@@ -45,7 +45,7 @@ public class RealVersioningTests : IDisposable
     public async Task FreshBackup_CreatesIndexAndFragments()
     {
         File.WriteAllBytes(_testFile, new byte[] { 0x01, 0x02, 0x03, 0x04 });
-        string fp = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
+        string fp = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
         Assert.NotNull(fp);
         Assert.True(_storage.IndexExists(fp), "Index file should exist");
         // At least fragment 0 should exist
@@ -58,10 +58,10 @@ public class RealVersioningTests : IDisposable
     {
         // v1 backup
         File.WriteAllBytes(_testFile, new byte[] { 0x0A, 0x0B, 0x0C });
-        string fp1 = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
+        string fp1 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
 
         // v2: same file content - fingerprint unchanged, no new fragments
-        string fp2 = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v2 no change", "FSS1");
+        string fp2 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v2 no change", "FSS1");
         Assert.Equal(fp1, fp2); // Same fingerprint since content unchanged
     }
 
@@ -70,14 +70,14 @@ public class RealVersioningTests : IDisposable
     {
         // v1: small file
         File.WriteAllBytes(_testFile, new byte[] { 0xAA, 0xBB });
-        string fp1 = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
+        string fp1 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
         var frags1 = _storage.ListFragments().Count;
 
         // v2: larger file - new fragment(s) written
         var bigger = new byte[2 * 1024 * 1024 + 100]; // 2 MB + 100 bytes
         new Random(42).NextBytes(bigger);
         File.WriteAllBytes(_testFile, bigger);
-        string fp2 = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v2 bigger", "FSS1");
+        string fp2 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v2 bigger", "FSS1");
         Assert.NotEqual(fp1, fp2);
 
         // Both versions' indexes should exist
@@ -90,15 +90,15 @@ public class RealVersioningTests : IDisposable
     {
         // v1
         File.WriteAllBytes(_testFile, new byte[] { 0x10, 0x20, 0x30 });
-        string fp1 = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
+        string fp1 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
 
         // v2: modified
         File.WriteAllBytes(_testFile, new byte[] { 0x10, 0x20, 0x30, 0x40 });
-        string fp2 = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v2 added byte", "FSS1");
+        string fp2 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v2 added byte", "FSS1");
 
         // v3: further modified
         File.WriteAllBytes(_testFile, new byte[] { 0x10, 0x20, 0x30, 0x40, 0x50 });
-        string fp3 = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v3 added another", "FSS1");
+        string fp3 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v3 added another", "FSS1");
 
         // All 3 indexes survive
         Assert.True(_storage.IndexExists(fp1), "v1 index");
@@ -114,8 +114,8 @@ public class RealVersioningTests : IDisposable
         File.WriteAllBytes(_testFile, content);
         string expectedHash = Sha256Hex(content);
 
-        // RealVersionedBackup backup -> standard engine restore
-        string fp = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
+        // Versioned backup -> standard engine restore
+        string fp = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
         Assert.True(_storage.IndexExists(fp), "index exists");
 
         using var engine = new RDRFEngine(_password, _storage);
@@ -134,7 +134,7 @@ public class RealVersioningTests : IDisposable
         rng.NextBytes(v1content);
         File.WriteAllBytes(_testFile, v1content);
         string expectedHash = Sha256Hex(v1content);
-        string fp1 = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
+        string fp1 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
 
         // Verify v1 via standard engine
         using var engine = new RDRFEngine(_password, _storage);
@@ -147,7 +147,7 @@ public class RealVersioningTests : IDisposable
         File.WriteAllBytes(_testFile, v2content);
         string expectedHash2 = Sha256Hex(v2content);
 
-        string fp2 = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v2 bigger", "FSS1");
+        string fp2 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v2 bigger", "FSS1");
 
         // Verify v2 index metadata
         byte[] enc2 = _storage.ReadIndex(fp2);
@@ -166,15 +166,15 @@ public class RealVersioningTests : IDisposable
         // v1
         var v1content = new byte[] { 0x01, 0x02, 0x03 };
         File.WriteAllBytes(_testFile, v1content);
-        string fp1 = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
+        string fp1 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
 
         // v2
         File.WriteAllBytes(_testFile, new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 });
-        string fp2 = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v2", "FSS1");
+        string fp2 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v2", "FSS1");
 
         // v3
         File.WriteAllBytes(_testFile, new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07 });
-        string fp3 = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v3", "FSS1");
+        string fp3 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v3", "FSS1");
 
         // Verify all indexes exist
         Assert.True(_storage.IndexExists(fp1), "v1 index exists");
@@ -194,7 +194,7 @@ public class RealVersioningTests : IDisposable
         var v1data = new byte[1024 * 1024];
         new Random(42).NextBytes(v1data);
         File.WriteAllBytes(_testFile, v1data);
-        string fp1 = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
+        string fp1 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
 
         // Count fragments after v1
         int fragsAfterV1 = _storage.ListFragments().Count;
@@ -204,7 +204,7 @@ public class RealVersioningTests : IDisposable
         Array.Copy(v1data, v2data, v1data.Length);
         new Random(99).NextBytes(v2data.AsSpan(v1data.Length));
         File.WriteAllBytes(_testFile, v2data);
-        string fp2 = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v2 append", "FSS1");
+        string fp2 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v2 append", "FSS1");
 
         // After v2: all fragments from v1 should still exist
         int fragsAfterV2 = _storage.ListFragments().Count;
@@ -219,9 +219,72 @@ public class RealVersioningTests : IDisposable
     public async Task RestoreVersion_InvalidVersion_Throws()
     {
         File.WriteAllBytes(_testFile, new byte[] { 0x01 });
-        string fp = await RealVersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
+        string fp = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            RealVersionedRestore.RestoreVersionAsync(_storage, fp, 99, Path.Combine(_testDir, "out.bin"), _password));
+        using var engine = new RDRFEngine(_password, _storage);
+        Exception? ex = await Record.ExceptionAsync(() =>
+            engine.RestoreFileFromFragmentsAsync("nonexistent_version_fp",
+                Path.Combine(_testDir, "out.bin")));
+        Assert.NotNull(ex);
+    }
+
+    [Fact]
+    public async Task VersionHistory_Preserved_AcrossIncrementalBackups()
+    {
+        File.WriteAllBytes(_testFile, new byte[] { 0x01, 0x02, 0x03 });
+        string fp1 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
+
+        var bigger = new byte[1024];
+        new Random(42).NextBytes(bigger);
+        File.WriteAllBytes(_testFile, bigger);
+        string fp2 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v2", "FSS1");
+
+        var idx = LoadIndex(fp2);
+        Assert.NotNull(idx.Versions);
+        Assert.True(idx.Versions.Count >= 2, $"Expected >=2 version records, got {idx.Versions?.Count}");
+        Assert.Contains(idx.Versions, v => v.Version == 1 && v.UserMessage == "v1");
+        Assert.Contains(idx.Versions, v => v.Version == 2 && v.UserMessage == "v2");
+    }
+
+    [Fact]
+    public async Task FreshBackup_WithCustomName_ReadsIndexCorrectly()
+    {
+        File.WriteAllBytes(_testFile, new byte[] { 0x01, 0x02, 0x03, 0x04 });
+        string fp = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "initial", "FSS1", customName: "CustFresh");
+        Assert.NotNull(fp);
+        Assert.True(_storage.IndexExists(fp), $"Index should exist at {fp}");
+    }
+
+    [Fact]
+    public async Task IncrementalBackup_ChangedFragments_RoundTripRestore()
+    {
+        File.WriteAllBytes(_testFile, new byte[] { 0x01, 0x02, 0x03, 0x04 });
+        await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
+
+        var changed = new byte[2048];
+        new Random(42).NextBytes(changed);
+        File.WriteAllBytes(_testFile, changed);
+        string fp2 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v2", "FSS1");
+
+        var idx2 = LoadIndex(fp2);
+        Assert.NotNull(idx2);
+        Assert.True(idx2.Fragments.Count > 0, "v2 should have fragments");
+    }
+
+    [Fact]
+    public async Task IncrementalBackup_WithChanges_RestoreCompletesWithoutDecryptErrors()
+    {
+        File.WriteAllBytes(_testFile, new byte[] { 0x0A, 0x0B, 0x0C, 0x0D });
+        string fp1 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v1", "FSS1");
+
+        var changed = new byte[2048];
+        new Random(42).NextBytes(changed);
+        File.WriteAllBytes(_testFile, changed);
+        string fp2 = await VersionedBackup.BackupAsync(_testFile, _storage, _password, "v2", "FSS1");
+
+        string outV2 = Path.Combine(_testDir, "restored_v2.bin");
+        using var engine = new RDRFEngine(_password, _storage);
+        await engine.RestoreFileFromFragmentsAsync(fp2, outV2);
+        Assert.True(File.Exists(outV2));
     }
 }

@@ -337,13 +337,6 @@ public static class DuipCode
                     for (int t = 0; t < idxArr.Length; t++)
                     {
                         int bi = idxArr[t];
-                        if (!known[bi] && !colMap.ContainsKey(bi))
-                            XorBlock(rhsMat.AsSpan(r * blockSize, blockSize), allBlocks[bi].AsSpan(0, blockSize));
-                    }
-
-                    for (int t = 0; t < idxArr.Length; t++)
-                    {
-                        int bi = idxArr[t];
                         if (colMap.TryGetValue(bi, out int ci))
                             mat[r][ci] = 1;
                     }
@@ -414,7 +407,7 @@ public static class DuipCode
             else
             {
                 // Scalar fallback: XOR all 64 byte positions across blocks
-                Span<byte> xorBuf = stackalloc byte[64];
+                Span<byte> xorBuf = new byte[64];
                 for (int i = start; i < end; i++)
                 {
                     int copyLen = Math.Min(64, sourceBlocks[i].Length);
@@ -494,20 +487,40 @@ public static class DuipCode
         }
         faceCoverage[anchorFace]++;
 
-        // PRNG-driven degree (data-independent for cacheability)
+        // PRNG-driven degree (data-independent for cacheability).
+        // Cap by K: when K < degree the old fallback (col+1)%K dedup loop spun forever
+        // (e.g. tiny files with few ETN blocks → FSS6.2 backup hung for minutes).
         degree = 6;
         if (useReverseDeg)
             degree = Math.Clamp(10 - degree, 2, MaxDegree);
+        if (K <= 0)
+        {
+            degree = 0;
+            indices = Array.Empty<int>();
+            return;
+        }
+        degree = Math.Min(degree, K);
 
         Span<int> used = stackalloc int[MaxDegree];
         int usedCount = 0;
 
-        int anchorCol = anchorFace * faceSize + (NextPseudo(ref prng) % Math.Min(faceSize, K - anchorFace * faceSize));
+        int faceSpan = Math.Min(faceSize, K - anchorFace * faceSize);
+        if (faceSpan <= 0)
+        {
+            // Degenerate face at end of last incomplete face — pick any column.
+            faceSpan = K;
+            anchorFace = 0;
+        }
+        int anchorCol = anchorFace * faceSize + (NextPseudo(ref prng) % faceSpan);
+        if (anchorCol >= K) anchorCol %= K;
         used[usedCount++] = anchorCol;
         colCoverage[anchorCol]++;
 
         for (int t = 1; t < degree; t++)
         {
+            if (usedCount >= K)
+                break;
+
             int col;
             if (NextPseudo(ref prng) % 3 > 0)
             {
@@ -533,10 +546,20 @@ public static class DuipCode
                 // Fall through to fallback
             }
 
-            // Fallback: random column with dedup
+            // Fallback: random column with dedup (bounded — never spin when K columns are used)
             col = NextPseudo(ref prng) % K;
-            for (int i = 0; i < usedCount; i++)
-                if (used[i] == col) { col = (col + 1) % K; i = -1; }
+            int attempts = 0;
+            while (attempts < K)
+            {
+                bool dup = false;
+                for (int i = 0; i < usedCount; i++)
+                    if (used[i] == col) { dup = true; break; }
+                if (!dup) break;
+                col = (col + 1) % K;
+                attempts++;
+            }
+            if (attempts >= K)
+                break; // all columns already in this symbol
             colCoverage[col]++;
             used[usedCount++] = col;
         }

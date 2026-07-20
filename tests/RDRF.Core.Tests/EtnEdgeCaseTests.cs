@@ -52,17 +52,11 @@ public class EtnEdgeCaseTests
                 string fname = $"{prefix}_{i}.rdrf";
                 byte[] fileBytes = storage.ReadFragment(fname);
                 var (_, data, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fileBytes, aesKey);
-                // Strip ETN trailer from fragment data
+                // Decompress first (compression applied after FSS/ETN during backup)
+                if (!string.IsNullOrEmpty(index.Compression))
+                    data = Compression.Compressor.Decompress(data, index.Compression);
+                // Strip ETN trailer from decompressed data
                 var cleanData = Fss6Etn.ParseTrailer(data).RawData;
-                // Strip padding using OriginalFragmentSizes, then decompress per fragment
-                if (index.Compression == Constants.CompressionLz4)
-                {
-                    int storedSize = (index.OriginalFragmentSizes != null && i < index.OriginalFragmentSizes.Count)
-                        ? index.OriginalFragmentSizes[i] : cleanData.Length;
-                    byte[] stored = cleanData.AsSpan(0, Math.Min(storedSize, cleanData.Length)).ToArray();
-                    try { cleanData = Compression.Compressor.Decompress(stored, Constants.CompressionLz4); }
-                    catch { cleanData = stored; }
-                }
                 decrypted.Add(cleanData);
             }
 

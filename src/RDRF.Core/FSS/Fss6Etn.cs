@@ -32,9 +32,15 @@ public class Fss6Etn : IFssStrategy
 
     public byte[] Strip(byte[] fragmentData)
     {
-        var (raw61, _, _, _, _) = Fss61RepairTrailer.Parse(fragmentData);
-        if (raw61.Length < fragmentData.Length)
-            return EtnTrailer.Parse(raw61).RawData;
+        var (raw62, _, _, _, _) = Fss62RepairTrailer.Parse(fragmentData);
+        if (raw62.Length < fragmentData.Length)
+        {
+            var (raw61, _, _, _, _) = Fss61RepairTrailer.Parse(raw62);
+            return raw61.Length < raw62.Length ? EtnTrailer.Parse(raw61).RawData : EtnTrailer.Parse(raw62).RawData;
+        }
+        var (rawFrom61, _, _, _, _) = Fss61RepairTrailer.Parse(fragmentData);
+        if (rawFrom61.Length < fragmentData.Length)
+            return EtnTrailer.Parse(rawFrom61).RawData;
         return EtnTrailer.Parse(fragmentData).RawData;
     }
 
@@ -52,6 +58,10 @@ public class Fss6Etn : IFssStrategy
     public static byte[] StripEtnFieldsFromIndexJson(byte[] indexBytes)
         => EtnPrecision.StripFss6Fields(indexBytes);
 
+    /// <summary>Slim index for per-fragment embedded headers (standalone index unchanged).</summary>
+    public static byte[] StripForEmbeddedHeader(byte[] indexBytes)
+        => EtnPrecision.StripForEmbeddedHeader(indexBytes);
+
     public static (List<byte[]> Fragments, byte[] RcJson) InjectCrossValidation(
         List<byte[]> fragments, byte[] indexBytes, RdrfIndex index,
         string fileFingerprint, long fileSize, string strategy)
@@ -66,23 +76,25 @@ public class Fss6Etn : IFssStrategy
             fragmentBlockFlats[i] = EtnBlockMap.Build(fragments[i], bs);
         });
 
-        // C (RC) stores: Index(8B+2B) + Fragment(8B+2B)
+        // C (RC): prefer binary flats on index path; RC CBOR still needs maps for tools.
+        // Skip base64 hex lists when possible to cut CPU/size (no legacy compat required).
         var rcFile = new RcFile
         {
             Version = 1,
             FileFingerprint = fileFingerprint,
+            // Compact: 8B maps only (2B redundant with first 2 of 8B for repair tooling)
             IndexBlockMap = HexListFromSecondFlat(indexBlockFlat, idxBlockCount),
-            Index2B = HexListFromFirstFlat(indexBlockFlat, idxBlockCount),
+            Index2B = null,
             FragmentBlockMaps = fragmentBlockFlats.Select(f => HexListFromSecondFlat(f, EtnBlockMap.BlockCount(f))).ToList(),
-            Fragment2B = fragmentBlockFlats.Select(f => HexListFromFirstFlat(f, EtnBlockMap.BlockCount(f))).ToList(),
+            Fragment2B = null,
             CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
         };
         byte[] rcBytes = rcFile.ToCborBytes();
         byte[] rcBlockFlat = EtnBlockMap.Build(rcBytes, bs);
         int rcBlockCount = EtnBlockMap.BlockCount(rcBlockFlat);
 
-        // B trailer stores: Index(2B+8B) + RC(2B+8B)
-        for (int i = 0; i < fragments.Count; i++)
+        // B trailer stores: Index(2B+8B) + RC(2B+8B) — independent per fragment
+        Parallel.For(0, fragments.Count, i =>
         {
             int rawLen = fragments[i].Length;
             byte[] trailer = EtnTrailer.Build(
@@ -93,7 +105,7 @@ public class Fss6Etn : IFssStrategy
             Buffer.BlockCopy(fragments[i], 0, withTrailer, 0, rawLen);
             Buffer.BlockCopy(trailer, 0, withTrailer, rawLen, trailer.Length);
             fragments[i] = withTrailer;
-        }
+        });
 
         // A (Index) stores: Fragment(8B+2B) + RC(8B+2B) — modify in-place
         AddFss6FieldsToIndex(index, fragmentBlockFlats, rcBlockFlat);
@@ -103,21 +115,16 @@ public class Fss6Etn : IFssStrategy
     private static void AddFss6FieldsToIndex(
         RdrfIndex index, byte[][] fragmentBlockFlats, byte[] rcBlockFlat)
     {
-        int rcBlockCount = EtnBlockMap.BlockCount(rcBlockFlat);
-        index.Fss6RcBlockMap = HexListFromSecondFlat(rcBlockFlat, rcBlockCount);
-        index.Fss6Rc2B = HexListFromFirstFlat(rcBlockFlat, rcBlockCount);
+        // Binary flats only (Analyze already prefers Flat over hex lists).
+        index.Fss6RcBlockMap = null;
+        index.Fss6Rc2B = null;
         index.Fss6RcBlockMapFlat = (byte[])rcBlockFlat.Clone();
 
-        index.Fss6FragmentBlockMaps = new List<List<string>>();
-        index.Fss6FragmentBlockMapsFlat = new List<byte[]>();
-        index.Fss6Fragment2B = new List<List<string>>();
+        index.Fss6FragmentBlockMaps = null;
+        index.Fss6Fragment2B = null;
+        index.Fss6FragmentBlockMapsFlat = new List<byte[]>(fragmentBlockFlats.Length);
         for (int i = 0; i < fragmentBlockFlats.Length; i++)
-        {
-            int fc = EtnBlockMap.BlockCount(fragmentBlockFlats[i]);
-            index.Fss6FragmentBlockMaps.Add(HexListFromSecondFlat(fragmentBlockFlats[i], fc));
             index.Fss6FragmentBlockMapsFlat.Add((byte[])fragmentBlockFlats[i].Clone());
-            index.Fss6Fragment2B.Add(HexListFromFirstFlat(fragmentBlockFlats[i], fc));
-        }
     }
 
     public static CrossValidationResult CrossValidate(

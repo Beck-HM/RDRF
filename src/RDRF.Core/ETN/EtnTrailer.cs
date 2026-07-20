@@ -86,16 +86,15 @@ public static class EtnTrailer
         byte[] rc2B = ReadBlockMapFlat(fragmentData, ref offset, rcCount, Trailer2BHashLen);
         byte[] rc8B = ReadBlockMapFlat(fragmentData, ref offset, rcCount, Trailer8BHashLen);
 
-        byte[] rawData = new byte[rawSize];
-        Buffer.BlockCopy(fragmentData, 0, rawData, 0, rawSize);
+        byte[] rawData = fragmentData.AsSpan(0, rawSize).ToArray();
         return new EtnTrailerData(rawData, idx2B, idxCount, idx8B, idxCount, rc2B, rcCount, rc8B, rcCount);
     }
 
     private static byte[] ReadBlockMapFlat(byte[] data, ref int offset, int count, int hashLen)
     {
         if (count <= 0) return [];
-        if (offset + count * hashLen > data.Length) count = (data.Length - offset) / hashLen;
-        if (count <= 0) return [];
+        if (offset + count * hashLen > data.Length)
+            throw new InvalidDataException($"Trailer block map truncated: expected {count * hashLen} bytes at offset {offset}, only {data.Length - offset} available");
         byte[] flat = new byte[count * hashLen];
         Buffer.BlockCopy(data, offset, flat, 0, flat.Length);
         offset += flat.Length;

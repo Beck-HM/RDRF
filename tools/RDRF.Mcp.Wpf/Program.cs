@@ -1,5 +1,6 @@
 using System.IO;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using RDRF.Mcp.Wpf;
 using RDRF.Mcp.Wpf.Tools;
@@ -10,7 +11,7 @@ string? apiKey = Environment.GetEnvironmentVariable("RDRF_MCP_KEY");
 if (string.IsNullOrEmpty(apiKey))
 {
     apiKey = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
-    Console.Error.WriteLine($"[rdrf-mcp-wpf] WARNING: RDRF_MCP_KEY not set, using ephemeral key: {apiKey}");
+    Console.Error.WriteLine("[rdrf-mcp-wpf] WARNING: RDRF_MCP_KEY not set, using ephemeral key");
     Console.Error.WriteLine("[rdrf-mcp-wpf] Set RDRF_MCP_KEY environment variable for persistent auth.");
 }
 else
@@ -88,7 +89,9 @@ await foreach (var json in ReadStdInAsync())
                 if (!string.IsNullOrEmpty(envKey))
                 {
                     string? requestKey = root.TryGetProperty("params", out var p) && p.TryGetProperty("apiKey", out var ak) ? ak.GetString() : null;
-                    if (requestKey != envKey)
+                    if (!CryptographicOperations.FixedTimeEquals(
+                            Encoding.UTF8.GetBytes(requestKey ?? ""),
+                            Encoding.UTF8.GetBytes(envKey)))
                     {
                         if (id != null)
                             WriteJson(new { jsonrpc = "2.0", id = id, error = new { code = -32001, message = "Unauthorized: invalid or missing apiKey" } });

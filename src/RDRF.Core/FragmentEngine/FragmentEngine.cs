@@ -12,21 +12,30 @@ public static class Frags
 {
     private const int DefaultFragmentSize = 1024 * 1024;
 
+    /// <summary>
+    /// Stream-split a file into fragments while computing fingerprint (no full-file double buffer).
+    /// Peak memory is still O(file) for the returned fragment list (callers that need all parts),
+    /// but avoids holding a separate full-file byte[] alongside the list.
+    /// </summary>
     public static (List<byte[]> fragments, string fingerprint) SplitFile(string filePath, int fragmentSize = 0)
     {
-        if (fragmentSize <= 0) fragmentSize = DefaultFragmentSize;
+        long fileLen = new FileInfo(filePath).Length;
+        if (fragmentSize <= 0) fragmentSize = Constants.ComputeFragmentSize(fileLen, null);
 
-        byte[] fileData = File.ReadAllBytes(filePath);
-        string fingerprint = ComputeFingerprint(fileData);
-
+        using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
+            FileShare.Read, Math.Clamp(fragmentSize, 64 * 1024, 1024 * 1024), FileOptions.SequentialScan);
+        using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var fragments = new List<byte[]>();
-        for (int offset = 0; offset < fileData.Length; offset += fragmentSize)
+        var buf = new byte[fragmentSize];
+        int read;
+        while ((read = fs.Read(buf, 0, fragmentSize)) > 0)
         {
-            int len = Math.Min(fragmentSize, fileData.Length - offset);
-            byte[] fragment = new byte[len];
-            Buffer.BlockCopy(fileData, offset, fragment, 0, len);
-            fragments.Add(fragment);
+            hasher.AppendData(buf.AsSpan(0, read));
+            var frag = new byte[read];
+            Buffer.BlockCopy(buf, 0, frag, 0, read);
+            fragments.Add(frag);
         }
+        string fingerprint = Hex.EncodeLower(hasher.GetHashAndReset());
         return (fragments, fingerprint);
     }
 
@@ -55,7 +64,7 @@ public static class Frags
 
     public static List<byte[]> SplitData(byte[] data, int fragmentSize = 0)
     {
-        if (fragmentSize <= 0) fragmentSize = DefaultFragmentSize;
+        if (fragmentSize <= 0) fragmentSize = Constants.ComputeFragmentSize(data.Length, null);
 
         var fragments = new List<byte[]>();
         for (int offset = 0; offset < data.Length; offset += fragmentSize)
@@ -77,8 +86,10 @@ public static class Frags
 
     public static byte[] MergeFragments(List<byte[]> fragments)
     {
-        int totalSize = 0;
+        long totalSize = 0;
         foreach (var f in fragments) totalSize += f.Length;
+        if (totalSize > int.MaxValue)
+            throw new RdrfException(ErrorCode.FileTooLarge, $"Merged fragment size {totalSize} exceeds maximum array size.");
         byte[] result = new byte[totalSize];
         int offset = 0;
         foreach (var f in fragments)
@@ -90,11 +101,17 @@ public static class Frags
     }
 
     public static string FragmentFilename(string filePrefix, int index)
-        => string.Format(Constants.FragmentFilePattern, filePrefix, index);
+    {
+        if (string.IsNullOrEmpty(filePrefix) || filePrefix.Contains("..") || filePrefix.Contains('/') || filePrefix.Contains('\\'))
+            throw new ArgumentException("Invalid file prefix: path traversal not allowed.", nameof(filePrefix));
+        if (filePrefix.Length == 64 && !System.Text.RegularExpressions.Regex.IsMatch(filePrefix, "^[0-9a-fA-F]{64}$"))
+            throw new ArgumentException("File prefix must be a valid SHA256 hex fingerprint.", nameof(filePrefix));
+        return string.Format(Constants.FragmentFilePattern, filePrefix, index);
+    }
 
     public static int GetFragmentCount(long fileSize, int fragmentSize = 0)
     {
-        if (fragmentSize <= 0) fragmentSize = DefaultFragmentSize;
+        if (fragmentSize <= 0) fragmentSize = Constants.ComputeFragmentSize(fileSize, null);
         return (int)((fileSize + fragmentSize - 1) / fragmentSize);
     }
 

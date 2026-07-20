@@ -40,7 +40,7 @@ public class FileLogSink : ILogSink
                             fi.Delete();
                     }
                 }
-                catch { /* best effort */ }
+                catch (Exception ex) { Debug.WriteLine($"[FileLogSink] Log cleanup failed: {ex.Message}"); }
             }
 
             string line = FormatEntry(entry);

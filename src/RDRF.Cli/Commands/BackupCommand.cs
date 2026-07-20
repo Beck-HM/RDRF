@@ -33,7 +33,7 @@ public class BackupCommand : Command
         var nameOpt = new Option<string?>("-name") { Description = "Custom name for the backup (optional)" };
         var nextOpt = new Option<bool>("-next", "--next") { Description = "Enable versioning (creates v1, supports 'rdrf next' for increments)" };
         var nodeOpt = new Option<bool>("-node", "--node") { Description = "Versioned backup with API distribution flag (use with rdrf remote + push)" };
-        var realOpt = new Option<bool>("-real", "--real") { Description = "Real incremental mode: keep all version files permanently" };
+        var gcOpt = new Option<bool>("-gc", "--gc") { Description = "Legacy GC mode: cleanup orphaned indexes between versions" };
         var messageOpt = new Option<string?>("-m") { Description = "Commit message for the initial version (used with -next or -node)" };
         var fss1 = new Option<bool>("-fss1", new[] { "--fss1" }) { Description = "FSS1 strategy" };
         var fss2 = new Option<bool>("-fss2", new[] { "--fss2" }) { Description = "FSS2 strategy" };
@@ -41,8 +41,20 @@ public class BackupCommand : Command
         var fss3 = new Option<bool>("-fss3", new[] { "--fss3" }) { Description = "FSS3 strategy - Reed-Solomon encoding" };
         var fss5 = new Option<bool>("-fss5", new[] { "--fss5" }) { Description = "FSS5 strategy" };
         var fss5p = new Option<bool>("-fss5+", new[] { "--fss5+" }) { Description = "FSS5+ strategy" };
-        var fss61 = new Option<bool>("-fss6.1", new[] { "--fss6.1" }) { Description = "FSS6.1 strategy - ETN + LT fountain repair" };
-        var fss62 = new Option<bool>("-fss6.2", new[] { "--fss6.2" }) { Description = "FSS6.2 strategy - ETN + Duip fountain repair" };
+        // Plain FSS6 (ETN validation only). Avoid "-fss6.1" as primary: SCL can split on '.'.
+        // Prefer -fss61 / --fss6.1 (and same for 6.2).
+        var fss6 = new Option<bool>("-fss6", new[] { "--fss6" })
+            { Description = "FSS6 strategy - ETN cross-validation only" };
+        var fss61 = new Option<bool>("-fss61", new[] { "--fss61", "--fss6.1", "-fss6.1" })
+            { Description = "FSS6.1 strategy - ETN + LT fountain repair (alias: --fss6.1)" };
+        var fss62 = new Option<bool>("-fss62", new[] { "--fss62", "--fss6.2", "-fss6.2" })
+            { Description = "FSS6.2 strategy - ETN + Duip fountain repair (alias: --fss6.2)" };
+        var compressionOpt = new Option<string[]>("-c")
+        {
+            Description = "Compression method and options. Values: lz4, lz4hc, zstd, gzip, brotli, lzma2, lzo, xz, ckc. e.g. -c zstd 5",
+            Arity = new ArgumentArity(1, 2),
+            AllowMultipleArgumentsPerToken = true
+        };
         // FSA multi-strategy fusion is temporarily disabled. Single-strategy mode only.
         // var fsaOpt = new Option<bool>("-fsa") { Description = "Enable multi-strategy FSA fusion mode (used with multiple --fss options)" };
 
@@ -54,8 +66,9 @@ public class BackupCommand : Command
         Options.Add(nameOpt);
         Options.Add(messageOpt);
         Add(fss1); Add(fss2); Add(fss2r);
-        Add(fss3); Add(fss5); Add(fss5p); Add(fss61); Add(fss62);
-        Add(nextOpt); Add(nodeOpt); Add(realOpt);
+        Add(fss3); Add(fss5); Add(fss5p); Add(fss6); Add(fss61); Add(fss62);
+        Add(nextOpt); Add(nodeOpt); Add(gcOpt);
+        Add(compressionOpt);
 
         SetAction(async (ParseResult parseResult, CancellationToken ct) =>
         {
@@ -76,6 +89,7 @@ public class BackupCommand : Command
                 (parseResult.GetValue(fss3), Constants.FssLevel3),
                 (parseResult.GetValue(fss5), Constants.FssLevel5),
                 (parseResult.GetValue(fss5p), Constants.FssLevel5P),
+                (parseResult.GetValue(fss6), Constants.FssLevel6),
                 (parseResult.GetValue(fss61), Constants.FssLevel61),
                 (parseResult.GetValue(fss62), Constants.FssLevel62),
             };
@@ -96,6 +110,15 @@ public class BackupCommand : Command
                 return 1;
             }
             strategy = selected[0];
+
+            var compArgs = parseResult.GetValue(compressionOpt);
+            string? compressionMethod = null;
+            string? compressionOptions = null;
+            if (compArgs is { Length: > 0 })
+            {
+                compressionMethod = compArgs[0];
+                compressionOptions = compArgs.Length > 1 ? compArgs[1] : null;
+            }
 
             if (fpKey != null && pwd != null)
             {
@@ -145,11 +168,10 @@ public class BackupCommand : Command
                 string mode = enableNode ? "node" : "versioned";
                 await ProgressReporter.Run($"Backing up {nf.Name}", async prog =>
                 {
-                    fp = enableNext && parseResult.GetValue(realOpt)
-                        ? await RealVersionedBackup.BackupAsync(nf.FullName, new LocalDSAAAdapter(storagePath), password,
-                            commitMsg ?? "Initial backup", strategy, fragmentSize, customName, auxiliary, prog)
-                        : await VersionedBackup.BackupAsync(nf.FullName, new LocalDSAAAdapter(storagePath), password,
-                            commitMsg ?? "Initial backup", strategy, fragmentSize, customName, auxiliary, prog, ct: ct);
+                    fp = await VersionedBackup.BackupAsync(nf.FullName, new LocalDSAAAdapter(storagePath), password,
+                            commitMsg ?? "Initial backup", strategy, fragmentSize, customName, auxiliary, prog, ct: ct,
+                            compressionMethod: compressionMethod, compressionOptions: compressionOptions,
+                            gcMode: parseResult.GetValue(gcOpt));
                 });
                 var resultTable = new Table();
                 resultTable.Border(TableBorder.Rounded);
@@ -171,6 +193,7 @@ public class BackupCommand : Command
                         resultTable.AddRow("Repair data", BackupHelpers.FormatSize(rcSize));
                 }
                 AnsiConsole.Write(resultTable);
+                return 0;
             }
 
             var storage = new LocalDSAAAdapter(storagePath);
@@ -185,7 +208,8 @@ public class BackupCommand : Command
                     {
                         firstFp = await engine.BackupFileAsync(file.FullName, strategy,
                             fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliary,
-                            progress: progress, cancellationToken: ct);
+                            progress: progress, cancellationToken: ct,
+                            compressionMethod: compressionMethod, compressionOptions: compressionOptions);
                     });
                     count = 1;
                 }
@@ -207,7 +231,8 @@ public class BackupCommand : Command
                             foreach (var f in files)
                             {
                                 var fp = await engine.BackupFileAsync(f.FullName, strategy,
-                                    fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliary, cancellationToken: ct);
+                                    fragmentSize: fragmentSize, customName: customName, auxiliaryStrategies: auxiliary, cancellationToken: ct,
+                                    compressionMethod: compressionMethod, compressionOptions: compressionOptions);
                                 firstFp ??= fp;
                                 count++;
                                 task.Value = count;
@@ -221,35 +246,45 @@ public class BackupCommand : Command
                 resultTable.AddColumn("Property");
                 resultTable.AddColumn(new TableColumn("Value").NoWrap());
                 string fp = firstFp ?? "";
+                // On-disk prefix is customName when -name is set; fingerprint alone is wrong for lookups.
+                string filePrefix = !string.IsNullOrEmpty(customName) ? customName : fp;
                 resultTable.AddRow("Fingerprint", fp.Length > 32 ? $"{fp[..12]}...{fp[^8..]}" : fp);
+                if (!string.IsNullOrEmpty(customName))
+                    resultTable.AddRow("Name", customName);
                 resultTable.AddRow("Strategy", strategy);
 
-                // Storage statistics
-                if (firstFp != null && Directory.Exists(storagePath))
+                // Storage statistics (prefix-aware for -name)
+                if (!string.IsNullOrEmpty(filePrefix) && Directory.Exists(storagePath))
                 {
                     long fragTotal = 0; int fragCount = 0;
-                    foreach (var f in Directory.GetFiles(storagePath, $"{firstFp}_*.rdrf"))
+                    foreach (var f in Directory.GetFiles(storagePath, $"{filePrefix}_*.rdrf"))
                     {
                         fragTotal += new FileInfo(f).Length;
                         fragCount++;
                     }
-                    string? rcPath = Directory.GetFiles(storagePath, $"{firstFp}.rdrc")
+                    string? rcPath = Directory.GetFiles(storagePath, $"{filePrefix}.rdrc")
                         .FirstOrDefault();
                     long rcSize = rcPath != null ? new FileInfo(rcPath).Length : 0;
-                    long idxSize = new FileInfo(Path.Combine(storagePath, firstFp + ".indrdrf")).Length;
+                    string indexPath = Path.Combine(storagePath, filePrefix + Constants.IndexFileSuffix);
+                    if (!File.Exists(indexPath))
+                        indexPath = Path.Combine(storagePath, fp + Constants.IndexFileSuffix);
+                    long idxSize = File.Exists(indexPath) ? new FileInfo(indexPath).Length : 0;
 
                     resultTable.AddRow("Fragments", $"{fragCount} ({BackupHelpers.FormatSize(fragTotal)})");
                     if (rcSize > 0)
                         resultTable.AddRow("Repair data", BackupHelpers.FormatSize(rcSize));
-                    resultTable.AddRow("Index", BackupHelpers.FormatSize(idxSize));
+                    if (idxSize > 0)
+                        resultTable.AddRow("Index", BackupHelpers.FormatSize(idxSize));
                 }
 
                 AnsiConsole.Write(resultTable);
 
                 // Attach index hash for FastPassword
-                if (usedFpKey != null && firstFp != null)
+                if (usedFpKey != null && !string.IsNullOrEmpty(filePrefix))
                 {
-                    string indexPath = Path.Combine(storagePath, firstFp + ".indrdrf");
+                    string indexPath = Path.Combine(storagePath, filePrefix + Constants.IndexFileSuffix);
+                    if (!File.Exists(indexPath) && !string.IsNullOrEmpty(fp))
+                        indexPath = Path.Combine(storagePath, fp + Constants.IndexFileSuffix);
                     if (File.Exists(indexPath))
                     {
                         string indexHash = HashHelper.ComputeSha256Hex(indexPath);

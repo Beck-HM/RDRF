@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
 using RDRF.Core.Index;
 
 namespace RDRF.Core.FSS;
@@ -11,19 +12,64 @@ public class Fss1Neighbor : IFssStrategy
 {
     public string Level => Constants.FssLevel1;
 
+    /// <summary>
+    /// Encode self||next for each fragment. Uses sequential windowed residency:
+    /// after fragment i is encoded, raw[i] is released when no longer needed as a neighbor
+    /// (raw[0] kept until the ring wrap of the last fragment). Peak ≈ 2× file (encoded)
+    /// instead of raw + encoded ≈ 3× during a full parallel materialize.
+    /// Mutates <paramref name="fragments"/> slots to null as raw is released.
+    /// </summary>
     public List<byte[]> Encode(List<byte[]> fragments)
     {
         int n = fragments.Count;
-        var encoded = new List<byte[]>(n);
-        for (int i = 0; i < n; i++)
+        if (n == 0) return new List<byte[]>();
+
+        if (n == 1)
         {
-            int nextIdx = (i + 1) % n;
-            byte[] combined = new byte[fragments[i].Length + fragments[nextIdx].Length];
-            Buffer.BlockCopy(fragments[i], 0, combined, 0, fragments[i].Length);
-            Buffer.BlockCopy(fragments[nextIdx], 0, combined, fragments[i].Length, fragments[nextIdx].Length);
-            encoded.Add(combined);
+            byte[] only = fragments[0];
+            byte[] combined = new byte[checked(only.Length * 2)];
+            Buffer.BlockCopy(only, 0, combined, 0, only.Length);
+            Buffer.BlockCopy(only, 0, combined, only.Length, only.Length);
+            CryptographicOperations.ZeroMemory(only);
+            fragments[0] = null!;
+            return new List<byte[]> { combined };
         }
-        return encoded;
+
+        var encoded = new byte[n][];
+        // Keep frag0 alive until last ring wrap (next of n-1).
+        byte[] first = fragments[0];
+
+        for (int i = 0; i < n - 1; i++)
+        {
+            byte[] self = fragments[i] ?? throw new InvalidOperationException($"FSS1.Encode: raw[{i}] already released");
+            byte[] next = fragments[i + 1] ?? throw new InvalidOperationException($"FSS1.Encode: raw[{i + 1}] already released");
+            byte[] combined = new byte[checked(self.Length + next.Length)];
+            Buffer.BlockCopy(self, 0, combined, 0, self.Length);
+            Buffer.BlockCopy(next, 0, combined, self.Length, next.Length);
+            encoded[i] = combined;
+
+            // raw[i] was self for i and next for i-1 (already done). Keep raw[0] for wrap.
+            if (i >= 1)
+            {
+                CryptographicOperations.ZeroMemory(self);
+                fragments[i] = null!;
+            }
+        }
+
+        // Last: self = n-1, next = first (ring)
+        {
+            byte[] self = fragments[n - 1] ?? throw new InvalidOperationException($"FSS1.Encode: raw[{n - 1}] already released");
+            byte[] combined = new byte[checked(self.Length + first.Length)];
+            Buffer.BlockCopy(self, 0, combined, 0, self.Length);
+            Buffer.BlockCopy(first, 0, combined, self.Length, first.Length);
+            encoded[n - 1] = combined;
+            CryptographicOperations.ZeroMemory(self);
+            fragments[n - 1] = null!;
+            CryptographicOperations.ZeroMemory(first);
+            fragments[0] = null!;
+        }
+
+        return new List<byte[]>(encoded);
     }
 
     public Dictionary<int, byte[]> Decode(
@@ -118,7 +164,7 @@ public class Fss1Neighbor : IFssStrategy
         {
             int size = originalSizes[index];
             if (size > encodedFragment.Length)
-                throw new InvalidOperationException($"FSS1.StripSingle[{index}]: originalSize={size} > fragLen={encodedFragment.Length}");
+                throw new RdrfException(ErrorCode.FssEncodingFailed, $"FSS1.StripSingle[{index}]: originalSize={size} > fragLen={encodedFragment.Length}");
             byte[] stripped = new byte[size];
             Buffer.BlockCopy(encodedFragment, 0, stripped, 0, size);
             return stripped;

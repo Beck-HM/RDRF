@@ -1,5 +1,6 @@
 bin/
 obj/
+*.rdrf
 *.dll
 *.exe
 *.pdb
@@ -11,6 +12,7 @@ obj/
 .DS_Store
 Thumbs.db
 dist/
+.rdrf/
 results.csv
 rdrf_metadata.json
 test_out.txt

@@ -145,18 +145,21 @@ public class Fss5CrossRecovery : IFssStrategy
 
     private static bool IsValidFss5Fragment(byte[] data, out int ownSize)
     {
+        // Fragments can be up to Constants.MaxFragmentSize (not 1 MiB).
+        // A 1 MiB cap made StripSingle leave FSS5 wrappers intact on large files → corrupt restore.
+        const int maxPart = Constants.MaxFragmentSize;
         ownSize = 0;
         if (data.Length < 12) return false;
         ownSize = BitConverter.ToInt32(data, 0);
-        if (ownSize <= 0 || ownSize > 1024 * 1024) return false;
+        if (ownSize <= 0 || ownSize > maxPart) return false;
         int off = 4 + ownSize;
         if (off + 4 > data.Length) return false;
         int n1Size = BitConverter.ToInt32(data, off);
-        if (n1Size <= 0 || n1Size > 1024 * 1024) return false;
+        if (n1Size <= 0 || n1Size > maxPart) return false;
         off += 4 + n1Size;
         if (off + 4 > data.Length) return false;
         int n2Size = BitConverter.ToInt32(data, off);
-        if (n2Size <= 0 || n2Size > 1024 * 1024) return false;
+        if (n2Size <= 0 || n2Size > maxPart) return false;
         off += 4 + n2Size;
         return data.Length == off;
     }

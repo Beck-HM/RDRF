@@ -55,6 +55,30 @@ public class StorageOrchestrator
             options.FragmentIndex, _backendNames[backend], path, data.Length, hashHex, options.Note);
     }
 
+    /// <summary>
+    /// Stream a local file to remote (hash-while-copy; no full-file buffer).
+    /// </summary>
+    public async Task WriteFragmentFromFileAsync(string localPath, StorageUploadOptions options,
+        IProgress<StorageProgress>? progress = null, CancellationToken ct = default)
+    {
+        EnsureConfigured(options);
+        var backend = SelectBackend(options);
+        var path = BuildPath(options.Fingerprint, options.VersionNumber, options.FragmentIndex);
+        long size = new FileInfo(localPath).Length;
+        if (options.FileSize <= 0)
+            options.FileSize = size;
+
+        await using var input = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read,
+            256 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        await using var remote = await backend.OpenWriteAsync(path, size, progress).ConfigureAwait(false);
+        await CopyAndHashAsync(input, remote, hasher, ct).ConfigureAwait(false);
+        var hashHex = Hex.EncodeLower(hasher.GetHashAndReset());
+
+        _management.RecordFragment(options.Fingerprint, options.VersionNumber,
+            options.FragmentIndex, _backendNames[backend], path, size, hashHex, options.Note);
+    }
+
     public async Task WriteRcAsync(byte[] data, StorageUploadOptions options,
         IProgress<StorageProgress>? progress = null)
     {
@@ -72,6 +96,42 @@ public class StorageOrchestrator
             _backendNames[backend], path, data.Length, hashHex, options.Note);
     }
 
+    /// <summary>
+    /// Stream a local RC file to remote (hash-while-copy; no full-file buffer).
+    /// </summary>
+    public async Task WriteRcFromFileAsync(string localPath, StorageUploadOptions options,
+        IProgress<StorageProgress>? progress = null, CancellationToken ct = default)
+    {
+        EnsureConfigured(options);
+        var backend = SelectBackendForRc(options);
+        var path = BuildRcPath(options.Fingerprint, options.VersionNumber);
+        long size = new FileInfo(localPath).Length;
+        if (options.FileSize <= 0)
+            options.FileSize = size;
+
+        await using var input = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read,
+            256 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        await using var remote = await backend.OpenWriteAsync(path, size, progress).ConfigureAwait(false);
+        await CopyAndHashAsync(input, remote, hasher, ct).ConfigureAwait(false);
+        var hashHex = Hex.EncodeLower(hasher.GetHashAndReset());
+
+        _management.RecordRc(options.Fingerprint, options.VersionNumber,
+            _backendNames[backend], path, size, hashHex, options.Note);
+    }
+
+    private static async Task CopyAndHashAsync(Stream input, Stream output, IncrementalHash hasher,
+        CancellationToken ct)
+    {
+        var buffer = new byte[256 * 1024];
+        int read;
+        while ((read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), ct).ConfigureAwait(false)) > 0)
+        {
+            hasher.AppendData(buffer.AsSpan(0, read));
+            await output.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+        }
+    }
+
     public async Task<byte[]> ReadAllFragmentsAsync(string fingerprint, int version)
     {
         var records = _management.Lookup(fingerprint, version);
@@ -80,7 +140,7 @@ public class StorageOrchestrator
         var tasks = records.Select(async record =>
         {
             if (!_backends.TryGetValue(record.BackendName, out var backend))
-                throw new InvalidOperationException(
+                throw new RdrfException(ErrorCode.StorageBackendUnavailable, 
                     $"Backend '{record.BackendName}' not registered");
 
             await using var stream = await backend.OpenReadAsync(record.RemotePath)
@@ -102,10 +162,10 @@ public class StorageOrchestrator
         var records = _management.Lookup(fingerprint, version);
         var rcRecord = records.FirstOrDefault(r => r.ContentType == "rc");
         if (rcRecord == null)
-            throw new InvalidOperationException($"RC file not found for {fingerprint} v{version}");
+            throw new RdrfException(ErrorCode.StorageBackendUnavailable, $"RC file not found for {fingerprint} v{version}");
 
         if (!_backends.TryGetValue(rcRecord.BackendName, out var backend))
-            throw new InvalidOperationException(
+            throw new RdrfException(ErrorCode.StorageBackendUnavailable, 
                 $"Backend '{rcRecord.BackendName}' not registered");
 
         await using var stream = await backend.OpenReadAsync(rcRecord.RemotePath)
@@ -119,11 +179,11 @@ public class StorageOrchestrator
         int version, int fragmentIndex)
     {
         var record = _management.LookupSingle(fingerprint, version, fragmentIndex)
-            ?? throw new InvalidOperationException(
+            ?? throw new RdrfException(ErrorCode.StorageBackendUnavailable, 
                 $"Fragment {fragmentIndex} not found for {fingerprint} v{version}");
 
         if (!_backends.TryGetValue(record.BackendName, out var backend))
-            throw new InvalidOperationException(
+            throw new RdrfException(ErrorCode.StorageBackendUnavailable, 
                 $"Backend '{record.BackendName}' not registered");
 
         return await backend.OpenReadAsync(record.RemotePath).ConfigureAwait(false);
@@ -161,7 +221,7 @@ public class StorageOrchestrator
             foreach (var name in options.Backends)
             {
                 if (!_backends.TryGetValue(name, out var backend))
-                    throw new InvalidOperationException(
+                    throw new RdrfException(ErrorCode.StorageBackendUnavailable, 
                         $"Backend '{name}' not registered. Call RegisterBackend first.");
 
                 var existing = _management.GetRemote(name);
@@ -183,7 +243,7 @@ public class StorageOrchestrator
 
         var candidates = GetCandidates(options.Backends, options.ExcludeBackends);
         if (candidates.Count == 0)
-            throw new InvalidOperationException("No available backends");
+            throw new RdrfException(ErrorCode.StorageBackendUnavailable, "No available backends");
 
         if (options.FragmentCount <= 0)
             return candidates[0];
@@ -199,7 +259,7 @@ public class StorageOrchestrator
 
         var candidates = GetCandidates(options.Backends, options.ExcludeBackends);
         if (candidates.Count == 0)
-            throw new InvalidOperationException("No available backends");
+            throw new RdrfException(ErrorCode.StorageBackendUnavailable, "No available backends");
         return candidates[0];
     }
 
@@ -209,7 +269,7 @@ public class StorageOrchestrator
         var names = backends ?? _backendOrder;
 
         if (names.Count == 0)
-            throw new InvalidOperationException("No backends specified");
+            throw new RdrfException(ErrorCode.StorageBackendUnavailable, "No backends specified");
 
         var excludeSet = exclude?.ToHashSet(StringComparer.OrdinalIgnoreCase)
             ?? new HashSet<string>();
@@ -224,7 +284,7 @@ public class StorageOrchestrator
     {
         if (_backends.TryGetValue(name, out var backend))
             return backend;
-        throw new InvalidOperationException($"Backend '{name}' not registered");
+        throw new RdrfException(ErrorCode.StorageBackendUnavailable, $"Backend '{name}' not registered");
     }
 
     private static string BuildPath(string fingerprint, int version, int fragmentIndex)

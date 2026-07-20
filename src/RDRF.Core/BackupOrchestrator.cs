@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using RDRF.Core.Abstractions;
 using RDRF.Core.Logging;
 using System.Buffers;
@@ -5,6 +6,7 @@ using System.IO.Hashing;
 using System.Security.Cryptography;
 using System.Text.Json;
 using RDRF.Core.Compression;
+using RDRF.Core.Compression.Ckc;
 using RDRF.Core.Encryption;
 using RDRF.Core.ETN;
 using RDRF.Core.FragmentEngine;
@@ -21,18 +23,16 @@ namespace RDRF.Core;
 /// Core backup pipeline orchestrator. Manages the full lifecycle of a backup:
 ///
 /// Pipeline:
-///   Stream read -> Incremental SHA256 hash -> Fragment (1 MB blocks)
-///   -> LZ4 compress per block -> FSS encode (strategy-dependent)
-///   -> ETN cross-validation inject (FSS6.x) -> Fountain code repair (FSS6.1/6.2)
-///   -> Encrypt with embedded index header -> Batch parallel write to storage
+///   Stream read -> Incremental SHA-256 hash -> Fragment (adaptive size)
+///   -> FSS encode (strategy-dependent)
+///   -> Compress (FSS6.1/6.2: before ETN; others: after ETN)
+///   -> ETN inject (FSS6.x) -> Fountain repair data (FSS6.1/6.2) -> repair trailers
+///   -> Encrypt with slim embedded index -> Batch encrypt+write
 ///   -> Write standalone Index file -> Write RC file -> Save metadata
 ///
 /// Two constructors:
 ///   (aesKey, rcCode, ...) - callers that already have a derived AES key.
 ///   (rcCode, storage, salt, ...) - derives AES key via PBKDF2 with salt.
-///
-/// All public methods delegate to BackupCoreAsync. The sync wrappers are
-/// [Obsolete] and block on the async path via GetAwaiter().GetResult().
 /// </summary>
 public class BackupOrchestrator : IDisposable
 {
@@ -114,8 +114,10 @@ public class BackupOrchestrator : IDisposable
         int fragmentSize = 0,
         string? customName = null,
         IProgress<RdrfProgressReport>? progress = null,
-        CancellationToken cancellationToken = default)
-        => BackupCoreAsync(filePath, fssStrategy, auxiliaryStrategies, originalFilename, fragmentSize, customName, progress, cancellationToken);
+        CancellationToken cancellationToken = default,
+        string? compressionMethod = null,
+        string? compressionOptions = null)
+        => BackupCoreAsync(filePath, fssStrategy, auxiliaryStrategies, originalFilename, fragmentSize, customName, progress, cancellationToken, compressionMethod, compressionOptions);
 
     /// <summary>
     /// Asynchronous backup with FileInfo.
@@ -184,51 +186,87 @@ public class BackupOrchestrator : IDisposable
         int fragmentSize,
         string? customName,
         IProgress<RdrfProgressReport>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? compressionMethod = null,
+        string? compressionOptions = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var fileInfo = new FileInfo(filePath);
         string filename = originalFilename ?? fileInfo.Name;
         long fileSize = fileInfo.Length;
 
-        const long maxFileSize = 4L * 1024 * 1024 * 1024; // 4 GB
+        const long maxFileSize = 16L * 1024 * 1024 * 1024; // 16 GB
         if (fileSize > maxFileSize)
-            throw new InvalidOperationException($"File too large ({fileSize:N0} bytes). Maximum supported size is {maxFileSize:N0} bytes.");
+            throw new RdrfException(ErrorCode.FileTooLarge, $"File too large ({fileSize:N0} bytes). Maximum supported size is {maxFileSize:N0} bytes.");
 
         _logger.Info("BackupOrchestrator", $"Backing up: {filename} ({fileSize:N0} bytes)");
 
-        int fragSize = fragmentSize > 0 ? fragmentSize : 1024 * 1024;
-        var compressionMethod = Constants.CompressionLz4;
+        int fragSize = Constants.ComputeFragmentSize(fileSize, fragmentSize > 0 ? fragmentSize : null);
+        string cm = compressionMethod ?? Constants.CompressionLz4;
         string originalHash;
         string fileFingerprint;
 
         // Multi-strategy (auxiliary) temporarily disabled; single-strategy only.
         var plan = _fsa.Compute(fssStrategy, null);
+        var phaseSw = Stopwatch.StartNew();
 
-        // Phase 1: Stream file -> hash -> split raw -> LZ4 compress
+        // Fast path: pure FSS1 + non-CKC → O(window) two-pass pipeline (no full encoded set in RAM).
+        if (BackupPhases.Fss1WindowedPipeline.IsEligible(plan, cm))
+        {
+            return await BackupFss1WindowedAsync(
+                filePath, fragSize, fileSize, filename, customName, plan, cm, compressionOptions,
+                progress, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Phase 1: Stream file -> hash -> split raw
         var readResult = await BackupPhases.BackupReadPhase.ExecuteAsync(
-            filePath, fragSize, progress, cancellationToken).ConfigureAwait(false);
+            filePath, fragSize, progress, cancellationToken,
+            compressionMethod, compressionOptions).ConfigureAwait(false);
         fileFingerprint = readResult.FileFingerprint;
         originalHash = readResult.OriginalHash;
+        long msRead = phaseSw.ElapsedMilliseconds;
 
         progress?.Report(new RdrfProgressReport { Stage = "Read", CurrentBytes = fileSize, TotalBytes = fileSize,
             CurrentItem = readResult.OriginalFragmentCount, TotalItems = readResult.OriginalFragmentCount });
 
-        _logger.Info("BackupOrchestrator", $"Phase 1: Read {fileSize:N0} bytes, {readResult.OriginalFragmentCount} raw fragments, each LZ4->padded to {fragSize}");
+        _logger.Info("BackupOrchestrator",
+            $"Phase 1: Read {fileSize:N0} bytes, {readResult.OriginalFragmentCount} raw fragments in {msRead} ms");
 
         // Phase 2: FSS encode all fragments
-        var fragments = EncodeViaPlan(new List<byte[]>(readResult.OriginalFragments), plan);
+        progress?.Report(new RdrfProgressReport { Stage = "Encode", CurrentItem = 0, TotalItems = 1 });
+        phaseSw.Restart();
+        // Own the raw list so FSS1 can null slots as it window-releases neighbors.
+        var workRaw = new List<byte[]>(readResult.OriginalFragments);
+        var fragments = EncodeViaPlan(workRaw, plan);
+        // Drop raw aliases for GC: FSS1/2 zeroed raw during encode; others release unreferenced.
+        ReleaseRawAfterEncode(readResult, fragments, plan.EffectivePrimary);
+        long msEncode = phaseSw.ElapsedMilliseconds;
         progress?.Report(new RdrfProgressReport { Stage = "Encode", CurrentItem = fragments.Count, TotalItems = fragments.Count });
+        _logger.Info("BackupOrchestrator", $"Phase 2: Encode ({plan.EffectivePrimary}) {fragments.Count} frags in {msEncode} ms");
 
         string filePrefix = customName ?? fileFingerprint;
 
+        // Hash encoded fragments in parallel (fast hex path); only encoded set is resident.
         var fragmentHashes = new string[fragments.Count];
-        await Parallel.ForEachAsync(Enumerable.Range(0, fragments.Count),
-            new ParallelOptions { CancellationToken = cancellationToken }, (i, ct) =>
+        if (RDRF.Core.Device.GpuContext.IsAvailable)
         {
-            fragmentHashes[i] = IntegrityChecker.HashBytes(fragments[i]);
-            return ValueTask.CompletedTask;
-        }).ConfigureAwait(false);
+            var rawHashes = RDRF.Core.Device.GpuHasher.HashSHA256(fragments);
+            for (int i = 0; i < fragments.Count; i++)
+            {
+                var sb = new System.Text.StringBuilder(64);
+                for (int j = 0; j < 32; j++) sb.Append(rawHashes[i * 32 + j].ToString("x2"));
+                fragmentHashes[i] = sb.ToString();
+            }
+        }
+        else
+        {
+            await Parallel.ForEachAsync(Enumerable.Range(0, fragments.Count),
+                new ParallelOptions { MaxDegreeOfParallelism = Constants.DefaultParallelism, CancellationToken = cancellationToken }, (i, ct) =>
+            {
+                fragmentHashes[i] = IntegrityChecker.HashBytes(fragments[i]);
+                return ValueTask.CompletedTask;
+            }).ConfigureAwait(false);
+        }
 
         var embeddedIndex = IndexManager.BuildIndex(
             fileFingerprint: fileFingerprint,
@@ -248,116 +286,113 @@ public class BackupOrchestrator : IDisposable
             embeddedIndex.CustomName = customName;
         if (_salt.Length > 0)
             embeddedIndex.Salt = Hex.EncodeLower(_salt);
-        embeddedIndex.Compression = compressionMethod;
+        embeddedIndex.Compression = cm;
 
         // RawFragmentHashes = XxHash128 of UNCOMPRESSED data (content-addressable dedup key)
         embeddedIndex.RawFragmentHashes = readResult.RawHashes;
 
         byte[] serializedIndex = _indexManager.SerializeIndex(embeddedIndex);
-        byte[] rcBytes = [];
 
-        bool hasFss6 = plan.ActiveStrategies.Contains(Constants.FssLevel6)
-                     || plan.ActiveStrategies.Contains(Constants.FssLevel61)
-                     || plan.ActiveStrategies.Contains(Constants.FssLevel62);
-        bool hasFss61 = plan.ActiveStrategies.Contains(Constants.FssLevel61);
-        bool hasFss62 = plan.ActiveStrategies.Contains(Constants.FssLevel62);
-        if (hasFss6)
-        {
-            var (etnFragments, etnRcJson) = Fss6Etn.InjectCrossValidation(
-                fragments, serializedIndex, embeddedIndex, filePrefix, fileSize, plan.EffectivePrimary);
-            fragments = etnFragments;
-            rcBytes = etnRcJson;
-        }
+        Fss61RepairData? repairA = null, repairC = null;
+        Fss62RepairData? repair62A = null, repair62C = null;
+        byte[] rcBytes;
+        byte[] finalSerializedIndex;
+        progress?.Report(new RdrfProgressReport { Stage = "Protect", CurrentItem = 0, TotalItems = fragments.Count });
+        phaseSw.Restart();
+        (fragments, rcBytes, repairA, repairC, repair62A, repair62C, finalSerializedIndex) =
+            await RunFssPipelineAsync(fragments, serializedIndex, embeddedIndex,
+                filePrefix, fileSize, plan, cm, compressionOptions, cancellationToken);
+        long msProtect = phaseSw.ElapsedMilliseconds;
+        progress?.Report(new RdrfProgressReport { Stage = "Protect", CurrentItem = fragments.Count, TotalItems = fragments.Count });
+        _logger.Info("BackupOrchestrator", $"Phase Protect (compress/ETN/repair): {msProtect} ms");
 
-        if (hasFss61)
-            rcBytes = RunFss61Repair(serializedIndex, fragments, rcBytes, fileSize, filePrefix, fileFingerprint, plan.EffectivePrimary, embeddedIndex);
-        if (hasFss62)
-            rcBytes = RunFss62Repair(serializedIndex, fragments, rcBytes, fileSize, filePrefix, fileFingerprint, plan.EffectivePrimary, embeddedIndex);
+        // Slim embedded index in fragment headers (standalone Index keeps full BM/history).
+        byte[] embeddedIndexBytes = Fss6Etn.StripForEmbeddedHeader(finalSerializedIndex);
 
-        // Serialize ONCE after all in-place modifications
-        byte[] finalSerializedIndex = _indexManager.SerializeIndex(embeddedIndex);
-
-        // Strip BM fields from the Index before embedding in fragment headers
-        // to save ~20KB/fragment. The standalone Index file retains full BM data.
-        byte[] embeddedIndexBytes = Fss6Etn.StripEtnFieldsFromIndexJson(finalSerializedIndex);
-
-        long totalBytes = fragments.Sum(f => f.Length);
-
-        // Phase 3: Batch encrypt + write (8 fragments per batch)
-        const int BatchSize = 8;
-        var writeBatch = new List<(string path, byte[] data)>(BatchSize);
-        var writtenFragments = new HashSet<string>();
+        // Phase 3: Encrypt+write per fragment in parallel (pipeline: no second batch of ciphertext residency).
+        var writtenFragments = new System.Collections.Concurrent.ConcurrentDictionary<string, byte>();
+        bool indexWritten = false, rcWritten = false;
 
         try
         {
-            for (int i = 0; i < fragments.Count; i++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                byte[] fileData = FragmentFileHeader.EncryptWithEmbeddedIndex(
-                    fragments[i], embeddedIndexBytes, _aesKey, _salt.Length > 0 ? _salt : null);
-                string fname = Frags.FragmentFilename(filePrefix, i);
-                writeBatch.Add((fname, fileData));
-                fragments[i] = null!;
+            string fPrefix = filePrefix;
+            byte[] eib = embeddedIndexBytes;
+            byte[] ak = _aesKey;
+            byte[]? slt = _salt.Length > 0 ? _salt : null;
+            int nFrags = fragments.Count;
+            phaseSw.Restart();
 
-                progress?.Report(new RdrfProgressReport { Stage = "Write", CurrentItem = i + 1, TotalItems = fragments.Count });
-
-                if (writeBatch.Count >= BatchSize)
+            await Parallel.ForEachAsync(Enumerable.Range(0, nFrags),
+                new ParallelOptions { MaxDegreeOfParallelism = Constants.DefaultParallelism, CancellationToken = cancellationToken },
+                async (i, ct) =>
                 {
-                    await Parallel.ForEachAsync(writeBatch, new ParallelOptions
+                    byte[] plain = fragments[i];
+                    string fname = Frags.FragmentFilename(fPrefix, i);
+                    for (int retry = 0; ; retry++)
                     {
-                        MaxDegreeOfParallelism = Constants.DefaultParallelism,
-                        CancellationToken = cancellationToken
-                    }, async (item, ct) =>
-                    {
-                        for (int retry = 0; ; retry++)
-                            try { await _storage.WriteFragmentAsync(item.path, item.data, ct).ConfigureAwait(false); writtenFragments.Add(item.path); break; }
-                            catch when (retry < 2) { await Task.Delay(100 * (retry + 1), ct).ConfigureAwait(false); }
-                    }).ConfigureAwait(false);
-                    writeBatch.Clear();
-                }
-            }
-
-            // Flush remaining
-            if (writeBatch.Count > 0)
-            {
-                await Parallel.ForEachAsync(writeBatch, new ParallelOptions
-                {
-                    MaxDegreeOfParallelism = Constants.DefaultParallelism,
-                    CancellationToken = cancellationToken
-                }, async (item, ct) =>
-                {
-                    await _storage.WriteFragmentAsync(item.path, item.data, ct).ConfigureAwait(false);
-                    writtenFragments.Add(item.path);
+                        try
+                        {
+                            // Stream encrypt → temp file → atomic move (no long-lived ciphertext array)
+                            await _storage.WriteFragmentViaStreamAsync(fname, async (stream, ct2) =>
+                            {
+                                await FragmentFileHeader.EncryptWithEmbeddedIndexToStreamAsync(
+                                    stream, plain, eib, ak, slt, ct2).ConfigureAwait(false);
+                            }, ct).ConfigureAwait(false);
+                            CryptographicOperations.ZeroMemory(plain);
+                            fragments[i] = null!;
+                            writtenFragments.TryAdd(fname, 0);
+                            break;
+                        }
+                        catch when (retry < 2)
+                        {
+                            await Task.Delay(100 * (retry + 1), ct).ConfigureAwait(false);
+                        }
+                    }
                 }).ConfigureAwait(false);
-                writeBatch.Clear();
+
+            long msWrite = phaseSw.ElapsedMilliseconds;
+            progress?.Report(new RdrfProgressReport { Stage = "Write", CurrentItem = nFrags, TotalItems = nFrags });
+            _logger.Info("BackupOrchestrator",
+                $"Phase Write: encrypt+store {nFrags} frags in {msWrite} ms (read={msRead} encode={msEncode} protect={msProtect} write={msWrite})");
+
+            byte[] indexBytes = finalSerializedIndex;
+            if (_salt.Length > 0)
+            {
+                byte[] salted = _encryption.EncryptIndexWithSaltPrefix(indexBytes, _rcCode, _salt);
+                await _storage.WriteIndexAsync(filePrefix, salted, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                byte[] encryptedIndex = _encryption.EncryptIndexWithKey(indexBytes, _aesKey);
+                await _storage.WriteIndexAsync(filePrefix, encryptedIndex, cancellationToken).ConfigureAwait(false);
+            }
+            indexWritten = true;
+
+            if (rcBytes.Length > 0)
+            {
+                byte[] encryptedRc = _encryption.EncryptFragmentWithKey(rcBytes, _aesKey);
+                await _storage.WriteRcAsync(filePrefix, encryptedRc, cancellationToken).ConfigureAwait(false);
+                rcWritten = true;
             }
         }
         catch (OperationCanceledException)
         {
-            foreach (var f in writtenFragments)
+            foreach (var f in writtenFragments.Keys)
             {
                 try { _storage.DeleteFragment(f); }
-                catch { /* best-effort cleanup */ }
+                catch (Exception ex) { Debug.WriteLine($"[BackupOrchestrator] Cleanup failed for {f}: {ex.Message}"); }
+            }
+            if (indexWritten)
+            {
+                try { _storage.DeleteIndex(filePrefix); }
+                catch (Exception ex) { Debug.WriteLine($"[BackupOrchestrator] Index cleanup failed: {ex.Message}"); }
+            }
+            if (rcWritten)
+            {
+                try { _storage.DeleteRc(filePrefix); }
+                catch (Exception ex) { Debug.WriteLine($"[BackupOrchestrator] RC cleanup failed: {ex.Message}"); }
             }
             throw;
-        }
-
-        byte[] indexBytes = finalSerializedIndex;
-        if (_salt.Length > 0)
-        {
-                byte[] salted = _encryption.EncryptIndexWithSaltPrefix(indexBytes, _rcCode, _salt);
-            await _storage.WriteIndexAsync(filePrefix, salted, cancellationToken).ConfigureAwait(false);
-        }
-        else
-        {
-            byte[] encryptedIndex = _encryption.EncryptIndexWithKey(indexBytes, _aesKey);
-            await _storage.WriteIndexAsync(filePrefix, encryptedIndex, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (rcBytes.Length > 0)
-        {
-            byte[] encryptedRc = _encryption.EncryptFragmentWithKey(rcBytes, _aesKey);
-            await _storage.WriteRcAsync(filePrefix, encryptedRc, cancellationToken).ConfigureAwait(false);
         }
 
         _metadata.SaveBackup(
@@ -369,6 +404,109 @@ public class BackupOrchestrator : IDisposable
             fragmentHashes: fragmentHashes.ToList());
 
         _logger.Info("BackupOrchestrator", "Backup complete!");
+        return fileFingerprint;
+    }
+
+    /// <summary>
+    /// FSS1-only O(window) backup: pass1 hash metadata, pass2 encode/compress/write without
+    /// holding the full encoded fragment set.
+    /// </summary>
+    private async Task<string> BackupFss1WindowedAsync(
+        string filePath, int fragSize, long fileSize, string filename, string? customName,
+        FsaPlan plan, string compressionMethod, string? compressionOptions,
+        IProgress<RdrfProgressReport>? progress, CancellationToken cancellationToken)
+    {
+        var sw = Stopwatch.StartNew();
+        progress?.Report(new RdrfProgressReport { Stage = "Read", TotalBytes = fileSize });
+        var pass1 = await BackupPhases.Fss1WindowedPipeline.ScanHashAsync(
+            filePath, fragSize, progress, cancellationToken).ConfigureAwait(false);
+        long msPass1 = sw.ElapsedMilliseconds;
+        _logger.Info("BackupOrchestrator",
+            $"FSS1-window pass1: {pass1.FragmentCount} frags, fingerprint scan in {msPass1} ms");
+
+        string fileFingerprint = pass1.FileFingerprint;
+        string originalHash = pass1.OriginalHash;
+        string filePrefix = customName ?? fileFingerprint;
+
+        var embeddedIndex = IndexManager.BuildIndex(
+            fileFingerprint: fileFingerprint,
+            originalFilename: filename,
+            originalSize: fileSize,
+            fragmentHashes: pass1.EncodedFragmentHashes,
+            originalHash: originalHash,
+            fssStrategy: Constants.FssLevel1,
+            originalFragmentSizes: pass1.OriginalFragmentSizes,
+            originalFragmentCount: pass1.FragmentCount,
+            fssParams: new Dictionary<string, object>
+            {
+                ["plan"] = JsonSerializer.SerializeToElement(plan),
+                ["windowed"] = true
+            });
+
+        if (!string.IsNullOrEmpty(customName))
+            embeddedIndex.CustomName = customName;
+        if (_salt.Length > 0)
+            embeddedIndex.Salt = Hex.EncodeLower(_salt);
+        embeddedIndex.Compression = compressionMethod;
+        embeddedIndex.RawFragmentHashes = pass1.RawFragmentHashes;
+
+        byte[] finalSerializedIndex = _indexManager.SerializeIndex(embeddedIndex);
+        byte[] embeddedIndexBytes = Fss6Etn.StripForEmbeddedHeader(finalSerializedIndex);
+
+        var writtenFragments = new System.Collections.Concurrent.ConcurrentDictionary<string, byte>();
+        bool indexWritten = false;
+        try
+        {
+            sw.Restart();
+            progress?.Report(new RdrfProgressReport
+            {
+                Stage = "Write", CurrentItem = 0, TotalItems = pass1.FragmentCount
+            });
+            byte[]? salt = _salt.Length > 0 ? _salt : null;
+            await BackupPhases.Fss1WindowedPipeline.WriteFragmentsAsync(
+                filePath, fragSize, filePrefix, embeddedIndexBytes, _aesKey, salt,
+                compressionMethod, compressionOptions, _storage, progress, cancellationToken,
+                writtenFragments).ConfigureAwait(false);
+            long msWrite = sw.ElapsedMilliseconds;
+            _logger.Info("BackupOrchestrator",
+                $"FSS1-window pass2: write {pass1.FragmentCount} frags in {msWrite} ms (pass1={msPass1} ms)");
+
+            if (_salt.Length > 0)
+            {
+                byte[] salted = _encryption.EncryptIndexWithSaltPrefix(finalSerializedIndex, _rcCode, _salt);
+                await _storage.WriteIndexAsync(filePrefix, salted, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                byte[] encryptedIndex = _encryption.EncryptIndexWithKey(finalSerializedIndex, _aesKey);
+                await _storage.WriteIndexAsync(filePrefix, encryptedIndex, cancellationToken).ConfigureAwait(false);
+            }
+            indexWritten = true;
+        }
+        catch (OperationCanceledException)
+        {
+            foreach (var f in writtenFragments.Keys)
+            {
+                try { _storage.DeleteFragment(f); }
+                catch (Exception ex) { Debug.WriteLine($"[BackupOrchestrator] Cleanup failed for {f}: {ex.Message}"); }
+            }
+            if (indexWritten)
+            {
+                try { _storage.DeleteIndex(filePrefix); }
+                catch (Exception ex) { Debug.WriteLine($"[BackupOrchestrator] Index cleanup failed: {ex.Message}"); }
+            }
+            throw;
+        }
+
+        _metadata.SaveBackup(
+            fileFingerprint: fileFingerprint,
+            originalFilename: filename,
+            originalSize: fileSize,
+            originalHash: originalHash,
+            fssStrategy: Constants.FssLevel1,
+            fragmentHashes: pass1.EncodedFragmentHashes);
+
+        _logger.Info("BackupOrchestrator", "Backup complete (FSS1 windowed)!");
         return fileFingerprint;
     }
 
@@ -400,25 +538,53 @@ public class BackupOrchestrator : IDisposable
         List<byte[]>? prevRawHashes,
         IProgress<RdrfProgressReport>? progress,
         CancellationToken ct,
-        string? compressionMethod = null)
+        string? compressionMethod = null,
+        List<int>? rawFragmentSizes = null)
     {
-        int fragSize = fragmentSize > 0 ? fragmentSize : 1024 * 1024;
+        int fragSize = Constants.ComputeFragmentSize(fileSize, fragmentSize > 0 ? fragmentSize : null);
         string filePrefix = customName ?? fileFingerprint;
         var plan = _fsa.Compute(fssStrategy, null);
 
-        var fragments = EncodeViaPlan(new List<byte[]>(allRawFragments), plan);
-        var fragmentHashes = new List<string>(fragments.Count);
-        foreach (var f in fragments)
-            fragmentHashes.Add(IntegrityChecker.HashBytes(f));
-
+        // Raw sizes + XxHash BEFORE FSS1 windowed encode zeros/releases raw buffers.
         int originalFragmentCount = allRawFragments.Count;
-        var originalFragmentSizes = allRawFragments.Select(f => f.Length).ToList();
+        var originalFragmentSizes = rawFragmentSizes ?? allRawFragments.Select(f => f.Length).ToList();
+        var rawXxHashes = new List<byte[]>(allRawFragments.Count);
+        foreach (var f in allRawFragments)
+            rawXxHashes.Add(System.IO.Hashing.XxHash128.Hash(f.AsSpan()));
+
+        var workRaw = new List<byte[]>(allRawFragments);
+        var fragments = EncodeViaPlan(workRaw, plan);
+        // Drop caller raw aliases when FSS1 family released them (same array refs).
+        if (plan.EffectivePrimary is Constants.FssLevel1 or Constants.FssLevel2)
+        {
+            for (int i = 0; i < allRawFragments.Count; i++)
+                allRawFragments[i] = null!;
+        }
+
+        var fragmentHashes = new string[fragments.Count];
+        if (RDRF.Core.Device.GpuContext.IsAvailable)
+        {
+            var rawHashes = RDRF.Core.Device.GpuHasher.HashSHA256(fragments);
+            for (int i = 0; i < fragments.Count; i++)
+            {
+                var sb = new System.Text.StringBuilder(64);
+                for (int j = 0; j < 32; j++) sb.Append(rawHashes[i * 32 + j].ToString("x2"));
+                fragmentHashes[i] = sb.ToString();
+            }
+        }
+        else
+        {
+            Parallel.For(0, fragments.Count, new ParallelOptions { MaxDegreeOfParallelism = Constants.DefaultParallelism }, i =>
+            {
+                fragmentHashes[i] = IntegrityChecker.HashBytes(fragments[i]);
+            });
+        }
 
         var index = IndexManager.BuildIndex(
             fileFingerprint: fileFingerprint,
             originalFilename: originalFilename,
             originalSize: fileSize,
-            fragmentHashes: fragmentHashes,
+            fragmentHashes: fragmentHashes.ToList(),
             originalHash: originalHash,
             fssStrategy: plan.EffectivePrimary,
             originalFragmentSizes: originalFragmentSizes,
@@ -436,26 +602,17 @@ public class BackupOrchestrator : IDisposable
         if (compressionMethod != null)
             index.Compression = compressionMethod;
 
-        index.RawFragmentHashes = allRawFragments
-            .Select(f => System.IO.Hashing.XxHash128.Hash(f.AsSpan()))
-            .ToList();
+        index.RawFragmentHashes = rawXxHashes;
 
         byte[] serializedIndex = _indexManager.SerializeIndex(index);
-        byte[] rcBytes = [];
 
-        bool hasFss6 = plan.ActiveStrategies.Contains(Constants.FssLevel6)
-                     || plan.ActiveStrategies.Contains(Constants.FssLevel61);
-        bool hasFss61 = plan.ActiveStrategies.Contains(Constants.FssLevel61);
-        if (hasFss6)
-        {
-            var (etnFragments, etnRcJson) = Fss6Etn.InjectCrossValidation(
-                fragments, serializedIndex, index, filePrefix, fileSize, plan.EffectivePrimary);
-            fragments = etnFragments;
-            rcBytes = etnRcJson;
-        }
-
-        if (hasFss61)
-            rcBytes = RunFss61Repair(serializedIndex, fragments, rcBytes, fileSize, filePrefix, fileFingerprint, plan.EffectivePrimary, index);
+        string cm = compressionMethod ?? Constants.CompressionLz4;
+        byte[] rcBytes;
+        Fss61RepairData? repairA2 = null, repairC2 = null;
+        Fss62RepairData? repair62A2 = null, repair62C2 = null;
+        (fragments, rcBytes, repairA2, repairC2, repair62A2, repair62C2, _) =
+            await RunFssPipelineAsync(fragments, serializedIndex, index,
+                filePrefix, fileSize, plan, cm, null, ct);
 
         // Add FssParams and SourceVersion references, then serialize once
         index.FssParams = new Dictionary<string, object>
@@ -476,34 +633,50 @@ public class BackupOrchestrator : IDisposable
         long totalBytes = fragments.Sum(f => f.Length);
         long processedBytes = 0;
 
+        // Collect indices of fragments to write (skip unchanged)
+        var writeIndices = new List<int>();
         for (int i = 0; i < fragments.Count; i++)
         {
-            ct.ThrowIfCancellationRequested();
-
-            // Skip write for unchanged fragments (they reference prev version)
             if (index.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
             {
                 processedBytes += fragments[i].Length;
                 continue;
             }
-
-            byte[] fileData = FragmentFileHeader.EncryptWithEmbeddedIndex(
-                fragments[i], embeddedIndexBytes, _aesKey, _salt);
-            string fname = Frags.FragmentFilename(filePrefix, i);
-            int rawLen = fragments[i].Length;
-            await _storage.WriteFragmentAsync(fname, fileData, ct).ConfigureAwait(false);
-            fragments[i] = null!;
-            processedBytes += rawLen;
-
-            progress?.Report(new RdrfProgressReport
-            {
-                Stage = "Encrypting",
-                CurrentItem = i + 1,
-                TotalItems = fragments.Count,
-                CurrentBytes = processedBytes,
-                TotalBytes = totalBytes
-            });
+            writeIndices.Add(i);
         }
+
+        // Parallel stream encrypt+write (no full ciphertext array residency across all frags)
+        string fPrefix = filePrefix;
+        byte[] eib = embeddedIndexBytes;
+        byte[] ak = _aesKey;
+        byte[] slt = _salt;
+        int done = 0;
+        await Parallel.ForEachAsync(Enumerable.Range(0, writeIndices.Count),
+            new ParallelOptions { MaxDegreeOfParallelism = Constants.DefaultParallelism, CancellationToken = ct },
+            async (j, ctInner) =>
+            {
+                int i = writeIndices[j];
+                byte[] plain = fragments[i];
+                string fname = Frags.FragmentFilename(fPrefix, i);
+                long plainLen = plain.Length;
+                await _storage.WriteFragmentViaStreamAsync(fname, async (stream, ct2) =>
+                {
+                    await FragmentFileHeader.EncryptWithEmbeddedIndexToStreamAsync(
+                        stream, plain, eib, ak, slt, ct2).ConfigureAwait(false);
+                }, ctInner).ConfigureAwait(false);
+                CryptographicOperations.ZeroMemory(plain);
+                fragments[i] = null!;
+                long cur = Interlocked.Add(ref processedBytes, plainLen);
+                int item = Interlocked.Increment(ref done);
+                progress?.Report(new RdrfProgressReport
+                {
+                    Stage = "Encrypting",
+                    CurrentItem = item,
+                    TotalItems = writeIndices.Count,
+                    CurrentBytes = cur,
+                    TotalBytes = totalBytes
+                });
+            });
 
         if (_salt.Length > 0)
         {
@@ -528,9 +701,94 @@ public class BackupOrchestrator : IDisposable
             originalSize: fileSize,
             originalHash: originalHash,
             fssStrategy: fssStrategy,
-            fragmentHashes: fragmentHashes);
+            fragmentHashes: fragmentHashes.ToList());
 
         return index;
+    }
+
+    /// <summary>
+    /// Shared FSS pipeline: ETN inject → repair generate → compress → append trailers.
+    /// Called by both BackupCoreAsync and BuildChangedFragmentsIndex.
+    /// </summary>
+    private async Task<(List<byte[]> Fragments, byte[] RcBytes, Fss61RepairData? RepairA,
+        Fss61RepairData? RepairC, Fss62RepairData? Repair62A, Fss62RepairData? Repair62C, byte[] FinalSerializedIndex)>
+        RunFssPipelineAsync(List<byte[]> fragments, byte[] serializedIndex, RdrfIndex index,
+        string filePrefix, long fileSize, FsaPlan plan, string compressionMethod,
+        string? compressionOptions, CancellationToken ct)
+    {
+        byte[] rcBytes = [];
+
+        bool hasFss6 = plan.ActiveStrategies.Contains(Constants.FssLevel6)
+                     || plan.ActiveStrategies.Contains(Constants.FssLevel61)
+                     || plan.ActiveStrategies.Contains(Constants.FssLevel62);
+        bool hasFss61 = plan.ActiveStrategies.Contains(Constants.FssLevel61);
+        bool hasFss62 = plan.ActiveStrategies.Contains(Constants.FssLevel62);
+
+        // Compression stage:
+        //   FSS1–5 / pure FSS6: compress AFTER ETN (trailers may be inside compressed payload).
+        //   FSS6.1/6.2: compress BEFORE ETN so block maps + fountain cover compressed body;
+        //   repair trailers are always appended last (never compressed).
+        // Index.Compression must match the bytes ETN hashed (re-serialize after setting it).
+        bool compressBeforeEtn = hasFss61 || hasFss62;
+        if (compressBeforeEtn)
+        {
+            await CompressFragmentsInPlaceAsync(fragments, compressionMethod, compressionOptions, ct).ConfigureAwait(false);
+            index.Compression = string.IsNullOrEmpty(compressionMethod) ? Constants.CompressionLz4 : compressionMethod;
+            serializedIndex = _indexManager.SerializeIndex(index);
+        }
+
+        if (hasFss6)
+        {
+            var (etnFrags, etnRcJson) = Fss6Etn.InjectCrossValidation(
+                fragments, serializedIndex, index, filePrefix, fileSize, plan.EffectivePrimary);
+            fragments = etnFrags;
+            rcBytes = etnRcJson;
+        }
+
+        Fss61RepairData? repairA = null, repairC = null;
+        if (hasFss61)
+        {
+            int bs = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
+            var (ra, rb, rc) = await FssRepairService.Generate61Async(serializedIndex, fragments, rcBytes, bs);
+            repairA = ra; repairC = rc;
+            if (rb != null) index.Fss61RepairB = rb;
+            if (rc != null) index.Fss61RepairC = rc;
+            var rcFile61 = RcFile.FromCbor(rcBytes);
+            if (ra != null) rcFile61.RepairA = ra;
+            if (rb != null) rcFile61.RepairB = rb;
+            rcBytes = rcFile61.ToCborBytes();
+        }
+
+        Fss62RepairData? repair62A = null, repair62C = null;
+        if (hasFss62)
+        {
+            int bs2 = EtnBlockMap.GetBlockSize(fileSize, plan.EffectivePrimary);
+            var (ra, rb, rc) = await FssRepairService.Generate62Async(serializedIndex, fragments, rcBytes, bs2);
+            repair62A = ra; repair62C = rc;
+            if (rb != null) index.Fss62RepairB = rb;
+            if (rc != null) index.Fss62RepairC = rc;
+            var rcFile62 = RcFile.FromCbor(rcBytes);
+            if (ra != null) rcFile62.Repair62A = ra;
+            if (rb != null) rcFile62.Repair62B = rb;
+            rcBytes = rcFile62.ToCborBytes();
+        }
+
+        // Non-6.1/6.2: compress after ETN, before repair trailers (FSS6 trailers go inside compress).
+        if (!compressBeforeEtn)
+        {
+            await CompressFragmentsInPlaceAsync(fragments, compressionMethod, compressionOptions, ct).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(compressionMethod))
+                index.Compression = compressionMethod;
+        }
+
+        // Append repair trailers AFTER any compression
+        if (hasFss61)
+            FssRepairService.Append61Trailers(fragments, filePrefix, repairA, repairC);
+        if (hasFss62)
+            FssRepairService.Append62Trailers(fragments, filePrefix, repair62A, repair62C);
+
+        byte[] final = _indexManager.SerializeIndex(index);
+        return (fragments, rcBytes, repairA, repairC, repair62A, repair62C, final);
     }
 
     /// <summary>
@@ -555,50 +813,66 @@ public class BackupOrchestrator : IDisposable
         return fragments;
     }
 
-    private byte[] RunFss61Repair(byte[] serializedIndex, List<byte[]> fragments, byte[] rcBytes,
-        long fileSize, string filePrefix, string fileFingerprint, string strategy, RdrfIndex index)
+    /// <summary>
+    /// After FSS encode, drop raw fragment buffers so GC can reclaim peak RAM.
+    /// FSS1/FSS2 already zero raw during windowed encode — only clear aliases.
+    /// Other strategies: zero unreferenced raw then clear.
+    /// </summary>
+    private static void ReleaseRawAfterEncode(
+        BackupPhases.BackupReadResult readResult, List<byte[]> encoded, string primaryStrategy)
     {
-        if (rcBytes.Length == 0) return rcBytes;
-        try
+        bool fss1Family = primaryStrategy is Constants.FssLevel1 or Constants.FssLevel2;
+        if (!fss1Family)
         {
-            int bs = EtnBlockMap.GetBlockSize(fileSize, strategy);
-            var (repairA, repairB, repairC) = FssRepairService.Generate61(
-                serializedIndex, fragments, rcBytes, bs);
+            var keep = new HashSet<byte[]>(encoded.Count, ReferenceEqualityComparer.Instance);
+            foreach (var f in encoded)
+                if (f != null) keep.Add(f);
 
-            var rcFile61 = RcFile.FromCbor(rcBytes);
-            if (repairA != null) rcFile61.RepairA = repairA;
-            if (repairB != null) { rcFile61.RepairB = repairB; index.Fss61RepairB = repairB; }
-            if (repairC != null) { index.Fss61RepairC = repairC; }
-
-            string fp = filePrefix ?? fileFingerprint;
-            FssRepairService.Append61Trailers(fragments, fp, repairA, repairC);
-
-            return rcFile61.ToCborBytes();
+            for (int i = 0; i < readResult.RawFragments.Count; i++)
+            {
+                byte[]? r = readResult.RawFragments[i];
+                if (r != null && !keep.Contains(r))
+                    CryptographicOperations.ZeroMemory(r);
+            }
         }
-        catch (Exception ex) { _logger.Error("BackupOrchestrator", "FSS6.1 repair generation failed", ex); return rcBytes; }
+
+        readResult.RawFragments.Clear();
+        if (readResult.OriginalFragments != null)
+        {
+            for (int i = 0; i < readResult.OriginalFragments.Length; i++)
+                readResult.OriginalFragments[i] = null!;
+        }
     }
 
-    private byte[] RunFss62Repair(byte[] serializedIndex, List<byte[]> fragments, byte[] rcBytes,
-        long fileSize, string filePrefix, string fileFingerprint, string strategy, RdrfIndex index)
+    /// <summary>
+    /// After FSS encode, drop raw fragment buffers that are no longer referenced so GC can reclaim peak RAM.
+    /// </summary>
+    private static void ReleaseUnreferencedRaw(BackupPhases.BackupReadResult readResult, List<byte[]> encoded)
+        => ReleaseRawAfterEncode(readResult, encoded, primaryStrategy: "");
+
+    private static async Task CompressFragmentsInPlaceAsync(
+        List<byte[]> fragments, string? compressionMethod, string? compressionOptions, CancellationToken ct)
     {
-        if (rcBytes.Length == 0) return rcBytes;
-        try
+        if (string.IsNullOrEmpty(compressionMethod))
+            compressionMethod = Constants.CompressionLz4;
+        if (string.Equals(compressionMethod, Constants.CompressionCkc, StringComparison.OrdinalIgnoreCase))
         {
-            int bs = EtnBlockMap.GetBlockSize(fileSize, strategy);
-            var (repair62A, repair62B, repair62C) = FssRepairService.Generate62(
-                serializedIndex, fragments, rcBytes, bs);
-
-            var rcFile62 = RcFile.FromCbor(rcBytes);
-            if (repair62A != null) rcFile62.Repair62A = repair62A;
-            if (repair62B != null) { rcFile62.Repair62B = repair62B; index.Fss62RepairB = repair62B; }
-            if (repair62C != null) { index.Fss62RepairC = repair62C; }
-
-            string fp = filePrefix ?? fileFingerprint;
-            FssRepairService.Append62Trailers(fragments, fp, repair62A, repair62C);
-
-            return rcFile62.ToCborBytes();
+            CkcEngine.CompressInPlace(fragments);
+            return;
         }
-        catch (Exception ex) { _logger.Error("BackupOrchestrator", "FSS6.2 repair generation failed", ex); return rcBytes; }
+        string cm = compressionMethod;
+        string? co = compressionOptions;
+        await Parallel.ForEachAsync(Enumerable.Range(0, fragments.Count),
+            new ParallelOptions { MaxDegreeOfParallelism = Constants.DefaultParallelism, CancellationToken = ct },
+            (i, ctInner) =>
+            {
+                byte[] plain = fragments[i];
+                byte[] c = Compressor.AlwaysCompress(plain, cm, co);
+                if (c.Length < plain.Length)
+                    fragments[i] = c;
+                // else keep plain; let short-lived larger compress buffer be GC'd
+                return ValueTask.CompletedTask;
+            }).ConfigureAwait(false);
     }
 
     public void Dispose()

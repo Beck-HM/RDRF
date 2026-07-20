@@ -1,5 +1,6 @@
 using System.Buffers;
-using RDRF.Core.Logging;using System.Diagnostics;
+using RDRF.Core.Logging;
+using System.Diagnostics;
 using System.IO.Hashing;
 using RDRF.Core.Index;
 
@@ -34,13 +35,16 @@ public class Fss5PSend : IFssStrategy
                 Buffer.BlockCopy(f, 0, fileBytes, offset, f.Length);
                 offset += f.Length;
             }
+            int totalDataLen = offset;
 
             for (int i = 0; i < K; i++)
             {
                 dataBlocks[i] = ArrayPool<byte>.Shared.Rent(blockSize);
                 int srcOff = i * blockSize;
-                int copyLen = Math.Min(blockSize, K * blockSize - srcOff);
+                int copyLen = Math.Min(blockSize, totalDataLen - srcOff);
                 Buffer.BlockCopy(fileBytes, srcOff, dataBlocks[i], 0, copyLen);
+                if (copyLen < blockSize)
+                    Array.Clear(dataBlocks[i], copyLen, blockSize - copyLen);
             }
 
             var rs = new ReedSolomon(K, K);
@@ -58,7 +62,7 @@ public class Fss5PSend : IFssStrategy
 
             for (int b = 0; b < K; b++)
             {
-                var hash = XxHash128.Hash(allBlocks[b]);
+                var hash = XxHash128.Hash(allBlocks[b].AsSpan(0, blockSize));
                 Buffer.BlockCopy(hash, 0, template, seedDataSize + b * 8, 8);
             }
 
@@ -83,7 +87,7 @@ public class Fss5PSend : IFssStrategy
 
     private List<byte[]>? DecodeFromSeed(byte[] seed, int K, int blockSize, List<int>? originalSizes = null)
     {
-        int seedDataSize = K * blockSize;
+        int seedDataSize = seed.Length - K * 8;
 
         for (int b = 0; b < K; b++)
         {
@@ -178,7 +182,7 @@ public class Fss5PSend : IFssStrategy
                 return encodedFragment;
 
             int seedDataSize = encodedFragment.Length - K * 8;
-            int blockSize = seedDataSize / K;
+            int blockSize = (seedDataSize + K - 1) / K;
 
             t_cache = DecodeFromSeed(encodedFragment, K, blockSize, originalSizes);
             t_cacheKey = key;

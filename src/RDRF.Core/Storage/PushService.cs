@@ -19,7 +19,7 @@ public static class PushService
     {
         if (password.Length == 0)
         {
-            Debug.WriteLine("Error: password cannot be empty");
+            Console.Error.WriteLine("Error: password cannot be empty");
             return 1;
         }
 
@@ -36,7 +36,8 @@ public static class PushService
 
         if (configs.Count == 0)
         {
-            Debug.WriteLine("Error: no backends configured in rdrf_config.yaml. Run 'rdrf init' first.");
+            Console.Error.WriteLine("Error: no backends configured in rdrf_config.yaml. Run 'rdrf init -path/...' first.");
+            Console.Error.WriteLine("Hint: use 'rdrf list -node' to inspect backends, then 'rdrf remote <index> -add <name>'.");
             return 1;
         }
 
@@ -46,7 +47,8 @@ public static class PushService
 
         if (registeredBackends.Count == 0)
         {
-            Debug.WriteLine("Error: no backends could be registered");
+            Console.Error.WriteLine("Error: no backends could be registered (missing plugins or bad config).");
+            Console.Error.WriteLine($"Plugins dir: {pluginsDir}");
             return 1;
         }
 
@@ -109,17 +111,19 @@ public static class PushService
 
         if (dryRun)
         {
-            Debug.WriteLine($"Project: {fingerprint} v{versionNumber}");
-            Debug.WriteLine($"Backends: {string.Join(", ", targetBackends)}");
-            Debug.WriteLine($"Would push {items.Count} fragment(s)" + (hasRc ? " + RC" : ""));
+            Console.WriteLine($"[dry-run] Project: {fingerprint} v{versionNumber}");
+            Console.WriteLine($"[dry-run] Backends: {string.Join(", ", targetBackends)}");
+            Console.WriteLine($"[dry-run] Would push {items.Count} fragment(s)" + (hasRc ? " + RC" : ""));
             foreach (var (idx, _) in items)
-                Debug.WriteLine($"  Fragment {idx}/{fragmentCount}");
+                Console.WriteLine($"[dry-run]   Fragment {idx}/{fragmentCount}");
             if (hasRc)
-                Debug.WriteLine("  RC file");
+                Console.WriteLine("[dry-run]   RC file");
+            if (items.Count == 0 && !hasRc)
+                Console.WriteLine("[dry-run] Nothing to push (fragments missing or already recorded).");
             return 0;
         }
 
-        // Push fragments (with optional concurrency)
+        // Push fragments via file stream (hash-while-copy; no full-buffer ReadAllBytes)
         if (concurrency > 1)
         {
             var semaphore = new SemaphoreSlim(concurrency);
@@ -128,7 +132,7 @@ public static class PushService
                 await semaphore.WaitAsync();
                 try
                 {
-                    byte[] data = await File.ReadAllBytesAsync(item.path);
+                    long fileSize = new FileInfo(item.path).Length;
                     var options = new StorageUploadOptions
                     {
                         Fingerprint = fingerprint,
@@ -136,10 +140,10 @@ public static class PushService
                         FragmentIndex = item.index,
                         VersionNumber = versionNumber,
                         Backends = targetBackends,
-                        FileSize = data.Length,
+                        FileSize = fileSize,
                         Note = "pushed via rdrf-push",
                     };
-                    await orchestrator.WriteFragmentAsync(data, options);
+                    await orchestrator.WriteFragmentFromFileAsync(item.path, options).ConfigureAwait(false);
                     Interlocked.Increment(ref done);
                     progress?.Report(new RdrfProgressReport
                     {
@@ -164,7 +168,7 @@ public static class PushService
             {
                 try
                 {
-                    byte[] data = await File.ReadAllBytesAsync(item.path);
+                    long fileSize = new FileInfo(item.path).Length;
                     var options = new StorageUploadOptions
                     {
                         Fingerprint = fingerprint,
@@ -172,10 +176,10 @@ public static class PushService
                         FragmentIndex = item.index,
                         VersionNumber = versionNumber,
                         Backends = targetBackends,
-                        FileSize = data.Length,
+                        FileSize = fileSize,
                         Note = "pushed via rdrf-push",
                     };
-                    await orchestrator.WriteFragmentAsync(data, options);
+                    await orchestrator.WriteFragmentFromFileAsync(item.path, options).ConfigureAwait(false);
                     done++;
                     progress?.Report(new RdrfProgressReport
                     {
@@ -190,12 +194,12 @@ public static class PushService
             }
         }
 
-        // Push RC file
+        // Push RC file (stream)
         if (hasRc)
         {
             try
             {
-                byte[] rcData = await File.ReadAllBytesAsync(rcPath);
+                long rcSize = new FileInfo(rcPath).Length;
                 var rcOptions = new StorageUploadOptions
                 {
                     Fingerprint = fingerprint,
@@ -203,10 +207,10 @@ public static class PushService
                     FragmentIndex = -1,
                     VersionNumber = versionNumber,
                     Backends = targetBackends,
-                    FileSize = rcData.Length,
+                    FileSize = rcSize,
                     Note = "pushed via rdrf-push",
                 };
-                await orchestrator.WriteRcAsync(rcData, rcOptions);
+                await orchestrator.WriteRcFromFileAsync(rcPath, rcOptions).ConfigureAwait(false);
                 done++;
                 progress?.Report(new RdrfProgressReport
                 {

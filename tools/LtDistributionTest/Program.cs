@@ -6,6 +6,7 @@ using RDRF.Core.Encryption;
 using RDRF.Core.ETN;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
+using RDRF.Core.Compression;
 using RDRF.Core.DSAA;
 
 string testFile;
@@ -100,8 +101,12 @@ foreach (double ratio in ratios)
         byte[] decrypted = EncryptionLayer.DecryptFragmentCtrWithKey(encrypted, hdrSize, aesKey);
         int idxLen = BitConverter.ToInt32(decrypted.AsSpan(0, 4));
 
-        // Raw data starts after the embedded index; its length is always fragSize(262144)
-        blocksPerFrag[i] = (fragSize + blockSize - 1) / blockSize;
+        // Use actual decompressed fragment data length for block count
+        var (_, fd, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(encrypted, aesKey);
+        byte[] data = fd ?? Array.Empty<byte>();
+        if (!string.IsNullOrEmpty(index.Compression))
+            data = Compressor.Decompress(data, index.Compression);
+        blocksPerFrag[i] = (data.Length + blockSize - 1) / blockSize;
         totalBlocks += blocksPerFrag[i];
         fragDataStart[i] = hdrSize + 12 + 4 + idxLen;
     }

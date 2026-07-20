@@ -130,13 +130,18 @@ public static class EncryptionLayer
         return EncryptFragmentCtrWithKey(plaintext, aesKey, nonce);
     }
 
-    /// <summary>Encrypts plaintext with caller-provided nonce.</summary>
+    /// <summary>Encrypts plaintext with caller-provided nonce (single output alloc: nonce||ct).</summary>
     private static byte[] EncryptFragmentCtrWithKey(byte[] plaintext, byte[] aesKey, byte[] nonce)
+        => EncryptFragmentCtrWithKey(plaintext.AsSpan(), aesKey, nonce);
+
+    /// <summary>Span overload: one allocation for nonce||ciphertext, in-place CTR into the ct region.</summary>
+    internal static byte[] EncryptFragmentCtrWithKey(ReadOnlySpan<byte> plaintext, byte[] aesKey, byte[]? nonce = null)
     {
-        byte[] ciphertext = CtrCryptWithKey(plaintext, aesKey, nonce);
-        byte[] result = new byte[nonce.Length + ciphertext.Length];
+        nonce ??= RandomNumberGenerator.GetBytes(Constants.NonceLength);
+        byte[] result = new byte[nonce.Length + plaintext.Length];
         Buffer.BlockCopy(nonce, 0, result, 0, nonce.Length);
-        Buffer.BlockCopy(ciphertext, 0, result, nonce.Length, ciphertext.Length);
+        plaintext.CopyTo(result.AsSpan(nonce.Length));
+        AesNiCtr.CtrCrypt(result.AsSpan(nonce.Length), result.AsSpan(nonce.Length), aesKey, nonce);
         return result;
     }
 
@@ -213,6 +218,179 @@ public static class EncryptionLayer
         {
             ArrayPool<byte>.Shared.Return(ciphertext, clearArray: true);
             ArrayPool<byte>.Shared.Return(output, clearArray: true);
+        }
+    }
+
+    /// <summary>
+    /// Stream-decrypt a fragment file and strip the embedded index header.
+    /// Does not load the full ciphertext into a separate managed buffer (file stream → single plain buffer).
+    /// Prefer this over ReadAllBytes + <see cref="DecryptAndStripFragment"/> on large fragments.
+    /// </summary>
+    public static byte[] DecryptAndStripFragmentFromStream(Stream input, byte[] aesKey)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (!input.CanRead)
+            throw new ArgumentException("Stream must be readable.", nameof(input));
+
+        long startPos = input.CanSeek ? input.Position : 0;
+        long available = input.CanSeek ? input.Length - startPos : -1;
+
+        // Probe header (magic + version + optional salt length).
+        Span<byte> probe = stackalloc byte[FragmentFileHeader.HeaderSize];
+        ReadExact(input, probe);
+        bool hasHeader = probe[0] == 0xFF && probe[1] == 0x01;
+        int hdrOff = 0;
+        if (hasHeader)
+        {
+            int saltLen = 0;
+            if (probe[2] >= 2 && probe.Length >= 4)
+                saltLen = probe[3];
+            hdrOff = FragmentFileHeader.HeaderSize + saltLen;
+            // Consume remaining header bytes after the 6-byte probe.
+            int already = FragmentFileHeader.HeaderSize;
+            if (hdrOff > already)
+            {
+                Span<byte> rest = stackalloc byte[hdrOff - already];
+                ReadExact(input, rest);
+            }
+        }
+        else
+        {
+            // Not a headered fragment: rewind probe into ciphertext path.
+            // Re-seek if possible; otherwise we already consumed 6 bytes that are part of nonce+ct.
+            if (input.CanSeek)
+            {
+                input.Position = startPos;
+                hdrOff = 0;
+            }
+            else
+            {
+                // Non-seekable without header: treat the 6 probe bytes as start of nonce||ct
+                // by buffering them — rare for local restore (FileStream is seekable).
+                return DecryptAndStripFragmentFromStreamNonSeekNoHeader(input, probe, aesKey);
+            }
+        }
+
+        int nonceLen = Constants.NonceLength;
+        byte[] nonce = new byte[nonceLen];
+        ReadExact(input, nonce);
+
+        int ciphertextLen;
+        if (available >= 0)
+        {
+            ciphertextLen = checked((int)(available - hdrOff - nonceLen));
+        }
+        else
+        {
+            // Drain remaining into pool buffer (fallback).
+            using var ms = new MemoryStream();
+            input.CopyTo(ms);
+            byte[] ct = ms.ToArray();
+            return StripAfterDecrypt(AesNiCtr.CtrCrypt(ct, aesKey, nonce), hasHeader);
+        }
+
+        if (ciphertextLen < 0)
+            throw new CryptographicException("Invalid encrypted fragment length.");
+        if (ciphertextLen == 0)
+            return Array.Empty<byte>();
+
+        // Single plain buffer: stream CTR decrypt file → plain (no full encrypted byte[]).
+        byte[] plain = new byte[ciphertextLen];
+        using (var plainMs = new MemoryStream(plain, 0, ciphertextLen, writable: true, publiclyVisible: true))
+        {
+            // Limit input to remaining ciphertext bytes.
+            using var limited = new LimitedReadStream(input, ciphertextLen);
+            AesNiCtr.CtrCryptStream(limited, plainMs, aesKey, nonce);
+        }
+
+        return StripAfterDecrypt(plain, hasHeader);
+    }
+
+    /// <summary>Async variant of <see cref="DecryptAndStripFragmentFromStream"/>.</summary>
+    public static async Task<byte[]> DecryptAndStripFragmentFromStreamAsync(
+        Stream input, byte[] aesKey, CancellationToken ct = default)
+    {
+        // Sync path is CPU-bound CTR over FileStream; offload only if caller needs true async I/O.
+        // Prefer sync for local sequential FileStream (already efficient).
+        ct.ThrowIfCancellationRequested();
+        if (input is FileStream fs && fs.IsAsync)
+        {
+            // Read header/nonce async then CTR on buffer — keep parity with sync for correctness.
+            return await Task.Run(() => DecryptAndStripFragmentFromStream(input, aesKey), ct).ConfigureAwait(false);
+        }
+        return DecryptAndStripFragmentFromStream(input, aesKey);
+    }
+
+    private static byte[] DecryptAndStripFragmentFromStreamNonSeekNoHeader(
+        Stream input, ReadOnlySpan<byte> alreadyRead, byte[] aesKey)
+    {
+        using var ms = new MemoryStream();
+        ms.Write(alreadyRead);
+        input.CopyTo(ms);
+        return DecryptAndStripFragment(ms.ToArray(), aesKey);
+    }
+
+    private static byte[] StripAfterDecrypt(byte[] plain, bool hasHeader)
+    {
+        if (hasHeader && plain.Length >= 4)
+        {
+            int idxLen = BitConverter.ToInt32(plain.AsSpan(0, 4));
+            if (idxLen > 0 && idxLen <= plain.Length - 4)
+            {
+                int dataLen = plain.Length - (4 + idxLen);
+                byte[] result = new byte[dataLen];
+                Buffer.BlockCopy(plain, 4 + idxLen, result, 0, dataLen);
+                CryptographicOperations.ZeroMemory(plain.AsSpan(0, 4 + idxLen));
+                return result;
+            }
+        }
+        return plain;
+    }
+
+    private static void ReadExact(Stream input, Span<byte> dest)
+    {
+        int offset = 0;
+        while (offset < dest.Length)
+        {
+            int n = input.Read(dest.Slice(offset));
+            if (n == 0)
+                throw new EndOfStreamException("Unexpected end of fragment stream.");
+            offset += n;
+        }
+    }
+
+    /// <summary>Limits reads to a fixed number of bytes from an underlying stream.</summary>
+    private sealed class LimitedReadStream : Stream
+    {
+        private readonly Stream _inner;
+        private long _remaining;
+
+        public LimitedReadStream(Stream inner, long remaining)
+        {
+            _inner = inner;
+            _remaining = remaining;
+        }
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (_remaining <= 0) return 0;
+            int toRead = (int)Math.Min(count, _remaining);
+            int n = _inner.Read(buffer, offset, toRead);
+            _remaining -= n;
+            return n;
         }
     }
 

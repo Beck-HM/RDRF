@@ -1,13 +1,20 @@
+using System.Diagnostics;
+
 namespace RDRF.Core.Configuration;
 
-public static class RdrfConfig
+public class RdrfConfigService
 {
-    private static string? _customRoot;
-    private static readonly string PointerPath = Path.Combine(
+    internal static RdrfConfigService? _instance;
+    internal static void SetInstance(RdrfConfigService instance) { _instance ??= instance; }
+    internal static RdrfConfigService Instance => _instance ?? throw new InvalidOperationException("RdrfConfigService not initialized.");
+    internal static bool IsInitialized => _instance != null;
+
+    private string? _customRoot;
+    private readonly string PointerPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".rdrfpointer");
 
-    public static string RootDir
+    public string RootDir
     {
         get
         {
@@ -24,16 +31,16 @@ public static class RdrfConfig
         }
     }
 
-    public static string LogDir => Path.Combine(RootDir, "log");
+    public string LogDir => Path.Combine(RootDir, "log");
 
-    public static void Initialize()
+    public void Initialize()
     {
         string? pointer = TryReadPointer();
         if (pointer != null)
             _customRoot = pointer;
     }
 
-    public static void MoveTo(string newPath)
+    public void MoveTo(string newPath)
     {
         string resolved = Path.GetFullPath(newPath);
         string oldDir = RootDir;
@@ -73,14 +80,36 @@ public static class RdrfConfig
         }
     }
 
-    private static string? TryReadPointer()
+    private string? TryReadPointer()
     {
         try
         {
             if (File.Exists(PointerPath))
                 return File.ReadAllText(PointerPath).Trim();
         }
-        catch { }
+        catch (Exception ex) { Debug.WriteLine($"[RdrfConfig] Failed to read pointer: {ex.Message}"); }
         return null;
     }
+}
+
+/// <summary>
+/// Static facade for backward compatibility. Delegates to the singleton service instance.
+/// New code should inject RdrfConfigService via DI.
+/// </summary>
+public static class RdrfConfig
+{
+    internal static void EnsureInitialized()
+    {
+        if (RdrfConfigService._instance == null)
+        {
+            var svc = new RdrfConfigService();
+            svc.Initialize();
+            RdrfConfigService.SetInstance(svc);
+        }
+    }
+
+    public static string RootDir { get { EnsureInitialized(); return RdrfConfigService.Instance.RootDir; } }
+    public static string LogDir { get { EnsureInitialized(); return RdrfConfigService.Instance.LogDir; } }
+    public static void Initialize() { EnsureInitialized(); RdrfConfigService.Instance.Initialize(); }
+    public static void MoveTo(string newPath) => RdrfConfigService.Instance.MoveTo(newPath);
 }

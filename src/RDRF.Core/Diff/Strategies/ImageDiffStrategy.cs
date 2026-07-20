@@ -1,10 +1,12 @@
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace RDRF.Core.Diff.Strategies;
 
 /// <summary>
 /// Image metadata diff via System.Drawing (dimensions, format, DPI).
+/// Only supported on Windows due to System.Drawing dependency.
 /// </summary>
 
 public class ImageDiffStrategy : IDiffStrategy
@@ -18,6 +20,9 @@ public class ImageDiffStrategy : IDiffStrategy
 
     public double MatchScore(string? fileName, ReadOnlySpan<byte> sample)
     {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return 0.0;
+
         if (!string.IsNullOrEmpty(fileName))
         {
             string ext = Path.GetExtension(fileName);
@@ -56,7 +61,7 @@ public class ImageDiffStrategy : IDiffStrategy
 
         if (!OperatingSystem.IsWindows())
         {
-            string sizeLine = $"  File: {FormatBytes(oldData.Length)} -> {FormatBytes(newData.Length)} ({FormatBytes(newData.Length - oldData.Length)})";
+            string sizeLine = $"  File: {FileSizeFormatter.FormatBytes(oldData.Length)} -> {FileSizeFormatter.FormatBytes(newData.Length)} ({FileSizeFormatter.FormatBytes(newData.Length - oldData.Length)})";
             sb.AppendLine(sizeLine);
             return new DiffResult
             {
@@ -72,7 +77,7 @@ public class ImageDiffStrategy : IDiffStrategy
         // Skip full image analysis for files over 50MB to prevent OOM
         if (oldData.LongLength > 50 * 1024 * 1024 || newData.LongLength > 50 * 1024 * 1024)
         {
-            sb.AppendLine($"  File: {FormatBytes(oldData.Length)} -> {FormatBytes(newData.Length)} ({FormatBytes(newData.Length - oldData.Length)})");
+            sb.AppendLine($"  File: {FileSizeFormatter.FormatBytes(oldData.Length)} -> {FileSizeFormatter.FormatBytes(newData.Length)} ({FileSizeFormatter.FormatBytes(newData.Length - oldData.Length)})");
             return new DiffResult
             {
                 Label = label,
@@ -102,7 +107,7 @@ public class ImageDiffStrategy : IDiffStrategy
                 sb.AppendLine($"+{newDesc}");
             }
 
-            string sizeLine = $"  File: {FormatBytes(oldData.Length)} -> {FormatBytes(newData.Length)} ({FormatBytes(newData.Length - oldData.Length)})";
+            string sizeLine = $"  File: {FileSizeFormatter.FormatBytes(oldData.Length)} -> {FileSizeFormatter.FormatBytes(newData.Length)} ({FileSizeFormatter.FormatBytes(newData.Length - oldData.Length)})";
             if (oldData.Length != newData.Length)
             {
                 lines.Add(new DiffLine { Type = DiffLineType.Context, Text = sizeLine });
@@ -136,14 +141,6 @@ public class ImageDiffStrategy : IDiffStrategy
     {
         var fmt = img.RawFormat?.ToString().ToLowerInvariant() ?? "unknown";
         return $"{img.Width}x{img.Height}, {img.HorizontalResolution:F0}dpi, {img.PixelFormat}, {fmt}";
-    }
-
-    private static string FormatBytes(long bytes)
-    {
-        if (bytes >= 1_000_000_000) return $"{bytes / 1_000_000_000.0:F1}GB";
-        if (bytes >= 1_000_000) return $"{bytes / 1_000_000.0:F1}MB";
-        if (bytes >= 1_000) return $"{(double)bytes / 1000:F1}KB";
-        return $"{bytes}B";
     }
 }
 

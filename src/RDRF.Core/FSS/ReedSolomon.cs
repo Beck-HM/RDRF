@@ -52,28 +52,36 @@ public class ReedSolomon
     public byte[][] Encode(byte[][] shards)
     {
         int shardSize = shards[0].Length;
-        Parallel.For(0, _parityShards, p =>
+        // Single parity (common FSS3 row RS): avoid Parallel.For overhead on 1 work item.
+        if (_parityShards == 1)
         {
-            int i = _dataShards + p;
-            byte[] parity = new byte[shardSize];
-            for (int j = 0; j < shardSize; j++)
-            {
-                byte val = 0;
-                int k = 0;
-                for (; k + 4 <= _dataShards; k += 4)
-                {
-                    val ^= _mulTable[_encodeMatrix[p, k]][shards[k][j]];
-                    val ^= _mulTable[_encodeMatrix[p, k + 1]][shards[k + 1][j]];
-                    val ^= _mulTable[_encodeMatrix[p, k + 2]][shards[k + 2][j]];
-                    val ^= _mulTable[_encodeMatrix[p, k + 3]][shards[k + 3][j]];
-                }
-                for (; k < _dataShards; k++)
-                    val ^= _mulTable[_encodeMatrix[p, k]][shards[k][j]];
-                parity[j] = val;
-            }
-            shards[i] = parity;
-        });
+            EncodeOneParity(shards, 0, shardSize);
+            return shards;
+        }
+        Parallel.For(0, _parityShards, p => EncodeOneParity(shards, p, shardSize));
         return shards;
+    }
+
+    private void EncodeOneParity(byte[][] shards, int p, int shardSize)
+    {
+        int i = _dataShards + p;
+        byte[] parity = new byte[shardSize];
+        for (int j = 0; j < shardSize; j++)
+        {
+            byte val = 0;
+            int k = 0;
+            for (; k + 4 <= _dataShards; k += 4)
+            {
+                val ^= _mulTable[_encodeMatrix[p, k]][shards[k][j]];
+                val ^= _mulTable[_encodeMatrix[p, k + 1]][shards[k + 1][j]];
+                val ^= _mulTable[_encodeMatrix[p, k + 2]][shards[k + 2][j]];
+                val ^= _mulTable[_encodeMatrix[p, k + 3]][shards[k + 3][j]];
+            }
+            for (; k < _dataShards; k++)
+                val ^= _mulTable[_encodeMatrix[p, k]][shards[k][j]];
+            parity[j] = val;
+        }
+        shards[i] = parity;
     }
 
     public bool Decode(byte[][] shards, List<int> erasures)

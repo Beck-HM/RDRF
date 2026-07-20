@@ -32,8 +32,6 @@ public static class PluginLoader
             {
                 RdrfLogger.Default.Warn("PluginLoader",
                     $"Failed to load plugin DLL '{dllPath}': {ex.Message}");
-                Console.Error.WriteLine(
-                    $"[PluginLoader] Failed to load plugin '{Path.GetFileName(dllPath)}': {ex.Message}");
             }
         }
 

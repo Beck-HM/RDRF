@@ -7,6 +7,7 @@ using RDRF.Core.PasswordManager;
 using RDRF.Cli.Services;
 using Spectre.Console;
 using System.CommandLine;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -66,7 +67,7 @@ public class RestoreCommand : Command
                         if (recent != null)
                             latest = recent.FullName;
                     }
-                    catch { }
+                    catch (Exception ex) { Debug.WriteLine($"[RestoreCommand] Listing backups failed: {ex.Message}"); }
                 }
                 string hint = latest != null
                     ? $" (use with: rdrf res \"{latest}\" -o <path>)"
@@ -149,24 +150,45 @@ public class RestoreCommand : Command
             (_, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(encryptedIndex, password);
             var index = IndexManager.DeserializeIndex(cbor);
 
-            string prefix;
             bool success;
-
             if (targetVersion > 0)
             {
                 var vr = index.Versions?.FirstOrDefault(v => v.Version == targetVersion)
                     ?? throw new InvalidOperationException($"Version {targetVersion} not found in index history");
-                prefix = index.CustomName ?? vr.FileFingerprint;
-                success = await AnsiConsole.Status()
-                    .StartAsync($"Restoring v{targetVersion}...", async _ =>
-                        await engine.RestoreFileFromFragmentsAsync(prefix, outputPath));
+                // Real-incremental: each version may have its own index file (content fingerprint).
+                // Prefer that index when present so --ver restores the correct payload.
+                string vFp = vr.FileFingerprint;
+                if (string.IsNullOrEmpty(vFp))
+                    throw new InvalidOperationException($"Version {targetVersion} has no FileFingerprint in history");
+                if (engine.FileExists(vFp))
+                {
+                    success = await AnsiConsole.Status()
+                        .StartAsync($"Restoring v{targetVersion}...", async _ =>
+                            await engine.RestoreFileAsync(vFp, outputPath, filePrefix: vFp));
+                }
+                else
+                {
+                    success = await AnsiConsole.Status()
+                        .StartAsync($"Restoring v{targetVersion} from fragments...", async _ =>
+                            await engine.RestoreFileFromFragmentsAsync(vFp, outputPath));
+                }
             }
             else
             {
-                prefix = index.CustomName ?? index.FileFingerprint;
-                success = await AnsiConsole.Status()
-                    .StartAsync("Restoring latest version...", async _ =>
-                        await engine.RestoreFileAsync(index.FileFingerprint, outputPath, filePrefix: prefix));
+                // Latest: use the index the user pointed at (CustomName or fingerprint prefix).
+                string prefix = index.CustomName ?? index.FileFingerprint;
+                if (engine.FileExists(prefix))
+                {
+                    success = await AnsiConsole.Status()
+                        .StartAsync("Restoring...", async _ =>
+                            await engine.RestoreFileAsync(prefix, outputPath, filePrefix: prefix));
+                }
+                else
+                {
+                    success = await AnsiConsole.Status()
+                        .StartAsync("Restoring...", async _ =>
+                            await engine.RestoreFileFromFragmentsAsync(prefix, outputPath));
+                }
             }
 
             if (success)

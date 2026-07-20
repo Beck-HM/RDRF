@@ -46,10 +46,14 @@ public class ListCommand : Command
                 return 0;
             }
 
+            // Default to backends list when no flag given (friendlier than hard error).
+            if (!node && !fp)
+                node = true;
+
             if (!node)
             {
-                AnsiConsole.MarkupLine("[red]Error: -node or -fp is required[/]");
-                return 1;
+                // fp branch already handled above
+                return 0;
             }
 
             var backends = ConfigManager.Load();

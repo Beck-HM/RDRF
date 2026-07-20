@@ -26,6 +26,9 @@ server.RegisterTool(new CheckTool());
 server.RegisterTool(new VerifyTool());
 server.RegisterTool(new ListTool());
 server.RegisterTool(new NextTool());
+server.RegisterTool(new StatusTool());
+server.RegisterTool(new ConfigTool());
+server.RegisterTool(new ReachTool());
 
 // JSON-RPC 2.0 over stdio, newline-delimited
 await foreach (var json in ReadStdInAsync())

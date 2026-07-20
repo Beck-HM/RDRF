@@ -1,5 +1,6 @@
 using System.Text.Json;
 using RDRF.Core;
+using RDRF.Core.Compression.Ckc;
 using RDRF.Core.Index;
 using RDRF.Core.DSAA;
 using RDRF.Core.Encryption;
@@ -77,7 +78,10 @@ public class StatusCommand : Command
                     catch { rcOk = false; }
                 }
 
-                bool hasEtn = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
+                bool hasEtn = index.HasFss6EtnData;
+
+                bool isCkc = string.Equals(index.Compression, "ckc", StringComparison.OrdinalIgnoreCase);
+                var ckcAlgo = isCkc ? new CkcAlgorithm() : null;
 
                 int ok = 0, corrupted = 0, missing = 0;
                 var rows = new List<(int idx, string status, string size, string hash, int rawSize)>();
@@ -95,31 +99,35 @@ public class StatusCommand : Command
                     try
                     {
                         byte[] encrypted = storage.ReadFragment(fname);
-                        byte[] decrypted = EncryptionLayer.DecryptAndStripFragment(encrypted, aesKey);
+                        // Payload after decrypt: [compressed?] body [+ FSS6 trailers].
+                        // fragment_hashes are post-FSS-encode, pre-compress, pre-trailer.
+                        byte[] body = EncryptionLayer.DecryptAndStripFragment(encrypted, aesKey);
 
-                        if (hasEtn)
+                        // Trailers outer → inner (same as restore StripAnyTrailer)
+                        var (raw62, _, _, _, _) = RDRF.Core.FSS.Fss62RepairTrailer.Parse(body);
+                        body = raw62;
+                        var (raw61, _, _, _, _) = RDRF.Core.FSS.Fss61RepairTrailer.Parse(body);
+                        body = raw61;
+                        body = RDRF.Core.ETN.EtnTrailer.Parse(body).RawData;
+
+                        // Decompress after trailer strip (matches backup: compress then trailers for 6.x off; or compress after ETN for pure FSS6)
+                        if (!string.IsNullOrEmpty(index.Compression))
                         {
-                            decrypted = RDRF.Core.ETN.EtnTrailer.Parse(decrypted).RawData;
-                            if (index.Fss61RepairB != null)
-                                decrypted = RDRF.Core.FSS.Fss61RepairTrailer.Parse(decrypted).data;
-                            if (index.Fss62RepairB != null)
-                                decrypted = RDRF.Core.FSS.Fss62RepairTrailer.Parse(decrypted).data;
+                            if (isCkc && ckcAlgo!.CanHandle(body))
+                                body = ckcAlgo.Decompress(body);
+                            else if (!isCkc)
+                                body = RDRF.Core.Compression.Compressor.Decompress(body, index.Compression);
                         }
 
-                        string actualHash = IntegrityChecker.HashBytes(decrypted);
+                        string actualHash = IntegrityChecker.HashBytes(body);
                         string expectedHash = index.FragmentHashes.Count > i ? index.FragmentHashes[i] : "";
                         bool match = IntegrityChecker.VerifyHash(actualHash, expectedHash);
-                        int fragSize = index.OriginalFragmentSizes.Count > i ? index.OriginalFragmentSizes[i] : decrypted.Length;
+                        int fragSize = index.OriginalFragmentSizes.Count > i ? index.OriginalFragmentSizes[i] : body.Length;
                         string sizeStr = FormatSize(fragSize);
 
                         if (match)
                         {
                             rows.Add((i, "OK", sizeStr, "\u2705", fragSize));
-                            ok++;
-                        }
-                        else if (hasEtn)
-                        {
-                            rows.Add((i, "ENCRYPTED (ETN)", sizeStr, "\u2753", fragSize));
                             ok++;
                         }
                         else
@@ -130,7 +138,8 @@ public class StatusCommand : Command
                     }
                     catch
                     {
-                        rows.Add((i, "ENCRYPTED (ETN)", "-", "-", 0));
+                        rows.Add((i, "CORRUPTED", "-", "\u274C", 0));
+                        corrupted++;
                     }
                 }
 
@@ -146,8 +155,10 @@ public class StatusCommand : Command
                     var result = new
                     {
                         fingerprint = index.FileFingerprint,
-                        file = index.OriginalName,
-                        strategy = index.FssStrategy + (hasEtn ? " + FSS6" : ""),
+                        originalName = index.OriginalName,
+                        fileSize = index.FileSize,
+                        fssStrategy = index.FssStrategy + (hasEtn ? " + FSS6" : ""),
+                        compression = index.Compression,
                         hasEtn,
                         indexOk,
                         rcOk,

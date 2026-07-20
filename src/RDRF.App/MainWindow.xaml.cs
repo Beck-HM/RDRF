@@ -51,6 +51,10 @@ public partial class MainWindow : Window
         _historyVM = serviceProvider.GetRequiredService<HistoryViewModel>();
         _settingsVM = serviceProvider.GetRequiredService<SettingsViewModel>();
         _passwordVM = new PasswordViewModel();
+        _passwordVM.ShowConfirmDialog = (title, message) =>
+            System.Windows.MessageBox.Show(message, title,
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Warning) == System.Windows.MessageBoxResult.Yes;
 
         InitializeComponent();
         InitializeConfig();

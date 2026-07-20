@@ -85,7 +85,7 @@ public class MediaDiffStrategy : IDiffStrategy
                 }
             }
 
-            string sizeLine = $"  File: {FormatBytes(oldData.Length)} -> {FormatBytes(newData.Length)} ({FormatBytes(newData.Length - oldData.Length)})";
+            string sizeLine = $"  File: {FileSizeFormatter.FormatBytes(oldData.Length)} -> {FileSizeFormatter.FormatBytes(newData.Length)} ({FileSizeFormatter.FormatBytes(newData.Length - oldData.Length)})";
             if (oldData.Length != newData.Length)
             {
                 lines.Add(new DiffLine { Type = DiffLineType.Context, Text = sizeLine });
@@ -194,14 +194,6 @@ public class MediaDiffStrategy : IDiffStrategy
         if (ts.TotalHours >= 1)
             return $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}";
         return $"{ts.Minutes}:{ts.Seconds:D2}";
-    }
-
-    private static string FormatBytes(long bytes)
-    {
-        if (bytes >= 1_000_000_000) return $"{bytes / 1_000_000_000.0:F1}GB";
-        if (bytes >= 1_000_000) return $"{bytes / 1_000_000.0:F1}MB";
-        if (bytes >= 1_000) return $"{(double)bytes / 1000:F1}KB";
-        return $"{bytes}B";
     }
 }
 

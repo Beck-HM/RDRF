@@ -3,6 +3,7 @@ using RDRF.Core.Encryption;
 using RDRF.Core.Index;
 using RDRF.Core.FSS;
 using RDRF.Core.DSAA;
+using RDRF.Core.Compression;
 using Xunit;
 
 namespace RDRF.Core.Tests;
@@ -72,6 +73,8 @@ public static class EtnTestHelpers
             string fragFilename = $"{prefix}_{i}.rdrf";
             byte[] fragFileBytes = storage.ReadFragment(fragFilename);
             var (_, fragmentData, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(fragFileBytes, aesKey);
+            if (!string.IsNullOrEmpty(index.Compression))
+                fragmentData = Compressor.Decompress(fragmentData, index.Compression);
             fragments.Add(fragmentData);
         }
 

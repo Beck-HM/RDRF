@@ -6,10 +6,12 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Channels;
 using RDRF.Core.Compression;
+using RDRF.Core.Compression.Ckc;
 using RDRF.Core.Encryption;
 using RDRF.Core.ETN;
 using RDRF.Core.FragmentEngine;
-using RDRF.Core.Logging;using RDRF.Core.FSS;
+using RDRF.Core.Logging;
+using RDRF.Core.FSS;
 using RDRF.Core.FSA;
 using RDRF.Core.Index;
 using RDRF.Core.Integrity;
@@ -27,13 +29,12 @@ namespace RDRF.Core;
 ///   -> FSS decode -> LZ4 decompress -> Merge into output file
 ///
 /// Two restore paths:
-///   Standard: loads all fragments, decrypts, validates, recovers, decodes.
-///   Streaming: sequentially reads, decrypts, strips, decompresses fragments
-///     and concatenates them directly (fast path, no recovery, no FSS decode).
-///     Only works when:
-///       - All fragments are present (no missing fragments)
-///       - FSS strategy <= FSS2R (no cross-fragment dependency)
-///       - FSS6 is not active
+///   Standard: loads all fragments, decrypts, validates, recovers, decodes
+///     (required when fragments missing or FSS repair / multi-fragment decode needed).
+///   Streaming: when every fragment is present, processes one fragment at a time
+///     (read → decrypt → strip trailers → decompress → FSS StripSingle → write),
+///     keeping O(1) fragment buffers in RAM (except CKC multi-frag shared tables,
+///     which must load all compressed fragments first by design).
 ///
 /// Call chain:
 ///   RDRFEngine.RestoreFileAsync
@@ -261,60 +262,96 @@ public class RestoreOrchestrator : IDisposable
             }
         }
 
-        bool hasFss6 = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
+        bool hasFss6 = index.HasFss6EtnData;
+        string? restoredHash = null;
 
         // Try streaming restore when all fragments are on disk (no recovery needed)
-        bool streamingPath = false;
         if (await TryStreamingRestoreCoreAsync(index, aesKey, filePrefix, outputPath,
                 progress, ct).ConfigureAwait(false))
         {
-            streamingPath = true;
+            return true;
         }
 
-        if (!streamingPath)
-        {
-            var decryptedFragments = await DownloadAndDecryptFragmentsAsync(
+        var decryptedFragments = await DownloadAndDecryptFragmentsAsync(
                 aesKey, filePrefix, fragmentCount, fileFingerprint, progress, ct, index).ConfigureAwait(false);
 
-            // ETN cross-validation (only if BM data available in the Index)
-            // Must run BEFORE stripping trailers, as cross-validation needs them
+            // Unified order with streaming / backup inverse:
+            //   For pure FSS6 (+compress after ETN): decompress first so trailers reappear, then ETN, then strip.
+            //   For FSS6.1/6.2 (no compress historically; or pre-ETN compress): trailers outer → strip after ETN.
+            // Heuristic: if compression is set and FSS6 BM present, try trailer-aware path:
+            //   1) If data starts as known compressed frame, decompress first; else strip trailers then decompress.
+            bool isCkc = string.Equals(index.Compression, Constants.CompressionCkc, StringComparison.OrdinalIgnoreCase);
+
+            // ETN cross-validation needs trailers still attached (post-decrypt body).
             var etnActual = false;
-            _logger.Info("RestoreOrchestrator",$"  [DICT] hasFss6={hasFss6} fragCount={decryptedFragments.Count} BM={index.Fss6FragmentBlockMaps?.Count} RcBM={index.Fss6RcBlockMap?.Count}");
+            _logger.Info("RestoreOrchestrator", $"  [DICT] hasFss6={hasFss6} fragCount={decryptedFragments.Count} BM={index.Fss6FragmentBlockMaps?.Count} RcBM={index.Fss6RcBlockMap?.Count}");
             if (hasFss6)
             {
                 ct.ThrowIfCancellationRequested();
+                // Pure FSS6 may have compressed(body+trailer). Detect LZ4/Zstd magic and decompress before CV.
+                if (!string.IsNullOrEmpty(index.Compression) && !isCkc)
+                {
+                    foreach (var idx in decryptedFragments.Keys.ToList())
+                    {
+                        byte[] d = decryptedFragments[idx];
+                        if (LooksCompressedFrame(d, index.Compression))
+                            decryptedFragments[idx] = Compressor.Decompress(d, index.Compression);
+                    }
+                }
                 etnActual = await RunEtnCrossValidateAsync(index, decryptedFragments,
                     fileFingerprint, aesKey, ct).ConfigureAwait(false);
             }
 
-            // Strip ETN/FSS6.1 trailers (parallel, only if ETN data exists)
-            if (hasFss6)
+            // Strip ETN / repair trailers, then decompress remaining payloads.
+            foreach (var idx in decryptedFragments.Keys.ToList())
             {
-                bool isFss61 = fssStrategy is Constants.FssLevel61 or Constants.FssLevel62;
-                var keys = decryptedFragments.Keys.ToList();
-                Parallel.ForEach(keys, idx =>
+                byte[] d = decryptedFragments[idx];
+                if (hasFss6)
                 {
-                    decryptedFragments[idx] = isFss61
-                        ? StripAnyTrailer(decryptedFragments[idx])
-                        : ((Fss6Etn)_fss.GetStrategy(Constants.FssLevel6)).Strip(decryptedFragments[idx]);
-                });
-            }
-
-                if (allowFssRecovery)
+                    bool isFss61 = fssStrategy is Constants.FssLevel61 or Constants.FssLevel62;
+                    d = isFss61
+                        ? StripAnyTrailer(d)
+                        : ((Fss6Etn)_fss.GetStrategy(Constants.FssLevel6)).Strip(d);
+                }
+                if (!string.IsNullOrEmpty(index.Compression))
                 {
-                    var recoveryResult = await _recoveryExecutor.ExecuteRecoveryAsync(
-                        index, decryptedFragments, _metadata).ConfigureAwait(false);
-                    foreach (var kvp in recoveryResult.RecoveredFragments)
-                        decryptedFragments[kvp.Key] = kvp.Value;
-                    var stillMissing = new List<int>();
-                    for (int i = 0; i < fragmentCount; i++)
-                        if (!decryptedFragments.ContainsKey(i)) stillMissing.Add(i);
-                    if (stillMissing.Count > 0)
+                    if (isCkc)
                     {
-                        _logger.Info("RestoreOrchestrator",$"  Restore failed: {stillMissing.Count} fragments still missing");
-                        return false;
+                        // CKC multi-frag handled in batch below
+                    }
+                    else if (LooksCompressedFrame(d, index.Compression) || !hasFss6)
+                    {
+                        // FSS1–5: compress wraps full fragment; FSS6.1 pre-ETN compress: body is compressed after strip
+                        d = Compressor.Decompress(d, index.Compression);
                     }
                 }
+                decryptedFragments[idx] = d;
+            }
+            if (isCkc && !string.IsNullOrEmpty(index.Compression))
+            {
+                var list = new List<byte[]>(fragmentCount);
+                for (int i = 0; i < fragmentCount; i++)
+                    list.Add(decryptedFragments.TryGetValue(i, out var x) ? x : Array.Empty<byte>());
+                CkcEngine.DecompressInPlace(list);
+                for (int i = 0; i < fragmentCount; i++)
+                    decryptedFragments[i] = list[i];
+            }
+
+            if (allowFssRecovery && !isCkc)
+            {
+                var recoveryResult = await _recoveryExecutor.ExecuteRecoveryAsync(
+                    index, decryptedFragments, _metadata).ConfigureAwait(false);
+                foreach (var kvp in recoveryResult.RecoveredFragments)
+                    decryptedFragments[kvp.Key] = kvp.Value;
+                var stillMissing = new List<int>();
+                for (int i = 0; i < fragmentCount; i++)
+                    if (!decryptedFragments.ContainsKey(i)) stillMissing.Add(i);
+                if (stillMissing.Count > 0)
+                {
+                    _logger.Info("RestoreOrchestrator", $"  Restore failed: {stillMissing.Count} fragments still missing");
+                    return false;
+                }
+            }
             else
             {
                 var missing = new List<int>();
@@ -322,44 +359,13 @@ public class RestoreOrchestrator : IDisposable
                     if (!decryptedFragments.ContainsKey(i)) missing.Add(i);
                 if (missing.Count > 0)
                 {
-                    _logger.Info("RestoreOrchestrator",$"  Restore failed: {missing.Count} fragments missing (recovery disabled)");
+                    _logger.Info("RestoreOrchestrator", $"  Restore failed: {missing.Count} fragments missing (recovery disabled)");
                     return false;
                 }
             }
 
             int origCount2 = originalCount ?? fragmentCount;
-            if (index.Compression == Constants.CompressionLz4)
-            {
-                // FSS decode all fragments first (Strip handles full decode)
-                var strategy = _fss.GetStrategy(fssStrategy);
-                bool alreadyStripped = fssStrategy is Constants.FssLevel61 or Constants.FssLevel62;
-                var stripped = alreadyStripped
-                    ? decryptedFragments.OrderBy(k => k.Key).Select(k => k.Value).ToList()
-                    : strategy.Strip(decryptedFragments, origCount2, originalSizes);
-
-                // Strip padding + LZ4 decompress per fragment
-                var rawFragments = new List<byte[]>(stripped.Count);
-                for (int i = 0; i < stripped.Count; i++)
-                {
-                    byte[] frag = stripped[i];
-                    int storedSize = (originalSizes != null && i < originalSizes.Count) ? originalSizes[i] : frag.Length;
-                    byte[] stored = frag.AsSpan(0, Math.Min(storedSize, frag.Length)).ToArray();
-                    byte[] decompressed = RDRF.Core.Compression.Compressor.IsLz4Frame(stored)
-                        ? RDRF.Core.Compression.Compressor.Decompress(stored, Constants.CompressionLz4)
-                        : stored;
-                    rawFragments.Add(decompressed);
-                }
-
-                using var ms = new MemoryStream(rawFragments.Sum(f => f.Length));
-                foreach (var frag in rawFragments)
-                    ms.Write(frag, 0, frag.Length);
-                File.WriteAllBytes(outputPath, ms.ToArray());
-            }
-            else
-            {
-                StripFssEncodingToStream(decryptedFragments, fssStrategy, originalSizes, origCount2, outputPath);
-            }
-        }
+            restoredHash = StripFssEncodingToStream(decryptedFragments, fssStrategy, originalSizes, origCount2, outputPath);
 
         // Trim restored file to original size (removes FSS1 padding zeros)
         if (File.Exists(outputPath) && new FileInfo(outputPath).Length > index.FileSize)
@@ -369,7 +375,6 @@ public class RestoreOrchestrator : IDisposable
         }
 
         long outSize = File.Exists(outputPath) ? new FileInfo(outputPath).Length : -1;
-        string restoredHash = IntegrityChecker.HashFile(outputPath);
         bool valid = IntegrityChecker.VerifyHash(restoredHash, index.OriginalHash);
         _logger.Info("RestoreOrchestrator",$"  Integrity check: {(valid ? "PASS" : "FAIL")}");
 
@@ -388,17 +393,6 @@ public class RestoreOrchestrator : IDisposable
     // FSS recovery and ETN cross-validation. For the common case where all
     // fragments are intact, TryStreamingRestoreCoreAsync (path A) handles the
     // restore with O(1) memory by streaming fragments one at a time.
-
-    private Dictionary<int, byte[]> DownloadAndDecryptFragments(
-        byte[] aesKey, string filePrefix, int fragmentCount, string fileFingerprint,
-        IProgress<RdrfProgressReport>? progress)
-    {
-        var task = Task.Run(() => DownloadAndDecryptFragmentsAsync(aesKey, filePrefix, fragmentCount,
-            fileFingerprint, progress, CancellationToken.None, null));
-        if (task.Wait(TimeSpan.FromMinutes(30)))
-            return task.Result;
-        throw new TimeoutException($"Fragment download timed out after 30 minutes: {filePrefix}");
-    }
 
     private Task<Dictionary<int, byte[]>> DownloadAndDecryptFragmentsAsync(
         byte[] aesKey, string filePrefix, int fragmentCount, string fileFingerprint,
@@ -486,30 +480,24 @@ public class RestoreOrchestrator : IDisposable
 
     // --- Strip FSS Encoding ---
 
-    private List<byte[]> StripFssEncoding(
-        Dictionary<int, byte[]> decryptedFragments,
-        string fssStrategy, int fragmentCount,
-        List<int>? originalSizes, int originalCount)
-    {
-        var strategy = _fss.GetStrategy(fssStrategy);
-        return strategy.Strip(decryptedFragments, originalCount, originalSizes);
-    }
-
-    private void StripFssEncodingToStream(
+    private string StripFssEncodingToStream(
         Dictionary<int, byte[]> decryptedFragments,
         string fssStrategy,
         List<int>? originalSizes, int originalCount,
         string outputPath)
     {
         using var fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
-        StripFssEncodingToStream(decryptedFragments, fssStrategy, originalSizes, originalCount, fs);
+        using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        StripFssEncodingToStream(decryptedFragments, fssStrategy, originalSizes, originalCount, fs, hasher);
+        return Hex.EncodeLower(hasher.GetHashAndReset());
     }
 
     private void StripFssEncodingToStream(
         Dictionary<int, byte[]> decryptedFragments,
         string fssStrategy,
         List<int>? originalSizes, int originalCount,
-        Stream output)
+        Stream output,
+        IncrementalHash? hasher = null)
     {
         var strategy = _fss.GetStrategy(fssStrategy);
 
@@ -517,7 +505,10 @@ public class RestoreOrchestrator : IDisposable
         {
             var stripped = strategy.Strip(decryptedFragments, originalCount, originalSizes);
             foreach (var frag in stripped)
+            {
                 output.Write(frag, 0, frag.Length);
+                hasher?.AppendData(frag, 0, frag.Length);
+            }
             return;
         }
 
@@ -529,6 +520,8 @@ public class RestoreOrchestrator : IDisposable
                 ? data
                 : strategy.StripSingle(data, i, originalSizes);
             output.Write(original, 0, original.Length);
+            hasher?.AppendData(original, 0, original.Length);
+            CryptographicOperations.ZeroMemory(decryptedFragments[i]);
             decryptedFragments[i] = null!;
         }
     }
@@ -557,11 +550,12 @@ public class RestoreOrchestrator : IDisposable
         }
 
         var strategy = _fss.GetStrategy(index.FssStrategy);
-        bool hasEtn = index.Fss6FragmentBlockMaps != null || index.Fss6RcBlockMap != null;
+        bool hasEtn = index.HasFss6EtnData;
         var etn = hasEtn ? (Fss6Etn)_fss.GetStrategy(Constants.FssLevel6) : null;
 
-        // Pre-read SourceVersion index keys
+        // Pre-read SourceVersion index keys and prefixes
         var sourceKeys = new Dictionary<string, byte[]>();
+        var sourcePrefixes = new Dictionary<string, string>();
         if (index.Fragments != null)
         {
             for (int i = 0; i < fragmentCount && i < index.Fragments.Count; i++)
@@ -570,71 +564,273 @@ public class RestoreOrchestrator : IDisposable
                 if (sv != null && !sourceKeys.ContainsKey(sv))
                 {
                     byte[] srcIdx = await _storage.ReadIndexAsync(sv, ct).ConfigureAwait(false);
-                    byte[] salt = srcIdx.AsSpan(0, Constants.SaltPrefixLength).ToArray();
-                    sourceKeys[sv] = _encryption.DeriveKey(_rcCode, salt);
+                    (byte[] srcKey, byte[] cbor) = EncryptionLayer.DecryptIndexWithAutoDetect(srcIdx, _rcCode);
+                    sourceKeys[sv] = srcKey;
+                    var srcIndex = _indexManager.DeserializeIndex(cbor);
+                    sourcePrefixes[sv] = srcIndex.CustomName ?? sv;
                 }
             }
         }
 
         try
         {
-            using var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
-            using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            bool isCkc = string.Equals(index.Compression, Constants.CompressionCkc, StringComparison.OrdinalIgnoreCase);
+            // When ETN/FSS6.x trailers were removed by StripAnyTrailer, skip StripSingle
+            // (Fss61/62 trailer Parse can false-positive on raw payload).
+            bool alreadyStripped = hasEtn
+                || index.FssStrategy is Constants.FssLevel61 or Constants.FssLevel62;
 
-            // Phase 1: Parallel download + decrypt + strip
-            var decrypted = new System.Collections.Concurrent.ConcurrentDictionary<int, byte[]>();
-            await Parallel.ForEachAsync(Enumerable.Range(0, fragmentCount),
-                new ParallelOptions { MaxDegreeOfParallelism = Constants.DefaultParallelism, CancellationToken = ct },
-                async (i, ct2) =>
-                {
-                    string svFp = filePrefix;
-                    int svIdx = i;
-                    byte[] key = aesKey;
-                    if (index.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
-                    {
-                        svFp = index.Fragments[i].SourceVersion;
-                        svIdx = index.Fragments[i].SourceIndex ?? i;
-                        if (sourceKeys.TryGetValue(svFp, out var cachedKey))
-                            key = cachedKey;
-                    }
-                    byte[] encrypted = await _storage.ReadFragmentAsync(
-                        Frags.FragmentFilename(svFp, svIdx), ct2).ConfigureAwait(false);
-                    byte[] data = _encryption.DecryptAndStripFragment(encrypted, key);
-                    if (etn != null)
-                        data = StripAnyTrailer(data);
-                    decrypted[i] = data;
-                }).ConfigureAwait(false);
+            progress?.Report(new RdrfProgressReport { Stage = "Downloading", TotalItems = fragmentCount });
 
-            // Phase 2: Serial write + hash (per-fragment LZ4 decompress)
-            bool isLz4 = index.Compression == Constants.CompressionLz4;
-            for (int i = 0; i < fragmentCount; i++)
+            // CKC multi-fragment: shared TANS tables require all compressed bodies first.
+            if (isCkc)
             {
-                if (!decrypted.TryGetValue(i, out var data) || i >= origCount) continue;
-                byte[] original = strategy.StripSingle(data, i, index.OriginalFragmentSizes);
-                if (isLz4)
-                {
-                    int storedSize = (index.OriginalFragmentSizes != null && i < index.OriginalFragmentSizes.Count)
-                        ? index.OriginalFragmentSizes[i] : original.Length;
-                    byte[] stored = original.AsSpan(0, Math.Min(storedSize, original.Length)).ToArray();
-                    original = RDRF.Core.Compression.Compressor.IsLz4Frame(stored)
-                        ? RDRF.Core.Compression.Compressor.Decompress(stored, Constants.CompressionLz4)
-                        : stored;
-                }
-                output.Write(original, 0, original.Length);
-                hasher.AppendData(original.AsSpan(0, original.Length));
+                return await StreamingRestoreCkcAsync(
+                    index, aesKey, filePrefix, outputPath, etn, alreadyStripped,
+                    origCount, fragmentCount, sourceKeys, sourcePrefixes, progress, ct).ConfigureAwait(false);
             }
 
-            byte[] hashBytes = hasher.GetHashAndReset();
-            string restoredHash = Hex.EncodeLower(hashBytes);
+            // Pipelined streaming: bounded concurrent decrypt/decompress, ordered strip+write.
+            // Peak ≈ prefetch fragments (not full set); wall-clock much better than pure serial.
+            int prefetch = Math.Clamp(Constants.DefaultParallelism, 2, 8);
+            if (fragmentCount < 2) prefetch = 1;
+
+            using var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write,
+                FileShare.None, 256 * 1024, FileOptions.SequentialScan | FileOptions.Asynchronous);
+            using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+
+            // Kick off bounded-parallel prepare tasks; await in order for sequential write.
+            var prepare = new Task<byte[]>[fragmentCount];
+            using var gate = new SemaphoreSlim(prefetch, prefetch);
+            for (int i = 0; i < fragmentCount; i++)
+            {
+                int idx = i;
+                prepare[idx] = PrepareFragmentGatedAsync(
+                    index, aesKey, filePrefix, idx, etn,
+                    sourceKeys, sourcePrefixes, gate, ct);
+            }
+
+            for (int i = 0; i < fragmentCount; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                byte[] data = await prepare[i].ConfigureAwait(false);
+                prepare[i] = null!; // allow GC of completed task
+
+                if (i < origCount)
+                {
+                    byte[] original = alreadyStripped
+                        ? data
+                        : strategy.StripSingle(data, i, index.OriginalFragmentSizes);
+                    int writeLen = original.Length;
+                    if (index.OriginalFragmentSizes != null && i < index.OriginalFragmentSizes.Count)
+                    {
+                        int want = index.OriginalFragmentSizes[i];
+                        if (want >= 0 && want < writeLen)
+                            writeLen = want;
+                    }
+                    // Write span without ToArray when trimming tail padding.
+                    await output.WriteAsync(original.AsMemory(0, writeLen), ct).ConfigureAwait(false);
+                    hasher.AppendData(original.AsSpan(0, writeLen));
+                }
+
+                progress?.Report(new RdrfProgressReport
+                {
+                    Stage = "Downloading", CurrentItem = i + 1, TotalItems = fragmentCount
+                });
+            }
+
+            if (output.Length > index.FileSize && index.FileSize >= 0)
+                output.SetLength(index.FileSize);
+
+            await output.FlushAsync(ct).ConfigureAwait(false);
+            string restoredHash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
             bool valid = IntegrityChecker.VerifyHash(restoredHash, index.OriginalHash);
-            _logger.Info("RestoreOrchestrator",$"  Integrity check: {(valid ? "PASS" : "FAIL")}");
+            _logger.Info("RestoreOrchestrator", $"  Integrity check (stream): {(valid ? "PASS" : "FAIL")}");
+            if (!valid && File.Exists(outputPath))
+                File.Delete(outputPath);
             return valid;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.Warn("RestoreOrchestrator", $"Streaming restore failed: {ex.GetType().Name}: {ex.Message}");
             if (File.Exists(outputPath)) File.Delete(outputPath);
             return false;
         }
+    }
+
+    private async Task<byte[]> PrepareFragmentGatedAsync(
+        RdrfIndex index, byte[] aesKey, string filePrefix, int i, Fss6Etn? etn,
+        Dictionary<string, byte[]> sourceKeys, Dictionary<string, string> sourcePrefixes,
+        SemaphoreSlim gate, CancellationToken ct)
+    {
+        await gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return await LoadDecryptPrepareFragmentAsync(
+                index, aesKey, filePrefix, i, etn, sourceKeys, sourcePrefixes, ct)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Open fragment stream and AES-CTR decrypt+strip without a full encrypted byte[] buffer.
+    /// Falls back to ReadFragmentAsync when stream open is unavailable.
+    /// </summary>
+    private async Task<byte[]> DecryptFragmentStreamingAsync(string filename, byte[] key, CancellationToken ct)
+    {
+        try
+        {
+            await using var stream = await _storage.OpenReadFragmentAsync(filename, ct).ConfigureAwait(false);
+            return await EncryptionLayer.DecryptAndStripFragmentFromStreamAsync(stream, key, ct)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not CryptographicException and not OperationCanceledException)
+        {
+            // Fallback for non-local / non-stream backends
+            byte[] encrypted = await _storage.ReadFragmentAsync(filename, ct).ConfigureAwait(false);
+            return _encryption.DecryptAndStripFragment(encrypted, key);
+        }
+    }
+
+    /// <summary>
+    /// Load one fragment: resolve SourceVersion, decrypt, strip ETN/repair trailers, decompress.
+    /// Does not perform FSS StripSingle (caller does).
+    /// </summary>
+    private async Task<byte[]> LoadDecryptPrepareFragmentAsync(
+        RdrfIndex index, byte[] aesKey, string filePrefix, int i, Fss6Etn? etn,
+        Dictionary<string, byte[]> sourceKeys, Dictionary<string, string> sourcePrefixes,
+        CancellationToken ct)
+    {
+        string svFp = filePrefix;
+        int svIdx = i;
+        byte[] key = aesKey;
+        if (index.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
+        {
+            string sv = index.Fragments[i].SourceVersion!;
+            svFp = sourcePrefixes.TryGetValue(sv, out var sp) ? sp : sv;
+            svIdx = index.Fragments[i].SourceIndex ?? i;
+            if (sourceKeys.TryGetValue(sv, out var cachedKey))
+                key = cachedKey;
+        }
+
+        byte[] data = await DecryptFragmentStreamingAsync(
+            Frags.FragmentFilename(svFp, svIdx), key, ct).ConfigureAwait(false);
+
+        // Pure FSS6 may compress(body+trailer) → decompress before strip.
+        // FSS6.1/6.2 compress pre-ETN → trailers outer → strip then decompress.
+        bool pureFss6Compress = etn != null
+            && index.FssStrategy is Constants.FssLevel6
+            && !string.IsNullOrEmpty(index.Compression)
+            && LooksCompressedFrame(data, index.Compression);
+        if (pureFss6Compress)
+            data = Compressor.Decompress(data, index.Compression!);
+        if (etn != null)
+            data = StripAnyTrailer(data);
+        else if (!string.IsNullOrEmpty(index.Compression))
+            data = Compressor.Decompress(data, index.Compression!);
+        if (etn != null && !string.IsNullOrEmpty(index.Compression) && !pureFss6Compress)
+            data = Compressor.Decompress(data, index.Compression!);
+        return data;
+    }
+
+    /// <summary>
+    /// CKC multi-frag path: must materialize all compressed fragments for shared-table decompress,
+    /// then stream strip+write (algorithm constraint on shared TANS tables from frag0).
+    /// </summary>
+    private async Task<bool> StreamingRestoreCkcAsync(
+        RdrfIndex index, byte[] aesKey, string filePrefix, string outputPath,
+        Fss6Etn? etn, bool alreadyStripped,
+        int origCount, int fragmentCount,
+        Dictionary<string, byte[]> sourceKeys, Dictionary<string, string> sourcePrefixes,
+        IProgress<RdrfProgressReport>? progress, CancellationToken ct)
+    {
+        var strategy = _fss.GetStrategy(index.FssStrategy);
+        var list = new List<byte[]>(fragmentCount);
+        for (int i = 0; i < fragmentCount; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            string svFp = filePrefix;
+            int svIdx = i;
+            byte[] key = aesKey;
+            if (index.Fragments?.Count > i && index.Fragments[i].SourceVersion != null)
+            {
+                string sv = index.Fragments[i].SourceVersion!;
+                svFp = sourcePrefixes.TryGetValue(sv, out var sp) ? sp : sv;
+                svIdx = index.Fragments[i].SourceIndex ?? i;
+                if (sourceKeys.TryGetValue(sv, out var cachedKey))
+                    key = cachedKey;
+            }
+            byte[] data = await DecryptFragmentStreamingAsync(
+                Frags.FragmentFilename(svFp, svIdx), key, ct).ConfigureAwait(false);
+            if (etn != null)
+                data = StripAnyTrailer(data);
+            list.Add(data);
+            progress?.Report(new RdrfProgressReport
+            {
+                Stage = "Downloading", CurrentItem = i + 1, TotalItems = fragmentCount
+            });
+        }
+
+        CkcEngine.DecompressInPlace(list);
+
+        using var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write,
+            FileShare.None, 256 * 1024, FileOptions.SequentialScan | FileOptions.Asynchronous);
+        using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        for (int i = 0; i < origCount && i < list.Count; i++)
+        {
+            byte[] original = alreadyStripped
+                ? list[i]
+                : strategy.StripSingle(list[i], i, index.OriginalFragmentSizes);
+            int writeLen = original.Length;
+            if (index.OriginalFragmentSizes != null && i < index.OriginalFragmentSizes.Count)
+            {
+                int want = index.OriginalFragmentSizes[i];
+                if (want >= 0 && want < writeLen)
+                    writeLen = want;
+            }
+            await output.WriteAsync(original.AsMemory(0, writeLen), ct).ConfigureAwait(false);
+            hasher.AppendData(original.AsSpan(0, writeLen));
+            list[i] = null!;
+        }
+        if (output.Length > index.FileSize && index.FileSize >= 0)
+            output.SetLength(index.FileSize);
+        await output.FlushAsync(ct).ConfigureAwait(false);
+        string restoredHash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
+        bool valid = IntegrityChecker.VerifyHash(restoredHash, index.OriginalHash);
+        _logger.Info("RestoreOrchestrator", $"  Integrity check (stream/ckc): {(valid ? "PASS" : "FAIL")}");
+        if (!valid && File.Exists(outputPath))
+            File.Delete(outputPath);
+        return valid;
+    }
+
+    /// <summary>
+    /// True when the leading bytes look like a compressed frame for the named codec
+    /// (used to decide decompress-before-trailer vs trailer-before-decompress).
+    /// </summary>
+    private static bool LooksCompressedFrame(byte[] data, string? method)
+    {
+        if (data == null || data.Length < 4 || string.IsNullOrEmpty(method))
+            return false;
+        // LZ4 frame magic 04 22 4D 18
+        if (method.Equals(Constants.CompressionLz4, StringComparison.OrdinalIgnoreCase)
+            || method.Equals(Constants.CompressionLz4Hc, StringComparison.OrdinalIgnoreCase))
+            return data[0] == 0x04 && data[1] == 0x22 && data[2] == 0x4D && data[3] == 0x18;
+        // Zstd magic 28 B5 2F FD
+        if (method.Equals(Constants.CompressionZstd, StringComparison.OrdinalIgnoreCase))
+            return data[0] == 0x28 && data[1] == 0xB5 && data[2] == 0x2F && data[3] == 0xFD;
+        // Gzip 1F 8B
+        if (method.Equals(Constants.CompressionGzip, StringComparison.OrdinalIgnoreCase))
+            return data[0] == 0x1F && data[1] == 0x8B;
+        // Brotli has no stable magic; try decompress path via CanHandle
+        if (method.Equals(Constants.CompressionBrotli, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (method.Equals(Constants.CompressionCkc, StringComparison.OrdinalIgnoreCase))
+            return data.Length >= 4 && data[0] == (byte)'C' && data[1] == (byte)'K' && data[2] == (byte)'C';
+        return false;
     }
 
     // --- Dispose ---

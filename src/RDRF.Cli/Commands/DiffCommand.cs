@@ -8,6 +8,7 @@ using RDRF.Core.Versioning;
 using RDRF.Cli.Services;
 using Spectre.Console;
 using System.CommandLine;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -145,16 +146,15 @@ public class DiffCommand : Command
                         return 1;
                     }
 
-                    byte[] oldBytes = File.ReadAllBytes(tmpV1);
-                    byte[] newBytes = File.ReadAllBytes(tmpV2);
-                    var diffResult = new DiffEngine().ComputeDiff(oldBytes, newBytes, index.OriginalName);
+                    // Stream sample / size-only for binary; load full content only for text/media strategies
+                    var diffResult = new DiffEngine().ComputeDiffFromFiles(tmpV1, tmpV2, index.OriginalName);
                     OutputDiff(diffResult.HumanDiff, outputFile, format);
                     return 0;
                 }
                 finally
                 {
-                    try { if (File.Exists(tmpV1)) File.Delete(tmpV1); } catch { }
-                    try { if (File.Exists(tmpV2)) File.Delete(tmpV2); } catch { }
+                    try { if (File.Exists(tmpV1)) File.Delete(tmpV1); } catch (Exception ex) { Debug.WriteLine($"[DiffCommand] Cleanup tmpV1 failed: {ex.Message}"); }
+                    try { if (File.Exists(tmpV2)) File.Delete(tmpV2); } catch (Exception ex) { Debug.WriteLine($"[DiffCommand] Cleanup tmpV2 failed: {ex.Message}"); }
                 }
             }
             finally

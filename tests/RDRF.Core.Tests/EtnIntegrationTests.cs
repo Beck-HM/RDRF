@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using RDRF.Core.Encryption;
 using RDRF.Core.FSS;
 using RDRF.Core.Index;
+using RDRF.Core.Compression;
 using RDRF.Core.DSAA;
 using Xunit;
 using Xunit.Abstractions;
@@ -79,18 +80,18 @@ public class EtnIntegrationTests
             var index = IndexManager.DeserializeIndex(idxCbor);
             string prefix = index.CustomName ?? fingerprint;
 
-            // Tamper with fragment[1] at encrypted level (decrypt  -> corrupt data  -> re>encrypt)
+            // Tamper with fragment[1] at FSS level (decrypt -> decompress -> corrupt -> compress -> re-encrypt)
             string fragFile = $"{prefix}_1.rdrf";
             byte[] encryptedFrag = storage.ReadFragment(fragFile);
             var (embeddedIndex, fragmentData, _) = FragmentFileHeader.DecryptWithEmbeddedIndex(encryptedFrag, aesKey);
 
-            // Corrupt the decrypted data's midpoint
-            int mid = fragmentData.Length / 2;
-            fragmentData[mid] ^= 0xFF;
+            byte[] corrupted = Compressor.Decompress(fragmentData, index.Compression ?? Constants.CompressionLz4);
+            int mid = corrupted.Length / 2;
+            corrupted[mid] ^= 0xFF;
 
-            // Re-encrypt with corrupt data
+            byte[] dataToEncrypt = Compressor.AlwaysCompress(corrupted, index.Compression);
             byte[] newEncrypted = FragmentFileHeader.EncryptWithEmbeddedIndex(
-                fragmentData, embeddedIndex!, aesKey);
+                dataToEncrypt, embeddedIndex!, aesKey);
             storage.WriteFragment(fragFile, newEncrypted);
 
             // Restore  - should detect corruption via ETN

@@ -59,10 +59,15 @@ public static class IndexManager
         return index;
     }
 
+    private const int CurrentSchemaVersion = 1;
+
     public static byte[] SerializeIndex(RdrfIndex index)
     {
         var writer = new CborWriter();
         writer.WriteStartMap(null);
+
+        writer.WriteTextString("schema_version");
+        writer.WriteInt32(CurrentSchemaVersion);
 
         WriteField(writer, "file_fingerprint", index.FileFingerprint);
         WriteField(writer, "custom_name", index.CustomName);
@@ -111,9 +116,24 @@ public static class IndexManager
         var index = new RdrfIndex();
 
         reader.ReadStartMap();
+        int depth = 0;
+
+        // Check schema_version (must be first field)
+        bool firstKey = true;
         while (reader.PeekState() != CborReaderState.EndMap)
         {
-            switch (reader.ReadTextString())
+            var key = reader.ReadTextString();
+            if (firstKey && key == "schema_version")
+            {
+                int sv = reader.ReadInt32();
+                firstKey = false;
+                if (sv > CurrentSchemaVersion)
+                    throw new RdrfException(ErrorCode.FileFormatInvalid,
+                        $"Unsupported index schema version {sv}. Max supported: {CurrentSchemaVersion}.");
+                continue;
+            }
+            firstKey = false;
+            switch (key)
             {
                 case "file_fingerprint":            index.FileFingerprint = reader.ReadTextString(); break;
                 case "custom_name":                 index.CustomName = reader.ReadTextString(); break;
@@ -131,7 +151,7 @@ public static class IndexManager
                 case "original_hash":               index.OriginalHash = reader.ReadTextString(); break;
                 case "fss_strategy":                index.FssStrategy = reader.ReadTextString(); break;
                 case "compression":                  index.Compression = reader.ReadTextString(); break;
-                case "fss_params":                  index.FssParams = ReadFssParams(reader); break;
+                case "fss_params":                  index.FssParams = ReadFssParams(reader, ref depth); break;
                 case "fss6_fragment_block_maps":    index.Fss6FragmentBlockMaps = ReadNestedStringList(reader); break;
                 case "fss6_fragment_flat":          index.Fss6FragmentBlockMapsFlat = ReadByteArrayList(reader); break;
                 case "fss6_fragment_2b":            index.Fss6Fragment2B = ReadNestedStringList(reader); break;
@@ -417,8 +437,12 @@ public static class IndexManager
         return list;
     }
 
-    private static Dictionary<string, object>? ReadFssParams(CborReader r)
+    private const int MaxCborDepth = 64;
+
+    private static Dictionary<string, object>? ReadFssParams(CborReader r, ref int depth)
     {
+        if (++depth > MaxCborDepth)
+            throw new InvalidDataException($"CBOR nesting exceeds maximum depth {MaxCborDepth}");
         r.ReadStartMap();
         var dict = new Dictionary<string, object>();
         while (r.PeekState() != CborReaderState.EndMap)
@@ -429,6 +453,7 @@ public static class IndexManager
             catch { dict[key] = value; }
         }
         r.ReadEndMap();
+        depth--;
         return dict;
     }
 
@@ -653,7 +678,19 @@ public class RdrfIndex
     public List<string>? Fss6RcBlockMap { get; set; }
     public byte[]? Fss6RcBlockMapFlat { get; set; }
     public List<string>? Fss6Rc2B { get; set; }
+
+    /// <summary>
+    /// True if index carries FSS6 ETN block maps (binary flat preferred, hex lists legacy).
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasFss6EtnData =>
+        (Fss6FragmentBlockMapsFlat is { Count: > 0 })
+        || (Fss6RcBlockMapFlat is { Length: > 0 })
+        || (Fss6FragmentBlockMaps is { Count: > 0 })
+        || (Fss6RcBlockMap is { Count: > 0 });
     public List<byte[]>? RawFragmentHashes { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<uint>? Adler32Sums { get; set; }
     public string? Salt { get; set; }
     public long CreatedAt { get; set; }
     public long? UpdatedAt { get; set; }

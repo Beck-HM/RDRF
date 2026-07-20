@@ -3,7 +3,12 @@ using System.IO.Hashing;
 string testFile = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "tests", "RDRF_TestInput"));
 if (!Directory.Exists(testFile)) { Console.Error.WriteLine($"Test input dir not found: {testFile}"); return; }
 var tfs = Directory.GetFiles(testFile);
-testFile = tfs.Length > 0 ? tfs[0] : (Console.Error.WriteLine("No test files in RDRF_TestInput"), "");
+if (tfs.Length == 0)
+{
+    Console.Error.WriteLine("No test files in RDRF_TestInput");
+    return;
+}
+testFile = tfs[0];
 int blockSize = 1024;
 int regionSize = 32;
 int sampleBits = 4;

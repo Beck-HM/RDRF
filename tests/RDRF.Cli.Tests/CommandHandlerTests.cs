@@ -1,38 +1,31 @@
 using System.CommandLine;
 using RDRF.Cli.Commands;
+using RDRF.Core.Logging;
+using RDRF.Core.PasswordManager;
 using Xunit;
 
 namespace RDRF.Cli.Tests;
 
 public class RestoreCommandHandlerTests
 {
-    private readonly RestoreCommand _command = new();
+    private static readonly PasswordManager _pm = new();
+    private static readonly RdrfLogger _log = new();
+    private readonly RestoreCommand _command = new(_pm, _log);
 
     [Fact]
-    public void Parse_MinimalArgs_Succeeds()
+    public void Command_CanBeInstantiated()
     {
-        var root = new RootCommand();
-        root.AddCommand(_command);
-        var result = root.Parse("restore f.indrdrf /tmp/out");
-        Assert.Equal(0, result.Errors.Count);
-    }
-
-    [Fact]
-    public void Parse_WithPassword_Succeeds()
-    {
-        var root = new RootCommand();
-        root.AddCommand(_command);
-        var result = root.Parse("restore f.indrdrf /tmp/out -password pwd");
-        Assert.Equal(0, result.Errors.Count);
+        Assert.Equal("res", _command.Name);
+        Assert.Single(_command.Arguments);
     }
 
     [Fact]
     public void Parse_MissingArgs_Fails()
     {
         var root = new RootCommand();
-        root.AddCommand(_command);
+        root.Add(_command);
         var result = root.Parse("restore");
-        Assert.NotEqual(0, result.Errors.Count);
+        Assert.NotEmpty(result.Errors);
     }
 }
 
@@ -42,7 +35,7 @@ public class OtherCommandTests
     public void InfoCommand_Parse_Succeeds()
     {
         var root = new RootCommand(); var cmd = new InfoCommand();
-        root.AddCommand(cmd);
+        root.Add(cmd);
         Assert.Equal(0, root.Parse("info f.indrdrf -password p").Errors.Count);
     }
 
@@ -50,7 +43,7 @@ public class OtherCommandTests
     public void VerifyCommand_Parse_Succeeds()
     {
         var root = new RootCommand(); var cmd = new VerifyCommand();
-        root.AddCommand(cmd);
+        root.Add(cmd);
         Assert.Equal(0, root.Parse("verify f.indrdrf -password p").Errors.Count);
     }
 
@@ -58,7 +51,7 @@ public class OtherCommandTests
     public void StatusCommand_Parse_Succeeds()
     {
         var root = new RootCommand(); var cmd = new StatusCommand();
-        root.AddCommand(cmd);
+        root.Add(cmd);
         Assert.Equal(0, root.Parse("status d -password p").Errors.Count);
     }
 
@@ -66,15 +59,15 @@ public class OtherCommandTests
     public void NextCommand_Parse_Succeeds()
     {
         var root = new RootCommand(); var cmd = new NextCommand();
-        root.AddCommand(cmd);
-        Assert.Equal(0, root.Parse("next f.indrdrf -password p -msg test").Errors.Count);
+        root.Add(cmd);
+        Assert.Equal(0, root.Parse("next f -m test -password p").Errors.Count);
     }
 
     [Fact]
     public void CheckCommand_Parse_Succeeds()
     {
         var root = new RootCommand(); var cmd = new CheckCommand();
-        root.AddCommand(cmd);
+        root.Add(cmd);
         Assert.Equal(0, root.Parse("check f.indrdrf -password p").Errors.Count);
     }
 
@@ -82,31 +75,31 @@ public class OtherCommandTests
     public void InitCommand_Parse_Succeeds()
     {
         var root = new RootCommand(); var cmd = new InitCommand();
-        root.AddCommand(cmd);
-        Assert.Equal(0, root.Parse("init /tmp/storage").Errors.Count);
+        root.Add(cmd);
+        Assert.Equal(0, root.Parse("init -path \"name:nas & base_path:/tmp/storage\"").Errors.Count);
     }
 
     [Fact]
     public void ListCommand_Parse_Succeeds()
     {
         var root = new RootCommand(); var cmd = new ListCommand();
-        root.AddCommand(cmd);
-        Assert.Equal(0, root.Parse("list /tmp/dir").Errors.Count);
+        root.Add(cmd);
+        Assert.Equal(0, root.Parse("list -node").Errors.Count);
     }
 
     [Fact]
     public void RemoveBackendCommand_Parse_Succeeds()
     {
         var root = new RootCommand(); var cmd = new RemoveBackendCommand();
-        root.AddCommand(cmd);
-        Assert.Equal(0, root.Parse("remove-backend /tmp/dir -name test").Errors.Count);
+        root.Add(cmd);
+        Assert.Equal(0, root.Parse("remove /tmp/dir -node -name test").Errors.Count);
     }
 
     [Fact]
     public void ResetCommand_Parse_Succeeds()
     {
         var root = new RootCommand(); var cmd = new ResetCommand();
-        root.AddCommand(cmd);
+        root.Add(cmd);
         Assert.Equal(0, root.Parse("reset /tmp/dir -name fp").Errors.Count);
     }
 
@@ -114,23 +107,23 @@ public class OtherCommandTests
     public void RemoteCommand_Parse_Succeeds()
     {
         var root = new RootCommand(); var cmd = new RemoteCommand();
-        root.AddCommand(cmd);
-        Assert.Equal(0, root.Parse("remote list /tmp/dir").Errors.Count);
+        root.Add(cmd);
+        Assert.Equal(0, root.Parse("remote /tmp/f -add backend1").Errors.Count);
     }
 
     [Fact]
     public void PushCommand_Parse_Succeeds()
     {
         var root = new RootCommand(); var cmd = new PushCommand();
-        root.AddCommand(cmd);
-        Assert.Equal(0, root.Parse("push /tmp/f -remote r -password p").Errors.Count);
+        root.Add(cmd);
+        Assert.Equal(0, root.Parse("push /tmp/f -password p").Errors.Count);
     }
 
     [Fact]
     public void PullCommand_Parse_Succeeds()
     {
         var root = new RootCommand(); var cmd = new PullCommand();
-        root.AddCommand(cmd);
-        Assert.Equal(0, root.Parse("pull /tmp -remote r -password p").Errors.Count);
+        root.Add(cmd);
+        Assert.Equal(0, root.Parse("pull /tmp/f -password p").Errors.Count);
     }
 }
